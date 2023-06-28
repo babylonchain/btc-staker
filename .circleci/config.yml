@@ -1,0 +1,46 @@
+version: 2.1
+
+orbs:
+  go: circleci/go@1.7.3
+  aws-ecr: circleci/aws-ecr@8.2.1
+
+jobs:
+  build_lint_test:
+    machine:
+      image: ubuntu-2204:2022.10.1
+    resource_class: large
+    steps:
+      - go/install:
+          version: "1.20"
+      - checkout
+      - run:
+          name: Print Go environment
+          command: "go env"
+      - go/load-cache:
+          key: go-mod-v6-{{ checksum "go.sum" }}
+      - add_ssh_keys
+      - go/mod-download
+      - go/save-cache:
+          key: go-mod-v6-{{ checksum "go.sum" }}
+          path: "/home/circleci/.go_workspace/pkg/mod"
+      - run:
+          name: Build cli app
+          command: make build
+      - run:
+          name: Lint
+          command: |
+            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.52.2
+            ./bin/golangci-lint run
+      - run:
+          name: Run tests
+          command: |
+            make test
+      - run:
+          name: Run integration tests
+          command: |
+            make test-e2e
+
+workflows:
+  CI:
+    jobs:
+      - build_lint_test
