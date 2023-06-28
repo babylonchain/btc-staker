@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	st "github.com/babylonchain/btc-staker/staker"
+	ut "github.com/babylonchain/btc-staker/utils"
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/urfave/cli"
 )
 
@@ -66,20 +68,40 @@ func genScript(ctx *cli.Context) error {
 	case !ctx.IsSet(stakerKeyFlag) && !ctx.IsSet(stakerAddressFlag):
 		return fmt.Errorf("one of %s or %s must be set", stakerKeyFlag, stakerAddressFlag)
 	}
-
-	// TODO: support staker address, it requires connection to the wallet to retrieve the key
-	if !ctx.IsSet(stakerAddressFlag) {
-		return fmt.Errorf("using staker address is not supported yet")
-	}
-
-	netParams, err := GetBtcNetworkParams(ctx.GlobalString(btcNetworkFlag))
+	netParams, err := ut.GetBtcNetworkParams(ctx.GlobalString(btcNetworkFlag))
 
 	if err != nil {
 		return err
 	}
 
+	var stakerPkString string
+
+	if ctx.IsSet(stakerAddressFlag) {
+		stakerAddress := ctx.String(stakerAddressFlag)
+		stakerAddressParsed, err := btcutil.DecodeAddress(stakerAddress, netParams)
+		if err != nil {
+			return err
+		}
+
+		client, err := getWalletClientFromCtx(ctx)
+
+		if err != nil {
+			return err
+		}
+
+		stakerPk, err := client.AddressPublicKey(stakerAddressParsed)
+
+		if err != nil {
+			return nil
+		}
+
+		stakerPkString = st.EncodeSchnorrPk(stakerPk)
+	} else {
+		stakerPkString = ctx.String(stakerKeyFlag)
+	}
+
 	response, err := st.GenerateStakingScriptAndAddress(
-		ctx.String(stakerKeyFlag),
+		stakerPkString,
 		ctx.String(delegatorKeyFlag),
 		ctx.String(juryKeyFlag),
 		ctx.Uint64(stakingTimeFlag),

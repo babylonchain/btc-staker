@@ -11,8 +11,10 @@ import (
 	"testing"
 	"time"
 
+	staking "github.com/babylonchain/babylon/btcstaking"
+	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
-	"github.com/babylonchain/btc-staker/walletclient"
+	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
@@ -115,16 +117,58 @@ type TestManager struct {
 	MinerNode        *rpctest.Harness
 	BtcWalletHandler *WalletHandler
 	Config           *stakercfg.StakerConfig
-	BtcWalletClient  *walletclient.WalletClient
+	StakerApp        *staker.StakerApp
+	WalletPrivKey    *btcec.PrivateKey
+	MinerAddr        btcutil.Address
+}
+
+type testStakingData struct {
+	StakerKey        *btcec.PublicKey
+	DelegatarPrivKey *btcec.PrivateKey
+	DelegatorKey     *btcec.PublicKey
+	JuryPrivKey      *btcec.PrivateKey
+	JuryKey          *btcec.PublicKey
+	StakingTime      uint16
+	StakingAmount    int64
+	Script           []byte
+}
+
+func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime uint16, stakingAmount int64) *testStakingData {
+	delegatarPrivKey, err := btcec.NewPrivateKey()
+	require.NoError(t, err)
+	juryPrivKey, err := btcec.NewPrivateKey()
+	require.NoError(t, err)
+	stakingData, err := staking.NewStakingScriptData(
+		stakerKey,
+		delegatarPrivKey.PubKey(),
+		juryPrivKey.PubKey(),
+		stakingTime,
+	)
+
+	require.NoError(t, err)
+
+	script, err := stakingData.BuildStakingScript()
+	require.NoError(t, err)
+
+	return &testStakingData{
+		StakerKey:        stakerKey,
+		DelegatarPrivKey: delegatarPrivKey,
+		DelegatorKey:     delegatarPrivKey.PubKey(),
+		JuryPrivKey:      juryPrivKey,
+		JuryKey:          juryPrivKey.PubKey(),
+		StakingTime:      stakingTime,
+		StakingAmount:    stakingAmount,
+		Script:           script,
+	}
 }
 
 func initBtcWalletClient(
 	t *testing.T,
 	cfg *stakercfg.StakerConfig,
 	walletPrivKey *btcec.PrivateKey,
-	outputsToWaitFor int) *walletclient.WalletClient {
+	outputsToWaitFor int) *walletcontroller.RpcWalletController {
 
-	client, err := walletclient.NewWalletClient(cfg)
+	client, err := walletcontroller.NewRpcWalletController(cfg)
 	require.NoError(t, err)
 
 	// lets wait until chain rpc becomes available
@@ -174,7 +218,7 @@ func StartManager(
 	miner, err := rpctest.New(netParams, handlers, args, "")
 	require.NoError(t, err)
 
-	privkey, _, err := GetSpendingKeyAndAddress(uint32(numTestInstances))
+	privkey, addr, err := GetSpendingKeyAndAddress(uint32(numTestInstances))
 	require.NoError(t, err)
 
 	if err := miner.SetUp(true, numMatureOutputsInWallet); err != nil {
@@ -206,13 +250,19 @@ func StartManager(
 		numbersOfOutputsToWaitForDurintInit,
 	)
 
+	stakerApp, err := staker.NewStakerAppFromClient(btcWalletClient)
+
+	require.NoError(t, err)
+
 	numTestInstances++
 
 	return &TestManager{
 		MinerNode:        miner,
 		BtcWalletHandler: wh,
 		Config:           cfg,
-		BtcWalletClient:  btcWalletClient,
+		StakerApp:        stakerApp,
+		WalletPrivKey:    privkey,
+		MinerAddr:        addr,
 	}
 }
 
@@ -225,13 +275,13 @@ func (tm *TestManager) Stop(t *testing.T) {
 
 func ImportWalletSpendingKey(
 	t *testing.T,
-	walletClient *walletclient.WalletClient,
+	walletClient *walletcontroller.RpcWalletController,
 	privKey *btcec.PrivateKey) error {
 
 	wifKey, err := btcutil.NewWIF(privKey, netParams, true)
 	require.NoError(t, err)
 
-	err = walletClient.WalletPassphrase(exisitngWalletPass, int64(walletTimeout))
+	err = walletClient.WalletPassphrase(walletClient.Passphrase(), int64(3))
 
 	if err != nil {
 		return err
@@ -271,7 +321,7 @@ func retrieveTransactionFromMempool(t *testing.T, h *rpctest.Harness, hashes []*
 	return txes
 }
 
-func waitForNOutputs(t *testing.T, walletClient *walletclient.WalletClient, n int) {
+func waitForNOutputs(t *testing.T, walletClient *walletcontroller.RpcWalletController, n int) {
 	require.Eventually(t, func() bool {
 		outputs, err := walletClient.ListUnspent()
 
@@ -283,7 +333,7 @@ func waitForNOutputs(t *testing.T, walletClient *walletclient.WalletClient, n in
 	}, eventuallyWaitTimeOut, eventuallyPollTime)
 }
 
-func TestSetupWorks(t *testing.T) {
+func TestSendingStakingTransaction(t *testing.T) {
 	numMatureOutputs := uint32(5)
 	var submittedTransactions []*chainhash.Hash
 
@@ -294,13 +344,30 @@ func TestSetupWorks(t *testing.T) {
 			submittedTransactions = append(submittedTransactions, hash)
 		},
 	}
-
 	tm := StartManager(t, numMatureOutputs, 2, handlers)
 	// this is necessary to receive notifications about new transactions entering mempool
 	err := tm.MinerNode.Client.NotifyNewTransactions(false)
 	require.NoError(t, err)
 	defer tm.Stop(t)
 
-	// For now we can't test anything useful
-	require.True(t, true)
+	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), 5, 10000)
+
+	_, txHash, err := tm.StakerApp.SendStakingTransaction(
+		tm.MinerAddr,
+		testStakingData.Script,
+		testStakingData.StakingAmount,
+	)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return len(submittedTransactions) == 1
+	}, eventuallyWaitTimeOut, eventuallyPollTime)
+
+	require.Equal(t, txHash, submittedTransactions[0])
+
+	// Check that tx executes successfully
+	mBlock := mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
+
+	require.Equal(t, 2, len(mBlock.Transactions))
+
 }
