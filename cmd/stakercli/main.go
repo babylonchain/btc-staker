@@ -25,7 +25,7 @@ func printRespJSON(resp interface{}) {
 }
 
 const (
-	btcNetwork = "btc-network"
+	btcNetworkFlag = "btc-network"
 )
 
 func GetBtcNetworkParams(network string) (*chaincfg.Params, error) {
@@ -49,7 +49,7 @@ func main() {
 	app.Usage = "btc staking controller"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:  btcNetwork,
+			Name:  btcNetworkFlag,
 			Usage: "btc network on which staking should take place",
 			Value: "testnet3",
 		},

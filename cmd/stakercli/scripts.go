@@ -20,39 +20,39 @@ var scriptsCommands = []cli.Command{
 }
 
 const (
-	stakerKey     = "staker-key"
-	stakerAddress = "staker-address"
-	delegatorKey  = "delegator-key"
-	juryKey       = "jury-key"
-	stakingTime   = "staking-time"
+	stakerKeyFlag     = "staker-key"
+	stakerAddressFlag = "staker-address"
+	delegatorKeyFlag  = "delegator-key"
+	juryKeyFlag       = "jury-key"
+	stakingTimeFlag   = "staking-time"
 )
 
 var generateStakingScript = cli.Command{
 	Name:      "generate-staking-script",
 	ShortName: "gscr",
-	Usage:     "Generate a staking script and staking taprot address",
+	Usage:     "Generate a staking script and staking taproot address",
 	Flags: []cli.Flag{
 		cli.StringFlag{
-			Name:  stakerKey,
-			Usage: "hex encoded public key of the staker in bip340 format",
+			Name:  stakerKeyFlag,
+			Usage: "hex encoded Bitcoin public key of the staker in bip340 format",
 		},
 		cli.StringFlag{
-			Name:  stakerAddress,
+			Name:  stakerAddressFlag,
 			Usage: "bech32 encoded address of the staker",
 		},
 		cli.StringFlag{
-			Name:     delegatorKey,
+			Name:     delegatorKeyFlag,
 			Usage:    "hex encoded public key of the delegator in bip340 format",
 			Required: true,
 		},
 		cli.StringFlag{
-			Name:     juryKey,
+			Name:     juryKeyFlag,
 			Usage:    "hex encoded public key of the jury in bip340 format",
 			Required: true,
 		},
 		cli.Uint64Flag{
-			Name:     stakingTime,
-			Usage:    "staking time in blocks. Max value is 65535",
+			Name:     stakingTimeFlag,
+			Usage:    "staking time in Bitcoin blocks. Max value is 65535",
 			Required: true,
 		},
 	},
@@ -61,28 +61,28 @@ var generateStakingScript = cli.Command{
 
 func genScript(ctx *cli.Context) error {
 	switch {
-	case ctx.IsSet(stakerKey) && ctx.IsSet(stakerAddress):
-		return fmt.Errorf("only one of %s or %s can be set", stakerKey, stakerAddress)
-	case !ctx.IsSet(stakerKey) && !ctx.IsSet(stakerAddress):
-		return fmt.Errorf("one of %s or %s must be set", stakerKey, stakerAddress)
+	case ctx.IsSet(stakerKeyFlag) && ctx.IsSet(stakerAddressFlag):
+		return fmt.Errorf("only one of %s or %s can be set", stakerKeyFlag, stakerAddressFlag)
+	case !ctx.IsSet(stakerKeyFlag) && !ctx.IsSet(stakerAddressFlag):
+		return fmt.Errorf("one of %s or %s must be set", stakerKeyFlag, stakerAddressFlag)
 	}
 
 	// TODO: support staker address, it requires connection to the wallet to retrieve the key
-	if !ctx.IsSet(stakerAddress) {
+	if !ctx.IsSet(stakerAddressFlag) {
 		return fmt.Errorf("using staker address is not supported yet")
 	}
 
-	netParams, err := GetBtcNetworkParams(ctx.GlobalString(btcNetwork))
+	netParams, err := GetBtcNetworkParams(ctx.GlobalString(btcNetworkFlag))
 
 	if err != nil {
 		return err
 	}
 
 	response, err := st.GenerateStakingScriptAndAddress(
-		ctx.String(stakerKey),
-		ctx.String(delegatorKey),
-		ctx.String(juryKey),
-		ctx.Uint64(stakingTime),
+		ctx.String(stakerKeyFlag),
+		ctx.String(delegatorKeyFlag),
+		ctx.String(juryKeyFlag),
+		ctx.Uint64(stakingTimeFlag),
 		netParams,
 	)
 

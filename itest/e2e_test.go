@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// bticoin params used for testing
+// bitcoin params used for testing
 var (
 	netParams        = &chaincfg.SimNetParams
 	submitterAddrStr = "bbn1eppc73j56382wjn6nnq3quu5eye4pmm087xfdh"
@@ -68,7 +68,7 @@ func defaultStakerConfig() *stakercfg.StakerConfig {
 
 	defaultConfig.ChainConfig.Network = "simnet"
 
-	// Config setting necessary to connect btcwwallet daemon
+	// Config setting necessary to connect btcwallet daemon
 	defaultConfig.WalletConfig.WalletPass = "pass"
 
 	defaultConfig.WalletRpcConfig.Host = "127.0.0.1:18554"
