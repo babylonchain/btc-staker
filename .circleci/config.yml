@@ -18,11 +18,11 @@ jobs:
           command: "go env"
       - go/load-cache:
           key: go-mod-v6-{{ checksum "go.sum" }}
+      - add_ssh_keys
       - go/mod-download
       - go/save-cache:
           key: go-mod-v6-{{ checksum "go.sum" }}
           path: "/home/circleci/.go_workspace/pkg/mod"
-      - add_ssh_keys
       - run:
           name: Build cli app
           command: make build
