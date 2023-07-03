@@ -65,8 +65,8 @@ func keyToAddr(key *btcec.PrivateKey, net *chaincfg.Params) (btcutil.Address, er
 	return pubKeyAddr.AddressPubKeyHash(), nil
 }
 
-func defaultStakerConfig() *stakercfg.StakerConfig {
-	defaultConfig := stakercfg.DefaultStakerConfig()
+func defaultStakerConfig() *stakercfg.Config {
+	defaultConfig := stakercfg.DefaultConfig()
 
 	defaultConfig.ChainConfig.Network = "simnet"
 
@@ -116,7 +116,7 @@ func GetSpendingKeyAndAddress(id uint32) (*btcec.PrivateKey, btcutil.Address, er
 type TestManager struct {
 	MinerNode        *rpctest.Harness
 	BtcWalletHandler *WalletHandler
-	Config           *stakercfg.StakerConfig
+	Config           *stakercfg.Config
 	StakerApp        *staker.StakerApp
 	WalletPrivKey    *btcec.PrivateKey
 	MinerAddr        btcutil.Address
@@ -164,7 +164,7 @@ func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime ui
 
 func initBtcWalletClient(
 	t *testing.T,
-	cfg *stakercfg.StakerConfig,
+	cfg *stakercfg.Config,
 	walletPrivKey *btcec.PrivateKey,
 	outputsToWaitFor int) *walletcontroller.RpcWalletController {
 

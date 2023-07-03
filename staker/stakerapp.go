@@ -27,7 +27,7 @@ type SlashingTxDescription struct {
 	SlashingTxSignature *schnorr.Signature
 }
 
-func NewStakerAppFromConfig(config *scfg.StakerConfig) (*StakerApp, error) {
+func NewStakerAppFromConfig(config *scfg.Config) (*StakerApp, error) {
 	params, err := ut.GetBtcNetworkParams(config.ChainConfig.Network)
 
 	if err != nil {

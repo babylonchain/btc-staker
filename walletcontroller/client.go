@@ -21,7 +21,7 @@ type RpcWalletController struct {
 
 var _ WalletController = (*RpcWalletController)(nil)
 
-func NewRpcWalletController(scfg *stakercfg.StakerConfig) (*RpcWalletController, error) {
+func NewRpcWalletController(scfg *stakercfg.Config) (*RpcWalletController, error) {
 	return NewRpcWalletControllerFromArgs(
 		scfg.WalletRpcConfig.Host,
 		scfg.WalletRpcConfig.User,
