@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/urfave/cli"
 )
 
@@ -25,22 +25,32 @@ func printRespJSON(resp interface{}) {
 }
 
 const (
-	btcNetworkFlag = "btc-network"
+	btcNetworkFlag          = "btc-network"
+	btcWalletHostFlag       = "btc-wallet-host"
+	btcWalletRpcUserFlag    = "btc-wallet-rpc-user"
+	btcWalletRpcPassFlag    = "btc-wallet-rpc-pass"
+	btcWalletPassphraseFlag = "btc-wallet-passphrase"
 )
 
-func GetBtcNetworkParams(network string) (*chaincfg.Params, error) {
-	switch network {
-	case "testnet3":
-		return &chaincfg.TestNet3Params, nil
-	case "mainnet":
-		return &chaincfg.MainNetParams, nil
-	case "regtest":
-		return &chaincfg.RegressionNetParams, nil
-	case "simnet":
-		return &chaincfg.SimNetParams, nil
-	default:
-		return nil, fmt.Errorf("unknown network %s", network)
+func getWalletClientFromCtx(ctx *cli.Context) (*walletcontroller.RpcWalletController, error) {
+	walletHost := ctx.String(btcWalletHostFlag)
+	walletUser := ctx.String(btcWalletRpcUserFlag)
+	walletPass := ctx.String(btcWalletRpcPassFlag)
+	network := ctx.String(btcNetworkFlag)
+
+	if !ctx.IsSet(btcWalletPassphraseFlag) {
+		return nil, fmt.Errorf("to interact with wallet it is necesary to provide wallet passphrase")
 	}
+
+	passphrase := ctx.String(btcWalletPassphraseFlag)
+
+	return walletcontroller.NewRpcWalletControllerFromArgs(
+		walletHost,
+		walletUser,
+		walletPass,
+		network,
+		passphrase,
+		true)
 }
 
 func main() {
@@ -53,9 +63,29 @@ func main() {
 			Usage: "btc network on which staking should take place",
 			Value: "testnet3",
 		},
+		cli.StringFlag{
+			Name:  btcWalletHostFlag,
+			Usage: "btc wallet rpc host",
+			Value: "127.0.0.1:18554",
+		},
+		cli.StringFlag{
+			Name:  btcWalletRpcUserFlag,
+			Usage: "btc wallet rpc user",
+			Value: "user",
+		},
+		cli.StringFlag{
+			Name:  btcWalletRpcPassFlag,
+			Usage: "btc wallet rpc password",
+			Value: "pass",
+		},
+		cli.StringFlag{
+			Name:  btcWalletRpcPassFlag,
+			Usage: "btc wallet passphrase",
+		},
 	}
 
 	app.Commands = append(app.Commands, scriptsCommands...)
+	app.Commands = append(app.Commands, transactionCommands...)
 
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)

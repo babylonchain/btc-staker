@@ -11,6 +11,10 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 )
 
+func EncodeSchnorrPkToHexString(pk *btcec.PublicKey) string {
+	return hex.EncodeToString(schnorr.SerializePubKey(pk))
+}
+
 func ParseSchnorPk(key string) (*btcec.PublicKey, error) {
 	keyBytes, err := hex.DecodeString(key)
 	if err != nil {
