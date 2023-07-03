@@ -24,13 +24,13 @@ const (
 )
 
 var createStakingTransactionCmd = cli.Command{
-	Name:      "create-staking-transacion",
+	Name:      "create-staking-transaction",
 	ShortName: "cst",
 	Usage:     "Create and sign staking transaction",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakerAddressFlag,
-			Usage: "bech32 encoded address of the staker",
+			Usage: "bech32 encoded BTC address of the staker",
 		},
 		cli.StringFlag{
 			Name:     stakingScriptFlag,
@@ -48,7 +48,7 @@ var createStakingTransactionCmd = cli.Command{
 }
 
 var sendStakingTransactionCmd = cli.Command{
-	Name:      "send-staking-transacion",
+	Name:      "send-staking-transaction",
 	ShortName: "sst",
 	Usage:     "Creates, signs and sends staking transaction",
 	Flags: []cli.Flag{

@@ -119,7 +119,7 @@ func (app *StakerApp) CreateStakingTransaction(
 		return nil, fmt.Errorf("staking amount must be positive")
 	}
 
-	// Parametrize unlocking timeout
+	// TODO: Parametrize unlocking timeout
 	err := app.wc.UnlockWallet(15)
 	if err != nil {
 		return nil, err

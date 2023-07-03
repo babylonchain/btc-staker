@@ -11,7 +11,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 )
 
-func EncodeSchnorrPk(pk *btcec.PublicKey) string {
+func EncodeSchnorrPkToHexString(pk *btcec.PublicKey) string {
 	return hex.EncodeToString(schnorr.SerializePubKey(pk))
 }
 

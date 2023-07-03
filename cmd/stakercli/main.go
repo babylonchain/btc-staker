@@ -25,11 +25,11 @@ func printRespJSON(resp interface{}) {
 }
 
 const (
-	btcNetworkFlag       = "btc-network"
-	btcWalletHostFlag    = "btc-wallet-host"
-	btcWalletRpcUserFlag = "btc-wallet-rpc-user"
-	btcWalletRpcPassFlag = "btc-wallet-rpc-pass"
-	btcWalletPassphrase  = "btc-wallet-passphrase"
+	btcNetworkFlag          = "btc-network"
+	btcWalletHostFlag       = "btc-wallet-host"
+	btcWalletRpcUserFlag    = "btc-wallet-rpc-user"
+	btcWalletRpcPassFlag    = "btc-wallet-rpc-pass"
+	btcWalletPassphraseFlag = "btc-wallet-passphrase"
 )
 
 func getWalletClientFromCtx(ctx *cli.Context) (*walletcontroller.RpcWalletController, error) {
@@ -38,11 +38,11 @@ func getWalletClientFromCtx(ctx *cli.Context) (*walletcontroller.RpcWalletContro
 	walletPass := ctx.String(btcWalletRpcPassFlag)
 	network := ctx.String(btcNetworkFlag)
 
-	if !ctx.IsSet(btcWalletPassphrase) {
+	if !ctx.IsSet(btcWalletPassphraseFlag) {
 		return nil, fmt.Errorf("to interact with wallet it is necesary to provide wallet passphrase")
 	}
 
-	passphrase := ctx.String(btcWalletPassphrase)
+	passphrase := ctx.String(btcWalletPassphraseFlag)
 
 	return walletcontroller.NewRpcWalletControllerFromArgs(
 		walletHost,

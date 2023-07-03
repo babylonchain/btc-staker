@@ -95,7 +95,7 @@ func genScript(ctx *cli.Context) error {
 			return nil
 		}
 
-		stakerPkString = st.EncodeSchnorrPk(stakerPk)
+		stakerPkString = st.EncodeSchnorrPkToHexString(stakerPk)
 	} else {
 		stakerPkString = ctx.String(stakerKeyFlag)
 	}

@@ -281,7 +281,7 @@ func ImportWalletSpendingKey(
 	wifKey, err := btcutil.NewWIF(privKey, netParams, true)
 	require.NoError(t, err)
 
-	err = walletClient.WalletPassphrase(walletClient.Passphrase(), int64(3))
+	err = walletClient.UnlockWallet(int64(3))
 
 	if err != nil {
 		return err

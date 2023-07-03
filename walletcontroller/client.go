@@ -72,11 +72,7 @@ func NewRpcWalletControllerFromArgs(
 		Client:           rpcclient,
 		walletPassphrase: walletPassphrase,
 		network:          params.Name,
-	}, err
-}
-
-func (w *RpcWalletController) Passphrase() string {
-	return w.walletPassphrase
+	}, nil
 }
 
 func (w *RpcWalletController) UnlockWallet(timoutSec int64) error {
