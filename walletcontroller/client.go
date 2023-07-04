@@ -26,7 +26,7 @@ func NewRpcWalletController(scfg *stakercfg.Config) (*RpcWalletController, error
 		scfg.WalletRpcConfig.Host,
 		scfg.WalletRpcConfig.User,
 		scfg.WalletRpcConfig.Pass,
-		scfg.ChainConfig.Network,
+		scfg.ActiveNetParams.Name,
 		scfg.WalletConfig.WalletPass,
 		// TODO for now just disable tls
 		true,

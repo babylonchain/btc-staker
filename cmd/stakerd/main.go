@@ -6,11 +6,22 @@ import (
 	"os"
 	"runtime/pprof"
 
+	staker "github.com/babylonchain/btc-staker/staker"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
+	service "github.com/babylonchain/btc-staker/stakerservice"
+
 	"github.com/jessevdk/go-flags"
+	"github.com/lightningnetwork/lnd/signal"
 )
 
 func main() {
+	// Hook interceptor for os signals.
+	shutdownInterceptor, err := signal.Intercept()
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
 	cfg, cfgLogger, err := scfg.LoadConfig()
 
 	if err != nil {
@@ -49,5 +60,24 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	fmt.Println("Hello, World!")
+	// TODO: consider moving this to stakerservice
+	staker, err := staker.NewStakerAppFromConfig(cfg)
+
+	if err != nil {
+		cfgLogger.Errorf("failed to create staker app: %v", err)
+		os.Exit(1)
+	}
+
+	service := service.NewStakerService(
+		cfg,
+		staker,
+		cfgLogger,
+		shutdownInterceptor,
+	)
+
+	err = service.RunUntilShutdown()
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }

@@ -28,12 +28,6 @@ type SlashingTxDescription struct {
 }
 
 func NewStakerAppFromConfig(config *scfg.Config) (*StakerApp, error) {
-	params, err := ut.GetBtcNetworkParams(config.ChainConfig.Network)
-
-	if err != nil {
-		return nil, err
-	}
-
 	// TODO: If we want to support multiple wallet types, this is most probably the place to decide
 	// on concrete implementation
 	walletClient, err := walletcontroller.NewRpcWalletController(config)
@@ -43,7 +37,7 @@ func NewStakerAppFromConfig(config *scfg.Config) (*StakerApp, error) {
 
 	return &StakerApp{
 		wc:      walletClient,
-		network: params,
+		network: &config.ActiveNetParams,
 	}, nil
 }
 

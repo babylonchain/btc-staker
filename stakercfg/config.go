@@ -110,7 +110,7 @@ type Config struct {
 
 	ActiveNetParams chaincfg.Params
 
-	rpcListeners []net.Addr
+	RpcListeners []net.Addr
 }
 
 func DefaultConfig() Config {
@@ -392,7 +392,7 @@ func ValidateConfig(cfg Config) (*Config, error) {
 
 	// Add default port to all RPC listener addresses if needed and remove
 	// duplicate addresses.
-	cfg.rpcListeners, err = lncfg.NormalizeAddresses(
+	cfg.RpcListeners, err = lncfg.NormalizeAddresses(
 		cfg.JsonRpcServerConfig.RawRPCListeners, strconv.Itoa(defaultRPCPort),
 		net.ResolveTCPAddr,
 	)
