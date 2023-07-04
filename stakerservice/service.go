@@ -53,11 +53,6 @@ func (s *StakerService) GetRoutes() RoutesMap {
 	}
 }
 
-func (s *StakerService) StartListeners() ([]net.Listener, error) {
-
-	return nil, nil
-}
-
 func (s *StakerService) RunUntilShutdown() error {
 	if atomic.AddInt32(&s.started, 1) != 1 {
 		return nil

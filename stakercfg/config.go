@@ -26,7 +26,7 @@ const (
 	defaultLogLevel        = "info"
 	defaultLogDirname      = "logs"
 	defaultLogFilename     = "stakerd.log"
-	defaultRPCPort         = 15812
+	DefaultRPCPort         = 15812
 	// DefaultAutogenValidity is the default validity of a self-signed
 	// certificate. The value corresponds to 14 months
 	// (14 months * 30 days * 24 hours).
@@ -378,7 +378,7 @@ func ValidateConfig(cfg Config) (*Config, error) {
 	// At least one RPCListener is required. So listen on localhost per
 	// default.
 	if len(cfg.JsonRpcServerConfig.RawRPCListeners) == 0 {
-		addr := fmt.Sprintf("localhost:%d", defaultRPCPort)
+		addr := fmt.Sprintf("localhost:%d", DefaultRPCPort)
 		cfg.JsonRpcServerConfig.RawRPCListeners = append(
 			cfg.JsonRpcServerConfig.RawRPCListeners, addr,
 		)
@@ -393,7 +393,7 @@ func ValidateConfig(cfg Config) (*Config, error) {
 	// Add default port to all RPC listener addresses if needed and remove
 	// duplicate addresses.
 	cfg.RpcListeners, err = lncfg.NormalizeAddresses(
-		cfg.JsonRpcServerConfig.RawRPCListeners, strconv.Itoa(defaultRPCPort),
+		cfg.JsonRpcServerConfig.RawRPCListeners, strconv.Itoa(DefaultRPCPort),
 		net.ResolveTCPAddr,
 	)
 
