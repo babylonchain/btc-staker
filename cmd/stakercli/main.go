@@ -79,13 +79,14 @@ func main() {
 			Value: "pass",
 		},
 		cli.StringFlag{
-			Name:  btcWalletRpcPassFlag,
+			Name:  btcWalletPassphraseFlag,
 			Usage: "btc wallet passphrase",
 		},
 	}
 
 	app.Commands = append(app.Commands, scriptsCommands...)
 	app.Commands = append(app.Commands, transactionCommands...)
+	app.Commands = append(app.Commands, daemonCommands...)
 
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)

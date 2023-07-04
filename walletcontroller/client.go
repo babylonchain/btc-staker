@@ -21,12 +21,12 @@ type RpcWalletController struct {
 
 var _ WalletController = (*RpcWalletController)(nil)
 
-func NewRpcWalletController(scfg *stakercfg.StakerConfig) (*RpcWalletController, error) {
+func NewRpcWalletController(scfg *stakercfg.Config) (*RpcWalletController, error) {
 	return NewRpcWalletControllerFromArgs(
 		scfg.WalletRpcConfig.Host,
 		scfg.WalletRpcConfig.User,
 		scfg.WalletRpcConfig.Pass,
-		scfg.ChainConfig.Network,
+		scfg.ActiveNetParams.Name,
 		scfg.WalletConfig.WalletPass,
 		// TODO for now just disable tls
 		true,
