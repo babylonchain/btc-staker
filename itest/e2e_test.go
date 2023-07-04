@@ -69,7 +69,7 @@ func defaultStakerConfig() *stakercfg.Config {
 	defaultConfig := stakercfg.DefaultConfig()
 
 	defaultConfig.ChainConfig.Network = "simnet"
-
+	defaultConfig.ActiveNetParams = *netParams
 	// Config setting necessary to connect btcwallet daemon
 	defaultConfig.WalletConfig.WalletPass = "pass"
 
