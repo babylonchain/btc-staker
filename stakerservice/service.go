@@ -59,7 +59,7 @@ func (s *StakerService) RunUntilShutdown() error {
 	}
 
 	defer func() {
-		s.logger.Info("Shutdown complete\n")
+		s.logger.Info("Shutdown complete")
 	}()
 
 	mkErr := func(format string, args ...interface{}) error {

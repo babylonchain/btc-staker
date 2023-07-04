@@ -28,7 +28,7 @@ import (
 
 // bitcoin params used for testing
 var (
-	netParams        = &chaincfg.SimNetParams
+	simnetParams        = &chaincfg.SimNetParams
 	submitterAddrStr = "bbn1eppc73j56382wjn6nnq3quu5eye4pmm087xfdh"
 	babylonTag       = []byte{1, 2, 3, 4}
 	babylonTagHex    = hex.EncodeToString(babylonTag)
@@ -69,7 +69,7 @@ func defaultStakerConfig() *stakercfg.Config {
 	defaultConfig := stakercfg.DefaultConfig()
 
 	defaultConfig.ChainConfig.Network = "simnet"
-	defaultConfig.ActiveNetParams = *netParams
+	defaultConfig.ActiveNetParams = *simnetParams
 	// Config setting necessary to connect btcwallet daemon
 	defaultConfig.WalletConfig.WalletPass = "pass"
 
@@ -86,7 +86,7 @@ func GetSpendingKeyAndAddress(id uint32) (*btcec.PrivateKey, btcutil.Address, er
 	// id used for our test wallet is always 0
 	binary.BigEndian.PutUint32(harnessHDSeed[:chainhash.HashSize], id)
 
-	hdRoot, err := hdkeychain.NewMaster(harnessHDSeed[:], netParams)
+	hdRoot, err := hdkeychain.NewMaster(harnessHDSeed[:], simnetParams)
 
 	if err != nil {
 		return nil, nil, err
@@ -105,7 +105,7 @@ func GetSpendingKeyAndAddress(id uint32) (*btcec.PrivateKey, btcutil.Address, er
 		return nil, nil, err
 	}
 
-	coinbaseAddr, err := keyToAddr(coinbaseKey, netParams)
+	coinbaseAddr, err := keyToAddr(coinbaseKey, simnetParams)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -215,7 +215,7 @@ func StartManager(
 		"--nostalldetect",
 	}
 
-	miner, err := rpctest.New(netParams, handlers, args, "")
+	miner, err := rpctest.New(simnetParams, handlers, args, "")
 	require.NoError(t, err)
 
 	privkey, addr, err := GetSpendingKeyAndAddress(uint32(numTestInstances))
@@ -278,7 +278,7 @@ func ImportWalletSpendingKey(
 	walletClient *walletcontroller.RpcWalletController,
 	privKey *btcec.PrivateKey) error {
 
-	wifKey, err := btcutil.NewWIF(privKey, netParams, true)
+	wifKey, err := btcutil.NewWIF(privKey, simnetParams, true)
 	require.NoError(t, err)
 
 	err = walletClient.UnlockWallet(int64(3))
