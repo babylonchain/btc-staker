@@ -83,13 +83,13 @@ func genScript(ctx *cli.Context) error {
 			return err
 		}
 
-		client, err := getWalletClientFromCtx(ctx)
+		ct, err := getStakerControllerFromCtx(ctx)
 
 		if err != nil {
 			return err
 		}
 
-		stakerPk, err := client.AddressPublicKey(stakerAddressParsed)
+		stakerPk, err := ct.Wc.AddressPublicKey(stakerAddressParsed)
 
 		if err != nil {
 			return nil

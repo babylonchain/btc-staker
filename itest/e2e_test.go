@@ -12,6 +12,7 @@ import (
 	"time"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
+	"github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/walletcontroller"
@@ -28,7 +29,7 @@ import (
 
 // bitcoin params used for testing
 var (
-	simnetParams        = &chaincfg.SimNetParams
+	simnetParams     = &chaincfg.SimNetParams
 	submitterAddrStr = "bbn1eppc73j56382wjn6nnq3quu5eye4pmm087xfdh"
 	babylonTag       = []byte{1, 2, 3, 4}
 	babylonTagHex    = hex.EncodeToString(babylonTag)
@@ -117,7 +118,7 @@ type TestManager struct {
 	MinerNode        *rpctest.Harness
 	BtcWalletHandler *WalletHandler
 	Config           *stakercfg.Config
-	StakerApp        *staker.StakerApp
+	Sc               *staker.StakerController
 	WalletPrivKey    *btcec.PrivateKey
 	MinerAddr        btcutil.Address
 }
@@ -250,7 +251,13 @@ func StartManager(
 		numbersOfOutputsToWaitForDurintInit,
 	)
 
-	stakerApp, err := staker.NewStakerAppFromClient(btcWalletClient)
+	// TODO add real client
+	bc := babylonclient.GetMockClient()
+
+	sc, err := staker.NewStakerControllerFromClients(
+		btcWalletClient,
+		bc,
+	)
 
 	require.NoError(t, err)
 
@@ -260,7 +267,7 @@ func StartManager(
 		MinerNode:        miner,
 		BtcWalletHandler: wh,
 		Config:           cfg,
-		StakerApp:        stakerApp,
+		Sc:               sc,
 		WalletPrivKey:    privkey,
 		MinerAddr:        addr,
 	}
@@ -352,7 +359,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), 5, 10000)
 
-	_, txHash, err := tm.StakerApp.SendStakingTransaction(
+	_, txHash, err := tm.Sc.SendStakingTransaction(
 		tm.MinerAddr,
 		testStakingData.Script,
 		testStakingData.StakingAmount,

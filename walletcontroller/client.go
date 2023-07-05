@@ -1,6 +1,7 @@
 package walletcontroller
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/babylonchain/btc-staker/stakercfg"
@@ -127,6 +128,32 @@ func (w *RpcWalletController) CreateTransaction(
 	}
 
 	return tx, err
+}
+
+func (w *RpcWalletController) CreateAndSignTx(
+	outputs []*wire.TxOut,
+	feeRatePerKb btcutil.Amount,
+	changeAddress btcutil.Address,
+) (*wire.MsgTx, error) {
+	tx, err := w.CreateTransaction(outputs, feeRatePerKb, changeAddress)
+
+	if err != nil {
+		return nil, err
+	}
+
+	fundedTx, signed, err := w.SignRawTransaction(tx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !signed {
+		// TODO: Investigate this case a bit more thoroughly, to check if we can recover
+		// somehow
+		return nil, fmt.Errorf("not all transactions inputs could be signed")
+	}
+
+	return fundedTx, nil
 }
 
 func (w *RpcWalletController) SignRawTransaction(tx *wire.MsgTx) (*wire.MsgTx, bool, error) {
