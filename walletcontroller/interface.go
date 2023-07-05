@@ -10,6 +10,7 @@ import (
 type WalletController interface {
 	UnlockWallet(timeoutSecs int64) error
 	AddressPublicKey(address btcutil.Address) (*btcec.PublicKey, error)
+	ImportPrivKey(privKeyWIF *btcutil.WIF) error
 	NetworkName() string
 	CreateTransaction(
 		outputs []*wire.TxOut,

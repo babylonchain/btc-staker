@@ -41,9 +41,9 @@ func GetMockClient() *MockBabylonClient {
 
 	return &MockBabylonClient{
 		CurrentParams: &StakingParams{
-			ComfirmationTimeBlocks:  6,
-			MinmumStakingTimeBlocks: 100,
-			MinSlashingTxFeeSat:     btcutil.Amount(10000),
+			ComfirmationTimeBlocks:  2,
+			MinmumStakingTimeBlocks: 5,
+			MinSlashingTxFeeSat:     btcutil.Amount(1000),
 			JuryPk:                  *juryPk.PubKey(),
 		},
 	}

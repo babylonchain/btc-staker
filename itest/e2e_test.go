@@ -12,7 +12,6 @@ import (
 	"time"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
-	"github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/walletcontroller"
@@ -24,6 +23,7 @@ import (
 	"github.com/btcsuite/btcd/integration/rpctest"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,7 +118,7 @@ type TestManager struct {
 	MinerNode        *rpctest.Harness
 	BtcWalletHandler *WalletHandler
 	Config           *stakercfg.Config
-	Sc               *staker.StakerController
+	Sa               *staker.StakerApp
 	WalletPrivKey    *btcec.PrivateKey
 	MinerAddr        btcutil.Address
 }
@@ -165,36 +165,14 @@ func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime ui
 
 func initBtcWalletClient(
 	t *testing.T,
-	cfg *stakercfg.Config,
+	client walletcontroller.WalletController,
 	walletPrivKey *btcec.PrivateKey,
-	outputsToWaitFor int) *walletcontroller.RpcWalletController {
+	outputsToWaitFor int) {
 
-	client, err := walletcontroller.NewRpcWalletController(cfg)
-	require.NoError(t, err)
-
-	// lets wait until chain rpc becomes available
-	// poll time is increase here to avoid spamming the btcwallet rpc server
-	require.Eventually(t, func() bool {
-		_, n, err := client.GetBestBlock()
-
-		if err != nil {
-			return false
-		}
-
-		// wait for at least 10 block to be indexed by wallet
-		if n < 10 {
-			return false
-		}
-
-		return true
-	}, eventuallyWaitTimeOut, 1*time.Second)
-
-	err = ImportWalletSpendingKey(t, client, walletPrivKey)
+	err := ImportWalletSpendingKey(t, client, walletPrivKey)
 	require.NoError(t, err)
 
 	waitForNOutputs(t, client, outputsToWaitFor)
-
-	return client
 }
 
 func StartManager(
@@ -244,20 +222,21 @@ func StartManager(
 
 	cfg := defaultStakerConfig()
 
-	btcWalletClient := initBtcWalletClient(
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+	logger.Out = os.Stdout
+
+	stakerApp, err := staker.NewStakerAppFromConfig(cfg, logger)
+	require.NoError(t, err)
+
+	initBtcWalletClient(
 		t,
-		cfg,
+		stakerApp.Wallet(),
 		privkey,
 		numbersOfOutputsToWaitForDurintInit,
 	)
 
-	// TODO add real client
-	bc := babylonclient.GetMockClient()
-
-	sc, err := staker.NewStakerControllerFromClients(
-		btcWalletClient,
-		bc,
-	)
+	stakerApp.Start()
 
 	require.NoError(t, err)
 
@@ -267,7 +246,7 @@ func StartManager(
 		MinerNode:        miner,
 		BtcWalletHandler: wh,
 		Config:           cfg,
-		Sc:               sc,
+		Sa:               stakerApp,
 		WalletPrivKey:    privkey,
 		MinerAddr:        addr,
 	}
@@ -276,13 +255,14 @@ func StartManager(
 func (tm *TestManager) Stop(t *testing.T) {
 	err := tm.BtcWalletHandler.Stop()
 	require.NoError(t, err)
+	tm.Sa.Stop()
 	err = tm.MinerNode.TearDown()
 	require.NoError(t, err)
 }
 
 func ImportWalletSpendingKey(
 	t *testing.T,
-	walletClient *walletcontroller.RpcWalletController,
+	walletClient walletcontroller.WalletController,
 	privKey *btcec.PrivateKey) error {
 
 	wifKey, err := btcutil.NewWIF(privKey, simnetParams, true)
@@ -328,9 +308,9 @@ func retrieveTransactionFromMempool(t *testing.T, h *rpctest.Harness, hashes []*
 	return txes
 }
 
-func waitForNOutputs(t *testing.T, walletClient *walletcontroller.RpcWalletController, n int) {
+func waitForNOutputs(t *testing.T, walletClient walletcontroller.WalletController, n int) {
 	require.Eventually(t, func() bool {
-		outputs, err := walletClient.ListUnspent()
+		outputs, err := walletClient.ListOutputs(false)
 
 		if err != nil {
 			return false
@@ -359,10 +339,11 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), 5, 10000)
 
-	_, txHash, err := tm.Sc.SendStakingTransaction(
+	txHash, err := tm.Sa.StakeFunds(
 		tm.MinerAddr,
-		testStakingData.Script,
-		testStakingData.StakingAmount,
+		btcutil.Amount(testStakingData.StakingAmount),
+		testStakingData.DelegatorKey,
+		testStakingData.StakingTime,
 	)
 	require.NoError(t, err)
 

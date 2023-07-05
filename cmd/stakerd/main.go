@@ -61,7 +61,7 @@ func main() {
 	}
 
 	// TODO: consider moving this to stakerservice
-	staker, err := staker.NewStakerAppFromConfig(cfg)
+	staker, err := staker.NewStakerAppFromConfig(cfg, cfgLogger)
 
 	if err != nil {
 		cfgLogger.Errorf("failed to create staker app: %v", err)

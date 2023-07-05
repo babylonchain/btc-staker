@@ -1,11 +1,24 @@
 package staker
 
-import "github.com/btcsuite/btcd/wire"
+import (
+	"fmt"
+
+	"github.com/btcsuite/btcd/wire"
+)
+
+type TxState uint8
+
+const (
+	Send TxState = iota
+	Confirmed
+)
 
 type TrackedTransaction struct {
 	tx *wire.MsgTx
 	// We need to track script also, as it is needed for slashing tx buidling
 	txscript []byte
+
+	state TxState
 }
 
 // TODO Add version with db!
@@ -20,11 +33,22 @@ func NewStakingTxTracker() *StakingTxTracker {
 	}
 }
 
-func (t *StakingTxTracker) Add(tx *wire.MsgTx, txscript []byte) {
-	t.transactions[tx.TxHash().String()] = &TrackedTransaction{
+func (t *StakingTxTracker) Add(tx *wire.MsgTx, txscript []byte) error {
+	txHash := tx.TxHash().String()
+
+	_, ok := t.transactions[txHash]
+
+	if ok {
+		return fmt.Errorf("tx with hash %s already added", txHash)
+	}
+
+	t.transactions[txHash] = &TrackedTransaction{
 		tx:       tx,
 		txscript: txscript,
+		state:    Send,
 	}
+
+	return nil
 }
 
 // returns nil only if tx is not found
