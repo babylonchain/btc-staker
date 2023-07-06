@@ -12,6 +12,7 @@ import (
 	"time"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
+	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/walletcontroller"
@@ -355,15 +356,33 @@ func TestSendingStakingTransaction(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	allCurrentDelegations := tm.Sa.GetAllDelegations()
+
+	require.Equal(t, 1, len(allCurrentDelegations))
+	require.Equal(t, txHash.String(), allCurrentDelegations[0].StakingTxHash)
+	require.Equal(t, staker.Send, allCurrentDelegations[0].State)
+
 	require.Eventually(t, func() bool {
 		return len(submittedTransactions) == 1
 	}, eventuallyWaitTimeOut, eventuallyPollTime)
 
 	require.Equal(t, txHash, submittedTransactions[0])
 
-	// Check that tx executes successfully
 	mBlock := mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
-
 	require.Equal(t, 2, len(mBlock.Transactions))
+
+	cl := cl.GetMockClient()
+	go func() {
+		// mine confirmation time blocks in background
+		for i := 0; i < int(cl.CurrentParams.ComfirmationTimeBlocks); i++ {
+			time.Sleep(1 * time.Second)
+			mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+		}
+	}()
+
+	require.Eventually(t, func() bool {
+		allCurrentDelegations := tm.Sa.GetAllDelegations()
+		return len(allCurrentDelegations) == 1 && allCurrentDelegations[0].State == staker.Confirmed
+	}, eventuallyWaitTimeOut, eventuallyPollTime)
 
 }

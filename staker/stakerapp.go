@@ -18,10 +18,21 @@ import (
 )
 
 type stakingRequest struct {
-	stakingTx       *wire.MsgTx
-	stakingTxScript []byte
-	errChan         chan error
-	successChan     chan *chainhash.Hash
+	stakingTx             *wire.MsgTx
+	stakingOutputPkScript []byte
+	stakingTxScript       []byte
+	numConfirmations      uint32
+	errChan               chan error
+	successChan           chan *chainhash.Hash
+}
+
+type confirmationEvent struct {
+	txHash chainhash.Hash
+}
+
+type Delegation struct {
+	StakingTxHash string
+	State         TxState
 }
 
 type StakerApp struct {
@@ -30,14 +41,15 @@ type StakerApp struct {
 	wg        sync.WaitGroup
 	quit      chan struct{}
 
-	babylonClient      cl.BabylonClient
-	wc                 walletcontroller.WalletController
-	notifier           notifier.ChainNotifier
-	network            *chaincfg.Params
-	config             *scfg.Config
-	logger             *logrus.Logger
-	txTracker          *StakingTxTracker
-	stakingRequestChan chan *stakingRequest
+	babylonClient         cl.BabylonClient
+	wc                    walletcontroller.WalletController
+	notifier              notifier.ChainNotifier
+	network               *chaincfg.Params
+	config                *scfg.Config
+	logger                *logrus.Logger
+	txTracker             *StakingTxTracker
+	stakingRequestChan    chan *stakingRequest
+	confirmationEventChan chan *confirmationEvent
 }
 
 func NewStakerAppFromConfig(
@@ -63,15 +75,16 @@ func NewStakerAppFromConfig(
 	}
 
 	return &StakerApp{
-		babylonClient:      cl,
-		wc:                 walletClient,
-		notifier:           nodeNotifier,
-		network:            &config.ActiveNetParams,
-		txTracker:          tracker,
-		config:             config,
-		logger:             logger,
-		quit:               make(chan struct{}),
-		stakingRequestChan: make(chan *stakingRequest),
+		babylonClient:         cl,
+		wc:                    walletClient,
+		notifier:              nodeNotifier,
+		network:               &config.ActiveNetParams,
+		txTracker:             tracker,
+		config:                config,
+		logger:                logger,
+		quit:                  make(chan struct{}),
+		stakingRequestChan:    make(chan *stakingRequest),
+		confirmationEventChan: make(chan *confirmationEvent),
 	}, nil
 }
 
@@ -109,6 +122,34 @@ func (app *StakerApp) Stop() error {
 	return stopErr
 }
 
+func (app *StakerApp) WaitForConfirmation(ev *notifier.ConfirmationEvent) {
+	// check we are not shutting down
+	select {
+	case <-app.quit:
+		ev.Cancel()
+		return
+
+	default:
+	}
+
+	for {
+		// TODO add handling of more events like ev.NegativeConf which signals that
+		// transaction have beer reorged out of the chain
+		select {
+		case conf := <-ev.Confirmed:
+			app.confirmationEventChan <- &confirmationEvent{
+				txHash: conf.Tx.TxHash(),
+			}
+			ev.Cancel()
+			return
+		case <-app.quit:
+			// app is quitting, cancel the event
+			ev.Cancel()
+			return
+		}
+	}
+}
+
 // main event loop for the staker app
 func (app *StakerApp) handleStaking() {
 	defer app.wg.Done()
@@ -117,7 +158,14 @@ func (app *StakerApp) handleStaking() {
 		select {
 		case req := <-app.stakingRequestChan:
 			txHash := req.stakingTx.TxHash().String()
-			app.logger.Debugf("Received staking request for tx %s", txHash)
+			bestBlockHeight, err := app.wc.BestBlockHeight()
+			app.logger.Debugf("Received staking request for tx %s. Current best block height: %d", txHash, bestBlockHeight)
+
+			if err != nil {
+				req.errChan <- err
+				continue
+			}
+
 			hash, err := app.wc.SendRawTransaction(req.stakingTx, true)
 			if err != nil {
 				req.errChan <- err
@@ -131,7 +179,41 @@ func (app *StakerApp) handleStaking() {
 				continue
 			}
 
+			confEvent, err := app.notifier.RegisterConfirmationsNtfn(
+				hash,
+				// TODO: staking script is necessary here, to support light clients. Maybe we could
+				// suppport neutrino backends, so stakers could use spv wallets.
+				req.stakingOutputPkScript,
+				req.numConfirmations,
+				uint32(bestBlockHeight),
+			)
+
+			if err != nil {
+				req.errChan <- err
+				continue
+			}
+			// TODO: add some wait group here, to wait for all go routines to finish
+			// before returning from this function
+			go app.WaitForConfirmation(confEvent)
+
+			app.logger.Debugf("Staking tx %s sent", txHash)
 			req.successChan <- hash
+
+		case confEvent := <-app.confirmationEventChan:
+			txHash := confEvent.txHash.String()
+			app.logger.Debugf("Received confirmation event for tx %s", txHash)
+			err := app.txTracker.SetState(txHash, Confirmed)
+
+			if err != nil {
+				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
+				// which is seems like programming error. Maybe panic?
+				app.logger.Errorf("Error setting state for tx %s: %s", txHash, err)
+			}
+
+			// TODO: Start go routine which handles:
+			// - building slashing tx
+			// - buidling inclusions proof for tx
+			// - sending delegation to babylon
 
 		case <-app.quit:
 			return
@@ -201,6 +283,7 @@ func (app *StakerApp) StakeFunds(
 		return nil, err
 	}
 
+	// todo: fix fees
 	tx, err := app.wc.CreateAndSignTx([]*wire.TxOut{ouput}, 100, stakerAddress)
 
 	if err != nil {
@@ -208,10 +291,14 @@ func (app *StakerApp) StakeFunds(
 	}
 
 	req := &stakingRequest{
-		stakingTx:       tx,
-		stakingTxScript: script,
-		errChan:         make(chan error),
-		successChan:     make(chan *chainhash.Hash),
+		stakingTx:             tx,
+		stakingOutputPkScript: ouput.PkScript,
+		stakingTxScript:       script,
+		// adding plus 1, as most libs in bitcoind world count best block as being 1 confirmation, but in
+		// babylon numenclature it is 0 deep
+		numConfirmations: params.ComfirmationTimeBlocks + 1,
+		errChan:          make(chan error),
+		successChan:      make(chan *chainhash.Hash),
 	}
 
 	app.stakingRequestChan <- req
@@ -224,4 +311,19 @@ func (app *StakerApp) StakeFunds(
 	case <-app.quit:
 		return nil, nil
 	}
+}
+
+func (app *StakerApp) GetAllDelegations() []*Delegation {
+	tracked := app.txTracker.GetAll()
+
+	var delegations []*Delegation
+
+	for _, tx := range tracked {
+		delegations = append(delegations, &Delegation{
+			StakingTxHash: tx.tx.TxHash().String(),
+			State:         tx.state,
+		})
+	}
+
+	return delegations
 }

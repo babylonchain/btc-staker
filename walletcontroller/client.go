@@ -179,3 +179,7 @@ func (w *RpcWalletController) ListOutputs(onlySpendable bool) ([]Utxo, error) {
 
 	return utxos, nil
 }
+
+func (w *RpcWalletController) BestBlockHeight() (int64, error) {
+	return w.Client.GetBlockCount()
+}
