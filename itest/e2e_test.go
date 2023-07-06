@@ -66,9 +66,17 @@ func keyToAddr(key *btcec.PrivateKey, net *chaincfg.Params) (btcutil.Address, er
 	return pubKeyAddr.AddressPubKeyHash(), nil
 }
 
-func defaultStakerConfig() *stakercfg.Config {
+func defaultStakerConfig(btcdCert []byte, btcdHost string) *stakercfg.Config {
 	defaultConfig := stakercfg.DefaultConfig()
+	// configure node backend
+	defaultConfig.BtcNodeBackendConfig.Nodetype = "btcd"
+	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RPCHost = btcdHost
+	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RawRPCCert = hex.EncodeToString(btcdCert)
+	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RPCUser = "user"
+	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RPCPass = "pass"
+	defaultConfig.BtcNodeBackendConfig.ActiveNodeBackend = stakercfg.BtcdNodeBackend
 
+	// configre wallet rpc
 	defaultConfig.ChainConfig.Network = "simnet"
 	defaultConfig.ActiveNetParams = *simnetParams
 	// Config setting necessary to connect btcwallet daemon
@@ -220,7 +228,7 @@ func StartManager(
 	// Wait for wallet to re-index the outputs
 	time.Sleep(5 * time.Second)
 
-	cfg := defaultStakerConfig()
+	cfg := defaultStakerConfig(certFile, minerNodeRpcConfig.Host)
 
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
@@ -236,8 +244,7 @@ func StartManager(
 		numbersOfOutputsToWaitForDurintInit,
 	)
 
-	stakerApp.Start()
-
+	err = stakerApp.Start()
 	require.NoError(t, err)
 
 	numTestInstances++
@@ -255,7 +262,8 @@ func StartManager(
 func (tm *TestManager) Stop(t *testing.T) {
 	err := tm.BtcWalletHandler.Stop()
 	require.NoError(t, err)
-	tm.Sa.Stop()
+	err = tm.Sa.Stop()
+	require.NoError(t, err)
 	err = tm.MinerNode.TearDown()
 	require.NoError(t, err)
 }

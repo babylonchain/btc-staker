@@ -13,6 +13,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	notifier "github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -31,6 +32,7 @@ type StakerApp struct {
 
 	babylonClient      cl.BabylonClient
 	wc                 walletcontroller.WalletController
+	notifier           notifier.ChainNotifier
 	network            *chaincfg.Params
 	config             *scfg.Config
 	logger             *logrus.Logger
@@ -54,9 +56,16 @@ func NewStakerAppFromConfig(
 	// TODO use real client
 	cl := cl.GetMockClient()
 
+	nodeNotifier, err := NewNodeBackend(config.BtcNodeBackendConfig, &config.ActiveNetParams)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &StakerApp{
 		babylonClient:      cl,
 		wc:                 walletClient,
+		notifier:           nodeNotifier,
 		network:            &config.ActiveNetParams,
 		txTracker:          tracker,
 		config:             config,
@@ -66,20 +75,38 @@ func NewStakerAppFromConfig(
 	}, nil
 }
 
-func (app *StakerApp) Start() {
+func (app *StakerApp) Start() error {
+	var startErr error
 	app.startOnce.Do(func() {
 		app.logger.Infof("Starting StakerApp")
+
+		err := app.notifier.Start()
+		if err != nil {
+			startErr = err
+			return
+		}
+
 		app.wg.Add(1)
 		go app.handleStaking()
 	})
+
+	return startErr
 }
 
-func (app *StakerApp) Stop() {
+func (app *StakerApp) Stop() error {
+	var stopErr error
 	app.stopOnce.Do(func() {
 		app.logger.Infof("Stopping StakerApp")
 		close(app.quit)
 		app.wg.Wait()
+
+		err := app.notifier.Stop()
+		if err != nil {
+			stopErr = err
+			return
+		}
 	})
+	return stopErr
 }
 
 // main event loop for the staker app

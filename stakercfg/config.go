@@ -34,6 +34,13 @@ const (
 	defaultConfigFileName  = "stakerd.conf"
 )
 
+type SupportedNodeBackend int
+
+const (
+	BitcoindNodeBackend SupportedNodeBackend = iota
+	BtcdNodeBackend
+)
+
 var (
 	//   C:\Users\<username>\AppData\Local\stakerd on Windows
 	//   ~/.stakerd on Linux
@@ -90,6 +97,23 @@ type JsonRpcServerConfig struct {
 	RawRPCListeners []string `long:"rpclisten" description:"Add an interface/port/socket to listen for RPC connections"`
 }
 
+type BtcNodeBackendConfig struct {
+	Nodetype          string    `long:"nodetype" description:"type of node to connect to {bitcoind, btcd}"`
+	BtcdConfig        *Btcd     `group:"btcd" namespace:"btcd"`
+	Bitcoind          *Bitcoind `group:"bitcoind" namespace:"bitcoind"`
+	ActiveNodeBackend SupportedNodeBackend
+}
+
+func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
+	btcdConfig := DefaultBtcdConfig()
+	bitcoindConfig := DefaultBitcoindConfig()
+	return BtcNodeBackendConfig{
+		Nodetype:   "btcd",
+		BtcdConfig: &btcdConfig,
+		Bitcoind:   &bitcoindConfig,
+	}
+}
+
 type Config struct {
 	DebugLevel string `long:"debuglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, fatal}"`
 	StakerdDir string `long:"stakerddir" description:"The base directory that contains staker's data, logs, configuration file, etc."`
@@ -106,6 +130,8 @@ type Config struct {
 
 	ChainConfig *ChainConfig `group:"chain" namespace:"chain"`
 
+	BtcNodeBackendConfig *BtcNodeBackendConfig `group:"btcnodebackend" namespace:"btcnodebackend"`
+
 	JsonRpcServerConfig *JsonRpcServerConfig
 
 	ActiveNetParams chaincfg.Params
@@ -117,15 +143,17 @@ func DefaultConfig() Config {
 	rpcConf := DefaultWalletRpcConfig()
 	walletConf := DefaultWalletConfig()
 	chainCfg := DefaultChainConfig()
+	nodeBackendCfg := DefaultBtcNodeBackendConfig()
 	return Config{
-		StakerdDir:      DefaultStakerdDir,
-		ConfigFile:      DefaultConfigFile,
-		DataDir:         defaultDataDir,
-		DebugLevel:      defaultLogLevel,
-		LogDir:          defaultLogDir,
-		WalletConfig:    &walletConf,
-		WalletRpcConfig: &rpcConf,
-		ChainConfig:     &chainCfg,
+		StakerdDir:           DefaultStakerdDir,
+		ConfigFile:           DefaultConfigFile,
+		DataDir:              defaultDataDir,
+		DebugLevel:           defaultLogLevel,
+		LogDir:               defaultLogDir,
+		WalletConfig:         &walletConf,
+		WalletRpcConfig:      &rpcConf,
+		ChainConfig:          &chainCfg,
+		BtcNodeBackendConfig: &nodeBackendCfg,
 	}
 }
 
@@ -337,6 +365,17 @@ func ValidateConfig(cfg Config) (*Config, error) {
 		return nil, mkErr(fmt.Sprintf("invalid network: %v",
 			cfg.ChainConfig.Network))
 	}
+
+	switch cfg.BtcNodeBackendConfig.Nodetype {
+	case "btcd":
+		cfg.BtcNodeBackendConfig.ActiveNodeBackend = BtcdNodeBackend
+	case "bitcoind":
+		cfg.BtcNodeBackendConfig.ActiveNodeBackend = BitcoindNodeBackend
+	default:
+		return nil, mkErr(fmt.Sprintf("invalid nodetype: %s", cfg.BtcNodeBackendConfig.Nodetype))
+	}
+
+	// TODO: Validate node host and port
 
 	// Validate profile port or host:port.
 	if cfg.Profile != "" {
