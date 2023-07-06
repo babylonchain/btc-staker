@@ -374,7 +374,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 	cl := cl.GetMockClient()
 	go func() {
 		// mine confirmation time blocks in background
-		for i := 0; i < int(cl.CurrentParams.ComfirmationTimeBlocks); i++ {
+		for i := 0; i < int(cl.ClientParams.ComfirmationTimeBlocks); i++ {
 			time.Sleep(1 * time.Second)
 			mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
 		}

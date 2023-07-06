@@ -228,7 +228,7 @@ func (app *StakerApp) Wallet() walletcontroller.WalletController {
 func (app *StakerApp) StakeFunds(
 	stakerAddress btcutil.Address,
 	stakingAmount btcutil.Amount,
-	delegatorPk *btcec.PublicKey,
+	validatorPk *btcec.PublicKey,
 	stakingTimeBlocks uint16,
 ) (*chainhash.Hash, error) {
 
@@ -251,9 +251,9 @@ func (app *StakerApp) StakeFunds(
 			stakingAmount, params.MinSlashingTxFeeSat)
 	}
 
-	if uint32(stakingTimeBlocks) < params.MinmumStakingTimeBlocks {
-		return nil, fmt.Errorf("staking time %d is less than minimum staking time %d",
-			stakingTimeBlocks, params.MinmumStakingTimeBlocks)
+	if uint32(stakingTimeBlocks) < params.FinalizationTimeoutBlocks {
+		return nil, fmt.Errorf("staking time %d is less than minimum finalization time %d",
+			stakingTimeBlocks, params.FinalizationTimeoutBlocks)
 	}
 
 	// unlock wallet for the rest of the operations
@@ -270,9 +270,9 @@ func (app *StakerApp) StakeFunds(
 		return nil, err
 	}
 
-	ouput, script, err := staking.BuildStakingOutput(
+	output, script, err := staking.BuildStakingOutput(
 		stakerKey,
-		delegatorPk,
+		validatorPk,
 		&params.JuryPk,
 		stakingTimeBlocks,
 		stakingAmount,
@@ -284,7 +284,7 @@ func (app *StakerApp) StakeFunds(
 	}
 
 	// todo: fix fees
-	tx, err := app.wc.CreateAndSignTx([]*wire.TxOut{ouput}, 100, stakerAddress)
+	tx, err := app.wc.CreateAndSignTx([]*wire.TxOut{output}, 100, stakerAddress)
 
 	if err != nil {
 		return nil, err
@@ -292,7 +292,7 @@ func (app *StakerApp) StakeFunds(
 
 	req := &stakingRequest{
 		stakingTx:             tx,
-		stakingOutputPkScript: ouput.PkScript,
+		stakingOutputPkScript: output.PkScript,
 		stakingTxScript:       script,
 		// adding plus 1, as most libs in bitcoind world count best block as being 1 confirmation, but in
 		// babylon numenclature it is 0 deep

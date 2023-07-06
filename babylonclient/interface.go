@@ -9,7 +9,7 @@ type StakingParams struct {
 	// K-deep
 	ComfirmationTimeBlocks uint32
 	// W-deep
-	MinmumStakingTimeBlocks uint32
+	FinalizationTimeoutBlocks uint32
 
 	// Minimum amount of satoshis required for slashing transaction
 	MinSlashingTxFeeSat btcutil.Amount
@@ -23,13 +23,13 @@ type BabylonClient interface {
 }
 
 type MockBabylonClient struct {
-	CurrentParams *StakingParams
+	ClientParams *StakingParams
 }
 
 var _ BabylonClient = (*MockBabylonClient)(nil)
 
 func (m *MockBabylonClient) Params() (*StakingParams, error) {
-	return m.CurrentParams, nil
+	return m.ClientParams, nil
 }
 
 func GetMockClient() *MockBabylonClient {
@@ -40,11 +40,11 @@ func GetMockClient() *MockBabylonClient {
 	}
 
 	return &MockBabylonClient{
-		CurrentParams: &StakingParams{
-			ComfirmationTimeBlocks:  2,
-			MinmumStakingTimeBlocks: 5,
-			MinSlashingTxFeeSat:     btcutil.Amount(1000),
-			JuryPk:                  *juryPk.PubKey(),
+		ClientParams: &StakingParams{
+			ComfirmationTimeBlocks:    2,
+			FinalizationTimeoutBlocks: 5,
+			MinSlashingTxFeeSat:       btcutil.Amount(1000),
+			JuryPk:                    *juryPk.PubKey(),
 		},
 	}
 }
