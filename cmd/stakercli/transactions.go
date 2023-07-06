@@ -72,12 +72,10 @@ var sendStakingTransactionCmd = cli.Command{
 }
 
 func createTx(ctx *cli.Context) error {
-	client, err := getWalletClientFromCtx(ctx)
+	ct, err := getStakerControllerFromCtx(ctx)
 	if err != nil {
 		return err
 	}
-
-	stakerApp, err := st.NewStakerAppFromClient(client)
 
 	if err != nil {
 		return err
@@ -87,7 +85,7 @@ func createTx(ctx *cli.Context) error {
 	stakingScript := ctx.String(stakingScriptFlag)
 	stakingAmount := ctx.Int64(stakingAmountFlag)
 
-	tx, err := stakerApp.CreateStakingTransactionFromArgs(
+	tx, err := ct.CreateStakingTransactionFromArgs(
 		stakerAddress,
 		stakingScript,
 		stakingAmount,
@@ -105,12 +103,10 @@ func createTx(ctx *cli.Context) error {
 }
 
 func sendTx(ctx *cli.Context) error {
-	client, err := getWalletClientFromCtx(ctx)
+	ct, err := getStakerControllerFromCtx(ctx)
 	if err != nil {
 		return err
 	}
-
-	stakerApp, err := st.NewStakerAppFromClient(client)
 
 	if err != nil {
 		return err
@@ -120,7 +116,7 @@ func sendTx(ctx *cli.Context) error {
 	stakingScript := ctx.String(stakingScriptFlag)
 	stakingAmount := ctx.Int64(stakingAmountFlag)
 
-	tx, hash, err := stakerApp.SendStakingTransactionFromArgs(
+	tx, hash, err := ct.SendStakingTransactionFromArgs(
 		stakerAddress,
 		stakingScript,
 		stakingAmount,

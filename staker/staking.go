@@ -1,6 +1,7 @@
 package staker
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -9,6 +10,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/wire"
 )
 
 func EncodeSchnorrPkToHexString(pk *btcec.PublicKey) string {
@@ -114,4 +116,29 @@ func GenerateStakingScriptAndAddress(
 		Script:  hex.EncodeToString(script),
 		Address: address.EncodeAddress(),
 	}, nil
+}
+
+func BuildStakingOutputFromScriptAndStakerKey(
+	stakingScript []byte,
+	stakerKey *btcec.PublicKey,
+	stakingAmount int64,
+	netParams *chaincfg.Params,
+) (*wire.TxOut, error) {
+	parsedScript, err := staking.ParseStakingTransactionScript(stakingScript)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !bytes.Equal(schnorr.SerializePubKey(stakerKey), schnorr.SerializePubKey(parsedScript.StakerKey)) {
+		return nil, fmt.Errorf("staker key in staking script does not match staker key provided")
+	}
+
+	pkScript, err := staking.BuildUnspendableTaprootPkScript(stakingScript, netParams)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return wire.NewTxOut(int64(stakingAmount), pkScript), nil
 }

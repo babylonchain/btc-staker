@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/babylonchain/btc-staker/babylonclient"
+	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/urfave/cli"
 )
@@ -32,7 +34,7 @@ const (
 	btcWalletPassphraseFlag = "btc-wallet-passphrase"
 )
 
-func getWalletClientFromCtx(ctx *cli.Context) (*walletcontroller.RpcWalletController, error) {
+func getStakerControllerFromCtx(ctx *cli.Context) (*staker.StakerController, error) {
 	walletHost := ctx.String(btcWalletHostFlag)
 	walletUser := ctx.String(btcWalletRpcUserFlag)
 	walletPass := ctx.String(btcWalletRpcPassFlag)
@@ -44,13 +46,22 @@ func getWalletClientFromCtx(ctx *cli.Context) (*walletcontroller.RpcWalletContro
 
 	passphrase := ctx.String(btcWalletPassphraseFlag)
 
-	return walletcontroller.NewRpcWalletControllerFromArgs(
+	wc, err := walletcontroller.NewRpcWalletControllerFromArgs(
 		walletHost,
 		walletUser,
 		walletPass,
 		network,
 		passphrase,
 		true)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: User real one
+	bc := babylonclient.GetMockClient()
+
+	return staker.NewStakerControllerFromClients(wc, bc)
 }
 
 func main() {

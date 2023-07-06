@@ -12,6 +12,7 @@ import (
 	"time"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
+	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/walletcontroller"
@@ -23,12 +24,13 @@ import (
 	"github.com/btcsuite/btcd/integration/rpctest"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
 // bitcoin params used for testing
 var (
-	simnetParams        = &chaincfg.SimNetParams
+	simnetParams     = &chaincfg.SimNetParams
 	submitterAddrStr = "bbn1eppc73j56382wjn6nnq3quu5eye4pmm087xfdh"
 	babylonTag       = []byte{1, 2, 3, 4}
 	babylonTagHex    = hex.EncodeToString(babylonTag)
@@ -65,9 +67,17 @@ func keyToAddr(key *btcec.PrivateKey, net *chaincfg.Params) (btcutil.Address, er
 	return pubKeyAddr.AddressPubKeyHash(), nil
 }
 
-func defaultStakerConfig() *stakercfg.Config {
+func defaultStakerConfig(btcdCert []byte, btcdHost string) *stakercfg.Config {
 	defaultConfig := stakercfg.DefaultConfig()
+	// configure node backend
+	defaultConfig.BtcNodeBackendConfig.Nodetype = "btcd"
+	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RPCHost = btcdHost
+	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RawRPCCert = hex.EncodeToString(btcdCert)
+	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RPCUser = "user"
+	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RPCPass = "pass"
+	defaultConfig.BtcNodeBackendConfig.ActiveNodeBackend = stakercfg.BtcdNodeBackend
 
+	// configre wallet rpc
 	defaultConfig.ChainConfig.Network = "simnet"
 	defaultConfig.ActiveNetParams = *simnetParams
 	// Config setting necessary to connect btcwallet daemon
@@ -117,7 +127,7 @@ type TestManager struct {
 	MinerNode        *rpctest.Harness
 	BtcWalletHandler *WalletHandler
 	Config           *stakercfg.Config
-	StakerApp        *staker.StakerApp
+	Sa               *staker.StakerApp
 	WalletPrivKey    *btcec.PrivateKey
 	MinerAddr        btcutil.Address
 }
@@ -164,36 +174,14 @@ func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime ui
 
 func initBtcWalletClient(
 	t *testing.T,
-	cfg *stakercfg.Config,
+	client walletcontroller.WalletController,
 	walletPrivKey *btcec.PrivateKey,
-	outputsToWaitFor int) *walletcontroller.RpcWalletController {
+	outputsToWaitFor int) {
 
-	client, err := walletcontroller.NewRpcWalletController(cfg)
-	require.NoError(t, err)
-
-	// lets wait until chain rpc becomes available
-	// poll time is increase here to avoid spamming the btcwallet rpc server
-	require.Eventually(t, func() bool {
-		_, n, err := client.GetBestBlock()
-
-		if err != nil {
-			return false
-		}
-
-		// wait for at least 10 block to be indexed by wallet
-		if n < 10 {
-			return false
-		}
-
-		return true
-	}, eventuallyWaitTimeOut, 1*time.Second)
-
-	err = ImportWalletSpendingKey(t, client, walletPrivKey)
+	err := ImportWalletSpendingKey(t, client, walletPrivKey)
 	require.NoError(t, err)
 
 	waitForNOutputs(t, client, outputsToWaitFor)
-
-	return client
 }
 
 func StartManager(
@@ -241,17 +229,23 @@ func StartManager(
 	// Wait for wallet to re-index the outputs
 	time.Sleep(5 * time.Second)
 
-	cfg := defaultStakerConfig()
+	cfg := defaultStakerConfig(certFile, minerNodeRpcConfig.Host)
 
-	btcWalletClient := initBtcWalletClient(
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+	logger.Out = os.Stdout
+
+	stakerApp, err := staker.NewStakerAppFromConfig(cfg, logger)
+	require.NoError(t, err)
+
+	initBtcWalletClient(
 		t,
-		cfg,
+		stakerApp.Wallet(),
 		privkey,
 		numbersOfOutputsToWaitForDurintInit,
 	)
 
-	stakerApp, err := staker.NewStakerAppFromClient(btcWalletClient)
-
+	err = stakerApp.Start()
 	require.NoError(t, err)
 
 	numTestInstances++
@@ -260,7 +254,7 @@ func StartManager(
 		MinerNode:        miner,
 		BtcWalletHandler: wh,
 		Config:           cfg,
-		StakerApp:        stakerApp,
+		Sa:               stakerApp,
 		WalletPrivKey:    privkey,
 		MinerAddr:        addr,
 	}
@@ -269,13 +263,15 @@ func StartManager(
 func (tm *TestManager) Stop(t *testing.T) {
 	err := tm.BtcWalletHandler.Stop()
 	require.NoError(t, err)
+	err = tm.Sa.Stop()
+	require.NoError(t, err)
 	err = tm.MinerNode.TearDown()
 	require.NoError(t, err)
 }
 
 func ImportWalletSpendingKey(
 	t *testing.T,
-	walletClient *walletcontroller.RpcWalletController,
+	walletClient walletcontroller.WalletController,
 	privKey *btcec.PrivateKey) error {
 
 	wifKey, err := btcutil.NewWIF(privKey, simnetParams, true)
@@ -321,9 +317,9 @@ func retrieveTransactionFromMempool(t *testing.T, h *rpctest.Harness, hashes []*
 	return txes
 }
 
-func waitForNOutputs(t *testing.T, walletClient *walletcontroller.RpcWalletController, n int) {
+func waitForNOutputs(t *testing.T, walletClient walletcontroller.WalletController, n int) {
 	require.Eventually(t, func() bool {
-		outputs, err := walletClient.ListUnspent()
+		outputs, err := walletClient.ListOutputs(false)
 
 		if err != nil {
 			return false
@@ -352,12 +348,19 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), 5, 10000)
 
-	_, txHash, err := tm.StakerApp.SendStakingTransaction(
+	txHash, err := tm.Sa.StakeFunds(
 		tm.MinerAddr,
-		testStakingData.Script,
-		testStakingData.StakingAmount,
+		btcutil.Amount(testStakingData.StakingAmount),
+		testStakingData.DelegatorKey,
+		testStakingData.StakingTime,
 	)
 	require.NoError(t, err)
+
+	allCurrentDelegations := tm.Sa.GetAllDelegations()
+
+	require.Equal(t, 1, len(allCurrentDelegations))
+	require.Equal(t, txHash.String(), allCurrentDelegations[0].StakingTxHash)
+	require.Equal(t, staker.Send, allCurrentDelegations[0].State)
 
 	require.Eventually(t, func() bool {
 		return len(submittedTransactions) == 1
@@ -365,9 +368,21 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	require.Equal(t, txHash, submittedTransactions[0])
 
-	// Check that tx executes successfully
 	mBlock := mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
-
 	require.Equal(t, 2, len(mBlock.Transactions))
+
+	cl := cl.GetMockClient()
+	go func() {
+		// mine confirmation time blocks in background
+		for i := 0; i < int(cl.ClientParams.ComfirmationTimeBlocks); i++ {
+			time.Sleep(1 * time.Second)
+			mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+		}
+	}()
+
+	require.Eventually(t, func() bool {
+		allCurrentDelegations := tm.Sa.GetAllDelegations()
+		return len(allCurrentDelegations) == 1 && allCurrentDelegations[0].State == staker.Confirmed
+	}, eventuallyWaitTimeOut, eventuallyPollTime)
 
 }
