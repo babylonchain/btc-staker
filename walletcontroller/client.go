@@ -90,6 +90,17 @@ func (w *RpcWalletController) AddressPublicKey(address btcutil.Address) (*btcec.
 	return privKey.PrivKey.PubKey(), nil
 }
 
+func (w *RpcWalletController) DumpPrivateKey(address btcutil.Address) (*btcec.PrivateKey, error) {
+	privKey, err := w.DumpPrivKey(address)
+
+
+	if err != nil {
+		return nil, err
+	}
+
+	return privKey.PrivKey, nil
+}
+
 func (w *RpcWalletController) NetworkName() string {
 	return w.network
 }

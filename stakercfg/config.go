@@ -132,6 +132,8 @@ type Config struct {
 
 	BtcNodeBackendConfig *BtcNodeBackendConfig `group:"btcnodebackend" namespace:"btcnodebackend"`
 
+	BabylonConfig *BBNConfig `group:"babylon" namespace:"babylon"`
+
 	JsonRpcServerConfig *JsonRpcServerConfig
 
 	ActiveNetParams chaincfg.Params
@@ -144,6 +146,7 @@ func DefaultConfig() Config {
 	walletConf := DefaultWalletConfig()
 	chainCfg := DefaultChainConfig()
 	nodeBackendCfg := DefaultBtcNodeBackendConfig()
+	bbnConfig := DefaultBBNConfig()
 	return Config{
 		StakerdDir:           DefaultStakerdDir,
 		ConfigFile:           DefaultConfigFile,
@@ -154,6 +157,7 @@ func DefaultConfig() Config {
 		WalletRpcConfig:      &rpcConf,
 		ChainConfig:          &chainCfg,
 		BtcNodeBackendConfig: &nodeBackendCfg,
+		BabylonConfig:        &bbnConfig,
 	}
 }
 
@@ -376,6 +380,7 @@ func ValidateConfig(cfg Config) (*Config, error) {
 	}
 
 	// TODO: Validate node host and port
+	// TODO: Validate babylon config!
 
 	// Validate profile port or host:port.
 	if cfg.Profile != "" {

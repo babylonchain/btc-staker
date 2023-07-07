@@ -4,20 +4,43 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/wire"
 )
 
 type TxState uint8
 
 const (
-	Send TxState = iota
-	Confirmed
+	SentToBtc TxState = iota
+	ConfirmedOnBtc
+	SentToBabylon
 )
 
+type ProofOfPossession struct {
+	BabylonSigOverBtcPk         []byte
+	BtcSchnorrSigOverBabylonSig []byte
+}
+
+func NewProofOfPossession(
+	babylonSigOverBtcPk []byte,
+	btcSchnorrSigOverBabylonSig []byte,
+) *ProofOfPossession {
+	return &ProofOfPossession{
+		BabylonSigOverBtcPk:         babylonSigOverBtcPk,
+		BtcSchnorrSigOverBabylonSig: btcSchnorrSigOverBabylonSig,
+	}
+}
+
 type TrackedTransaction struct {
-	tx *wire.MsgTx
+	Tx *wire.MsgTx
 	// We need to track script also, as it is needed for slashing tx buidling
-	txscript []byte
+	Txscript []byte
+
+	Pop *ProofOfPossession
+
+	StakerAddress btcutil.Address
+
+	StakingOutputIndex uint32
 
 	state TxState
 }
@@ -35,7 +58,13 @@ func NewStakingTxTracker() *StakingTxTracker {
 	}
 }
 
-func (t *StakingTxTracker) Add(tx *wire.MsgTx, txscript []byte) error {
+func (t *StakingTxTracker) Add(
+	tx *wire.MsgTx,
+	stakingOutputIndex uint32,
+	txscript []byte,
+	pop *ProofOfPossession,
+	stakerAddress btcutil.Address,
+) error {
 	txHash := tx.TxHash().String()
 
 	t.mutex.Lock()
@@ -47,9 +76,12 @@ func (t *StakingTxTracker) Add(tx *wire.MsgTx, txscript []byte) error {
 	}
 
 	t.transactions[txHash] = &TrackedTransaction{
-		tx:       tx,
-		txscript: txscript,
-		state:    Send,
+		Tx:                 tx,
+		Txscript:           txscript,
+		Pop:                pop,
+		StakerAddress:      stakerAddress,
+		StakingOutputIndex: stakingOutputIndex,
+		state:              SentToBtc,
 	}
 
 	return nil
@@ -88,7 +120,6 @@ func (t *StakingTxTracker) Remove(txHash string) {
 	defer t.mutex.Unlock()
 	delete(t.transactions, txHash)
 }
-
 
 func (t *StakingTxTracker) GetAll() []*TrackedTransaction {
 	t.mutex.RLock()
