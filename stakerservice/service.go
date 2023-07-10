@@ -1,7 +1,9 @@
 package stakerservice
 
 import (
+	"encoding/hex"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"strings"
@@ -9,9 +11,13 @@ import (
 
 	str "github.com/babylonchain/btc-staker/staker"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
+	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/cometbft/cometbft/libs/log"
 	rpc "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
+
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/signal"
 	"github.com/sirupsen/logrus"
@@ -49,10 +55,83 @@ func (s *StakerService) health(*rpctypes.Context) (*ResultHealth, error) {
 	return &ResultHealth{}, nil
 }
 
+func (s *StakerService) stake(_ *rpctypes.Context,
+	stakerAddress string,
+	stakingAmount int64,
+	validatorPk string,
+	stakingTimeBlocks int64,
+) (*ResultStake, error) {
+
+	if stakingAmount <= 0 {
+		return nil, fmt.Errorf("staking amount must be positive")
+	}
+
+	amount := btcutil.Amount(stakingAmount)
+
+	address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+
+	if err != nil {
+		return nil, err
+	}
+
+	validatorPkBytes, err := hex.DecodeString(validatorPk)
+
+	if err != nil {
+		return nil, err
+	}
+
+	valSchnorrKey, err := schnorr.ParsePubKey(validatorPkBytes)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if stakingTimeBlocks <= 0 || stakingTimeBlocks > math.MaxUint16 {
+		return nil, fmt.Errorf("staking time must be positive and lower than %d", math.MaxUint16)
+	}
+
+	stakingTimeUint16 := uint16(stakingTimeBlocks)
+
+	stakingTxHash, err := s.staker.StakeFunds(address, amount, valSchnorrKey, stakingTimeUint16)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ResultStake{
+		TxHash: stakingTxHash.String(),
+	}, nil
+}
+
+func (s *StakerService) stakingDetails(_ *rpctypes.Context,
+	stakingTxHash string) (*StakingDetails, error) {
+
+	txHash, err := chainhash.NewHashFromStr(stakingTxHash)
+
+	if err != nil {
+		return nil, err
+	}
+
+	storedTx, err := s.staker.GetStoredTransaction(txHash)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &StakingDetails{
+		StakerAddress: storedTx.StakerAddress,
+		StakingScript: hex.EncodeToString(storedTx.TxScript),
+		StakingState:  storedTx.State.String(),
+	}, nil
+}
+
 func (s *StakerService) GetRoutes() RoutesMap {
 	return RoutesMap{
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
+		// staking API
+		"stake":           rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
+		"staking_details": rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 	}
 }
 

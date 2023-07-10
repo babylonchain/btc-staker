@@ -556,3 +556,7 @@ func (app *StakerApp) GetAllDelegations() ([]*Delegation, error) {
 
 	return delegations, nil
 }
+
+func (app *StakerApp) GetStoredTransaction(txHash *chainhash.Hash) (*stakerdb.StoredTransaction, error) {
+	return app.txTracker.GetTransaction(txHash)
+}
