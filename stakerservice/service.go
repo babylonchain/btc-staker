@@ -163,7 +163,7 @@ func (s *StakerService) RunUntilShutdown() error {
 	}
 
 	defer func() {
-		s.staker.Stop()
+		_ = s.staker.Stop()
 		s.logger.Info("staker stop complete")
 	}()
 
