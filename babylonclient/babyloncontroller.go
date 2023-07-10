@@ -10,6 +10,7 @@ import (
 	bcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
 	"github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/babylonchain/btc-staker/stakercfg"
+	"github.com/babylonchain/btc-staker/utils"
 	"github.com/babylonchain/rpc-client/query"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -202,13 +203,13 @@ func delegationDataToMsg(dg *DelegationData) (*types.MsgCreateBTCDelegation, err
 
 	}
 
-	serizalizedStakingTransaction, err := SerializeBtcTransaction(dg.StakingTransaction)
+	serizalizedStakingTransaction, err := utils.SerializeBtcTransaction(dg.StakingTransaction)
 
 	if err != nil {
 		return nil, err
 	}
 
-	serializedSlashingTransaction, err := SerializeBtcTransaction(dg.SlashingTransaction)
+	serializedSlashingTransaction, err := utils.SerializeBtcTransaction(dg.SlashingTransaction)
 
 	if err != nil {
 		return nil, err

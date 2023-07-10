@@ -60,8 +60,16 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	dbBackend, err := scfg.GetDbBackend(cfg.DBConfig)
+
+	if err != nil {
+		err = fmt.Errorf("failed to load db backend: %w", err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
 	// TODO: consider moving this to stakerservice
-	staker, err := staker.NewStakerAppFromConfig(cfg, cfgLogger)
+	staker, err := staker.NewStakerAppFromConfig(cfg, cfgLogger, dbBackend)
 
 	if err != nil {
 		cfgLogger.Errorf("failed to create staker app: %v", err)
@@ -73,6 +81,7 @@ func main() {
 		staker,
 		cfgLogger,
 		shutdownInterceptor,
+		dbBackend,
 	)
 
 	err = service.RunUntilShutdown()

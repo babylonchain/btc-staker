@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package stakerproto;
+
+option go_package = "github.com/babylonchain/btc-staker/stakerproto";
+
+enum TransactionState {
+    SENT_TO_BTC = 0;
+    CONFIRMED_ON_BTC = 1;
+    SENT_TO_BABYLON = 2;
+}
+
+message TrackedTransaction {
+    bytes staking_transaction = 1;
+    bytes staking_script = 2;
+    uint32 staking_output_idx = 3;
+    string staker_address = 4;
+    bytes babylon_sig_btc_pk = 5;
+    bytes schnor_sig_babylon_sig = 6;
+    TransactionState state = 7;
+}
+

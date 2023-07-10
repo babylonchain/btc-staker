@@ -15,6 +15,8 @@ import (
 	"github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
+	"github.com/babylonchain/btc-staker/stakerdb"
+	"github.com/babylonchain/btc-staker/stakerproto"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
@@ -24,6 +26,7 @@ import (
 	"github.com/btcsuite/btcd/integration/rpctest"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
@@ -87,6 +90,7 @@ func defaultStakerConfig(btcdCert []byte, btcdHost string) *stakercfg.Config {
 	defaultConfig.WalletRpcConfig.User = "user"
 	defaultConfig.WalletRpcConfig.Pass = "pass"
 	defaultConfig.WalletRpcConfig.DisableTls = true
+
 	return &defaultConfig
 }
 
@@ -127,6 +131,7 @@ type TestManager struct {
 	MinerNode         *rpctest.Harness
 	BtcWalletHandler  *WalletHandler
 	Config            *stakercfg.Config
+	Db                kvdb.Backend
 	Sa                *staker.StakerApp
 	MockBabylonClient *babylonclient.MockBabylonClient
 	WalletPrivKey     *btcec.PrivateKey
@@ -187,27 +192,40 @@ func initBtcWalletClient(
 
 // TODO this is needed as we still do not have a way to test with real babylon node
 func newStakerAppWithMockBabylonClient(
+	t *testing.T,
 	config *stakercfg.Config,
 	logger *logrus.Logger,
-) (*staker.StakerApp, *babylonclient.MockBabylonClient, error) {
+) (*staker.StakerApp, *babylonclient.MockBabylonClient, kvdb.Backend, error) {
 	walletClient, err := walletcontroller.NewRpcWalletController(config)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-
-	tracker := staker.NewStakingTxTracker()
 
 	cl := babylonclient.GetMockClient()
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	nodeNotifier, err := staker.NewNodeBackend(config.BtcNodeBackendConfig, &config.ActiveNetParams)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
+
+	dirPath := filepath.Join(os.TempDir(), "stakerd", "e2etest")
+	err = os.MkdirAll(dirPath, 0755)
+	require.NoError(t, err)
+	dbTempDir, err := os.MkdirTemp(dirPath, "db")
+	require.NoError(t, err)
+
+	config.DBConfig.DBPath = dbTempDir
+
+	dbBackend, err := stakercfg.GetDbBackend(config.DBConfig)
+	require.NoError(t, err)
+
+	tracker, err := stakerdb.NewTrackedTransactionStore(dbBackend)
+	require.NoError(t, err)
 
 	staker, err := staker.NewStakerAppFromDeps(
 		config,
@@ -219,10 +237,10 @@ func newStakerAppWithMockBabylonClient(
 	)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return staker, cl, nil
+	return staker, cl, dbBackend, nil
 }
 
 func StartManager(
@@ -276,7 +294,7 @@ func StartManager(
 	logger.SetLevel(logrus.DebugLevel)
 	logger.Out = os.Stdout
 
-	stakerApp, mockBabylonClient, err := newStakerAppWithMockBabylonClient(cfg, logger)
+	stakerApp, mockBabylonClient, dbbackend, err := newStakerAppWithMockBabylonClient(t, cfg, logger)
 
 	require.NoError(t, err)
 
@@ -296,6 +314,7 @@ func StartManager(
 		MinerNode:         miner,
 		BtcWalletHandler:  wh,
 		Config:            cfg,
+		Db:                dbbackend,
 		Sa:                stakerApp,
 		MockBabylonClient: mockBabylonClient,
 		WalletPrivKey:     privkey,
@@ -307,6 +326,10 @@ func (tm *TestManager) Stop(t *testing.T) {
 	err := tm.BtcWalletHandler.Stop()
 	require.NoError(t, err)
 	err = tm.Sa.Stop()
+	require.NoError(t, err)
+	err = tm.Db.Close()
+	require.NoError(t, err)
+	err = os.RemoveAll(tm.Config.DBConfig.DBPath)
 	require.NoError(t, err)
 	err = tm.MinerNode.TearDown()
 	require.NoError(t, err)
@@ -398,12 +421,12 @@ func TestSendingStakingTransaction(t *testing.T) {
 		testStakingData.StakingTime,
 	)
 	require.NoError(t, err)
-
-	allCurrentDelegations := tm.Sa.GetAllDelegations()
+	allCurrentDelegations, err := tm.Sa.GetAllDelegations()
+	require.NoError(t, err)
 
 	require.Equal(t, 1, len(allCurrentDelegations))
 	require.Equal(t, txHash.String(), allCurrentDelegations[0].StakingTxHash)
-	require.Equal(t, staker.SentToBtc, allCurrentDelegations[0].State)
+	require.Equal(t, stakerproto.TransactionState_SENT_TO_BTC, allCurrentDelegations[0].State)
 
 	require.Eventually(t, func() bool {
 		return len(submittedTransactions) == 1
@@ -435,8 +458,11 @@ func TestSendingStakingTransaction(t *testing.T) {
 	// TODO: check more fields
 	require.Equal(t, stakingtxHash, submittedTransactions[0])
 
-	allCurrentDelegations = tm.Sa.GetAllDelegations()
-	require.Equal(t, 1, len(allCurrentDelegations))
-	require.Equal(t, txHash.String(), allCurrentDelegations[0].StakingTxHash)
-	require.Equal(t, staker.SentToBabylon, allCurrentDelegations[0].State)
+	// we need to use eventually here, as state is changes in db after message sending, so
+	// there could be an delay between message sending and state change
+	require.Eventually(t, func() bool {
+		allCurrentDelegations, err = tm.Sa.GetAllDelegations()
+		require.NoError(t, err)
+		return len(allCurrentDelegations) == 1 && allCurrentDelegations[0].State == stakerproto.TransactionState_SENT_TO_BABYLON
+	}, eventuallyWaitTimeOut, eventuallyPollTime)
 }

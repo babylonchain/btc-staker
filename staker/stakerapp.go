@@ -7,6 +7,8 @@ import (
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
+	"github.com/babylonchain/btc-staker/stakerdb"
+	"github.com/babylonchain/btc-staker/stakerproto"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -16,6 +18,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	notifier "github.com/lightningnetwork/lnd/chainntnfs"
+	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/sirupsen/logrus"
 )
 
@@ -26,13 +29,13 @@ type stakingRequest struct {
 	stakingOutputPkScript []byte
 	stakingTxScript       []byte
 	numConfirmations      uint32
-	pop                   *ProofOfPossession
+	pop                   *stakerdb.ProofOfPossession
 	errChan               chan error
 	successChan           chan *chainhash.Hash
 }
 
 type confirmationEvent struct {
-	txHash        string
+	txHash        chainhash.Hash
 	txIndex       uint32
 	tx            *wire.MsgTx
 	inlusionBlock *wire.MsgBlock
@@ -40,7 +43,7 @@ type confirmationEvent struct {
 
 type Delegation struct {
 	StakingTxHash string
-	State         TxState
+	State         stakerproto.TransactionState
 }
 
 const (
@@ -60,7 +63,7 @@ type StakerApp struct {
 	network               *chaincfg.Params
 	config                *scfg.Config
 	logger                *logrus.Logger
-	txTracker             *StakingTxTracker
+	txTracker             *stakerdb.TrackedTransactionStore
 	stakingRequestChan    chan *stakingRequest
 	confirmationEventChan chan *confirmationEvent
 }
@@ -68,6 +71,7 @@ type StakerApp struct {
 func NewStakerAppFromConfig(
 	config *scfg.Config,
 	logger *logrus.Logger,
+	db kvdb.Backend,
 ) (*StakerApp, error) {
 	// TODO: If we want to support multiple wallet types, this is most probably the place to decide
 	// on concrete implementation
@@ -76,7 +80,11 @@ func NewStakerAppFromConfig(
 		return nil, err
 	}
 
-	tracker := NewStakingTxTracker()
+	tracker, err := stakerdb.NewTrackedTransactionStore(db)
+
+	if err != nil {
+		return nil, err
+	}
 
 	cl, err := cl.NewBabylonController(config.BabylonConfig, &config.ActiveNetParams)
 
@@ -106,7 +114,7 @@ func NewStakerAppFromDeps(
 	cl cl.BabylonClient,
 	walletClient walletcontroller.WalletController,
 	nodeNotifier notifier.ChainNotifier,
-	tracker *StakingTxTracker,
+	tracker *stakerdb.TrackedTransactionStore,
 ) (*StakerApp, error) {
 	return &StakerApp{
 		babylonClient:         cl,
@@ -127,11 +135,17 @@ func (app *StakerApp) Start() error {
 	app.startOnce.Do(func() {
 		app.logger.Infof("Starting StakerApp")
 
+		// TODO: This can take a long time as it conntects to node. Maybe make it cancellable?
+		// although staker without node is not very useful
+
+		app.logger.Infof("Connecting to node backend: %s", app.config.BtcNodeBackendConfig.Nodetype)
 		err := app.notifier.Start()
 		if err != nil {
 			startErr = err
 			return
 		}
+
+		app.logger.Infof("Successfully connected to node backend: %s", app.config.BtcNodeBackendConfig.Nodetype)
 
 		app.wg.Add(1)
 		go app.handleStaking()
@@ -172,7 +186,7 @@ func (app *StakerApp) WaitForConfirmation(ev *notifier.ConfirmationEvent) {
 		select {
 		case conf := <-ev.Confirmed:
 			app.confirmationEventChan <- &confirmationEvent{
-				txHash:        conf.Tx.TxHash().String(),
+				txHash:        conf.Tx.TxHash(),
 				txIndex:       conf.TxIndex,
 				tx:            conf.Tx,
 				inlusionBlock: conf.Block,
@@ -194,7 +208,7 @@ func (app *StakerApp) buildDelegationData(
 	stakingTx *wire.MsgTx,
 	stakingTxScript []byte,
 	stakingOutputIdx uint32,
-	proofOfPossession *ProofOfPossession,
+	proofOfPossession *stakerdb.ProofOfPossession,
 	minSlashingFee int64) (*cl.DelegationData, error) {
 
 	params, err := app.babylonClient.Params()
@@ -285,7 +299,7 @@ func (app *StakerApp) handleStaking() {
 				continue
 			}
 
-			err = app.txTracker.Add(
+			err = app.txTracker.AddTransaction(
 				req.stakingTx,
 				req.stakingOutputIdx,
 				req.stakingTxScript,
@@ -297,6 +311,8 @@ func (app *StakerApp) handleStaking() {
 				req.errChan <- err
 				continue
 			}
+
+			app.logger.Infof("Saved staking tx %s to db", txHash)
 
 			confEvent, err := app.notifier.RegisterConfirmationsNtfn(
 				hash,
@@ -324,7 +340,7 @@ func (app *StakerApp) handleStaking() {
 		case confEvent := <-app.confirmationEventChan:
 			app.logger.Debugf("Received confirmation event for tx %s", confEvent.txHash)
 
-			err := app.txTracker.SetState(confEvent.txHash, ConfirmedOnBtc)
+			err := app.txTracker.SetTxConfirmed(&confEvent.txHash)
 
 			if err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
@@ -334,16 +350,26 @@ func (app *StakerApp) handleStaking() {
 
 			// TODO Following code should porobably be started in seprarate go routine
 			// to not block main event loop
-			ts := app.txTracker.Get(confEvent.txHash)
+			ts, err := app.txTracker.GetTransaction(&confEvent.txHash)
+
+			if err != nil {
+				app.logger.Fatalf("Error getting transaction state for tx %s. Eff: %v", confEvent.txHash, err)
+			}
 
 			app.logger.Debugf("Staker address is: %v", ts.StakerAddress)
+
+			stakerAddress, err := btcutil.DecodeAddress(ts.StakerAddress, app.network)
+
+			if err != nil {
+				app.logger.Fatalf("Error decoding staker address: %s. Err: %v", ts.StakerAddress, err)
+			}
 
 			dg, err := app.buildDelegationData(
 				confEvent.inlusionBlock,
 				confEvent.txIndex,
-				ts.StakerAddress,
-				ts.Tx,
-				ts.Txscript,
+				stakerAddress,
+				ts.BtcTx,
+				ts.TxScript,
 				ts.StakingOutputIndex,
 				ts.Pop,
 				minSlashingFeeAdjustment,
@@ -362,7 +388,7 @@ func (app *StakerApp) handleStaking() {
 				continue
 			}
 
-			err = app.txTracker.SetState(confEvent.txHash, SentToBabylon)
+			err = app.txTracker.SetTxSentToBabylon(&confEvent.txHash)
 
 			if err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
@@ -461,7 +487,7 @@ func (app *StakerApp) StakeFunds(
 		return nil, err
 	}
 
-	pop := NewProofOfPossession(
+	pop := stakerdb.NewProofOfPossession(
 		babylonSig,
 		btcSig.Serialize(),
 	)
@@ -512,17 +538,21 @@ func (app *StakerApp) StakeFunds(
 	}
 }
 
-func (app *StakerApp) GetAllDelegations() []*Delegation {
-	tracked := app.txTracker.GetAll()
+func (app *StakerApp) GetAllDelegations() ([]*Delegation, error) {
+	tracked, err := app.txTracker.GetAllStoredTransactions()
+
+	if err != nil {
+		return nil, err
+	}
 
 	var delegations []*Delegation
 
 	for _, tx := range tracked {
 		delegations = append(delegations, &Delegation{
-			StakingTxHash: tx.Tx.TxHash().String(),
-			State:         tx.state,
+			StakingTxHash: tx.BtcTx.TxHash().String(),
+			State:         tx.State,
 		})
 	}
 
-	return delegations
+	return delegations, nil
 }

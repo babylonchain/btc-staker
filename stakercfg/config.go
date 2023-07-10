@@ -134,6 +134,8 @@ type Config struct {
 
 	BabylonConfig *BBNConfig `group:"babylon" namespace:"babylon"`
 
+	DBConfig *DBConfig `group:"dbconfig" namespace:"dbconfig"`
+
 	JsonRpcServerConfig *JsonRpcServerConfig
 
 	ActiveNetParams chaincfg.Params
@@ -147,6 +149,7 @@ func DefaultConfig() Config {
 	chainCfg := DefaultChainConfig()
 	nodeBackendCfg := DefaultBtcNodeBackendConfig()
 	bbnConfig := DefaultBBNConfig()
+	dbConfig := DefaultDBConfig()
 	return Config{
 		StakerdDir:           DefaultStakerdDir,
 		ConfigFile:           DefaultConfigFile,
@@ -158,6 +161,7 @@ func DefaultConfig() Config {
 		ChainConfig:          &chainCfg,
 		BtcNodeBackendConfig: &nodeBackendCfg,
 		BabylonConfig:        &bbnConfig,
+		DBConfig:             &dbConfig,
 	}
 }
 

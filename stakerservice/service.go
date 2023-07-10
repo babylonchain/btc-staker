@@ -12,6 +12,7 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	rpc "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
+	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/signal"
 	"github.com/sirupsen/logrus"
 )
@@ -21,10 +22,10 @@ type RoutesMap map[string]*rpc.RPCFunc
 type StakerService struct {
 	started int32
 
-	config *scfg.Config
-	staker *str.StakerApp
-	logger *logrus.Logger
-
+	config      *scfg.Config
+	staker      *str.StakerApp
+	logger      *logrus.Logger
+	db          kvdb.Backend
 	interceptor signal.Interceptor
 }
 
@@ -33,12 +34,14 @@ func NewStakerService(
 	s *str.StakerApp,
 	l *logrus.Logger,
 	sig signal.Interceptor,
+	db kvdb.Backend,
 ) *StakerService {
 	return &StakerService{
 		config:      c,
 		staker:      s,
 		logger:      l,
 		interceptor: sig,
+		db:          db,
 	}
 }
 
@@ -62,12 +65,28 @@ func (s *StakerService) RunUntilShutdown() error {
 		s.logger.Info("Shutdown complete")
 	}()
 
+	defer func() {
+		s.logger.Info("Closing database...")
+		s.db.Close()
+		s.logger.Info("Database closed")
+	}()
+
 	mkErr := func(format string, args ...interface{}) error {
 		logFormat := strings.ReplaceAll(format, "%w", "%v")
 		s.logger.Errorf("Shutting down because error in main "+
 			"method: "+logFormat, args...)
 		return fmt.Errorf(format, args...)
 	}
+
+	err := s.staker.Start()
+	if err != nil {
+		return mkErr("error starting staker: %w", err)
+	}
+
+	defer func() {
+		s.staker.Stop()
+		s.logger.Info("staker stop complete")
+	}()
 
 	routes := s.GetRoutes()
 	// TODO: Add staker service dedicated config to define those values
@@ -118,9 +137,13 @@ func (s *StakerService) RunUntilShutdown() error {
 		listeners[i] = listener
 	}
 
+	s.logger.Info("Staker Service fully started")
+
 	// Wait for shutdown signal from either a graceful service stop or from
 	// the interrupt handler.
 	<-s.interceptor.ShutdownChannel()
+
+	s.logger.Info("Received shutdown signal. Stopping...")
 
 	return nil
 }
