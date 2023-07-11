@@ -189,6 +189,7 @@ func LoadConfig() (*Config, *logrus.Logger, error) {
 	// Pre-parse the command line options to pick up an alternative config
 	// file.
 	preCfg := DefaultConfig()
+
 	if _, err := flags.Parse(&preCfg); err != nil {
 		return nil, nil, err
 	}
@@ -215,7 +216,7 @@ func LoadConfig() (*Config, *logrus.Logger, error) {
 	// User did specify an explicit --configfile, so we check that it does
 	// exist under that path to avoid surprises.
 	case configFilePath != DefaultConfigFile:
-		if !fileExists(configFilePath) {
+		if !FileExists(configFilePath) {
 			return nil, nil, fmt.Errorf("specified config file does "+
 				"not exist in %s", configFilePath)
 		}
@@ -453,9 +454,9 @@ func ValidateConfig(cfg Config) (*Config, error) {
 	return &cfg, nil
 }
 
-// fileExists reports whether the named file or directory exists.
+// FileExists reports whether the named file or directory exists.
 // This function is taken from https://github.com/btcsuite/btcd
-func fileExists(name string) bool {
+func FileExists(name string) bool {
 	if _, err := os.Stat(name); err != nil {
 		if os.IsNotExist(err) {
 			return false

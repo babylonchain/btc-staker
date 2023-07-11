@@ -35,7 +35,7 @@ func DefaultBBNConfig() BBNConfig {
 		KeyringBackend: dc.KeyringBackend,
 		GasAdjustment:  dc.GasAdjustment,
 		GasPrices:      dc.GasPrices,
-		KeyDirectory:   dc.KeyDirectory,
+		KeyDirectory:   DefaultStakerdDir,
 		Debug:          dc.Debug,
 		Timeout:        dc.Timeout,
 		BlockTimeout:   dc.BlockTimeout,
