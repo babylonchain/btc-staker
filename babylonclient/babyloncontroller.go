@@ -237,7 +237,7 @@ func delegationDataToMsg(dg *DelegationData) (*types.MsgCreateBTCDelegation, err
 		BabylonPk: dg.BabylonPk,
 		Pop: &types.ProofOfPossession{
 			BabylonSig: dg.BabylonEcdsaSigOverBtcPk,
-			BtcSig:     &schnorSig,
+			BtcSig:     schnorSig,
 		},
 		StakingTx: &types.StakingTx{
 			Tx:            serizalizedStakingTransaction,
