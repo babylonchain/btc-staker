@@ -13,6 +13,7 @@ type WalletController interface {
 	BestBlockHeight() (int64, error)
 	UnlockWallet(timeoutSecs int64) error
 	AddressPublicKey(address btcutil.Address) (*btcec.PublicKey, error)
+	DumpPrivateKey(address btcutil.Address) (*btcec.PrivateKey, error)
 	ImportPrivKey(privKeyWIF *btcutil.WIF) error
 	NetworkName() string
 	CreateTransaction(
