@@ -8,7 +8,7 @@ import (
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
-	"github.com/babylonchain/btc-staker/stakerproto"
+	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -43,7 +43,7 @@ type confirmationEvent struct {
 
 type Delegation struct {
 	StakingTxHash string
-	State         stakerproto.TransactionState
+	State         proto.TransactionState
 }
 
 const (

@@ -3,12 +3,12 @@ package stakerdb
 import (
 	"bytes"
 
-	"github.com/babylonchain/btc-staker/stakerproto"
+	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"google.golang.org/protobuf/proto"
+	pm "google.golang.org/protobuf/proto"
 
 	"github.com/lightningnetwork/lnd/kvdb"
 )
@@ -44,7 +44,7 @@ type StoredTransaction struct {
 	// Returning address as string, to avoid having to know how to decode address
 	// which requires knowing the network we are on
 	StakerAddress string
-	State         stakerproto.TransactionState
+	State         proto.TransactionState
 }
 
 // NewTrackedTransactionStore returns a new store backed by db
@@ -69,7 +69,7 @@ func (c *TrackedTransactionStore) initBuckets() error {
 	})
 }
 
-func protoTxToStoredTransaction(ttx *stakerproto.TrackedTransaction) (*StoredTransaction, error) {
+func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransaction, error) {
 	var stakingTx wire.MsgTx
 	err := stakingTx.Deserialize(bytes.NewReader(ttx.StakingTransaction))
 
@@ -117,17 +117,17 @@ func (c *TrackedTransactionStore) AddTransaction(
 			return err
 		}
 
-		msg := stakerproto.TrackedTransaction{
+		msg := proto.TrackedTransaction{
 			StakingTransaction:  serializedTx,
 			StakingScript:       txscript,
 			StakingOutputIdx:    stakingOutputIndex,
 			StakerAddress:       stakerAddress.EncodeAddress(),
 			BabylonSigBtcPk:     pop.BabylonSigOverBtcPk,
 			SchnorSigBabylonSig: pop.BtcSchnorrSigOverBabylonSig,
-			State:               stakerproto.TransactionState_SENT_TO_BTC,
+			State:               proto.TransactionState_SENT_TO_BTC,
 		}
 
-		marshalled, err := proto.Marshal(&msg)
+		marshalled, err := pm.Marshal(&msg)
 
 		if err != nil {
 			return err
@@ -137,7 +137,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 	})
 }
 
-func (c *TrackedTransactionStore) setTxState(txHash *chainhash.Hash, state stakerproto.TransactionState) error {
+func (c *TrackedTransactionStore) setTxState(txHash *chainhash.Hash, state proto.TransactionState) error {
 	txHashBytes := txHash.CloneBytes()
 
 	return kvdb.Batch(c.db, func(tx kvdb.RwTx) error {
@@ -151,15 +151,15 @@ func (c *TrackedTransactionStore) setTxState(txHash *chainhash.Hash, state stake
 			return ErrTransactionNotFound
 		}
 
-		var storedTx stakerproto.TrackedTransaction
-		err := proto.Unmarshal(maybeTx, &storedTx)
+		var storedTx proto.TrackedTransaction
+		err := pm.Unmarshal(maybeTx, &storedTx)
 		if err != nil {
 			return ErrCorruptedTransactionsDb
 		}
 
 		storedTx.State = state
 
-		marshalled, err := proto.Marshal(&storedTx)
+		marshalled, err := pm.Marshal(&storedTx)
 
 		if err != nil {
 			return err
@@ -170,11 +170,11 @@ func (c *TrackedTransactionStore) setTxState(txHash *chainhash.Hash, state stake
 }
 
 func (c *TrackedTransactionStore) SetTxConfirmed(txHash *chainhash.Hash) error {
-	return c.setTxState(txHash, stakerproto.TransactionState_CONFIRMED_ON_BTC)
+	return c.setTxState(txHash, proto.TransactionState_CONFIRMED_ON_BTC)
 }
 
 func (c *TrackedTransactionStore) SetTxSentToBabylon(txHash *chainhash.Hash) error {
-	return c.setTxState(txHash, stakerproto.TransactionState_SENT_TO_BABYLON)
+	return c.setTxState(txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
 
 func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*StoredTransaction, error) {
@@ -191,8 +191,8 @@ func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*Store
 			return ErrTransactionNotFound
 		}
 
-		var storedTxProto stakerproto.TrackedTransaction
-		err := proto.Unmarshal(maybeTx, &storedTxProto)
+		var storedTxProto proto.TrackedTransaction
+		err := pm.Unmarshal(maybeTx, &storedTxProto)
 
 		if err != nil {
 			return ErrCorruptedTransactionsDb
@@ -224,9 +224,9 @@ func (c *TrackedTransactionStore) GetAllStoredTransactions() ([]*StoredTransacti
 		}
 
 		return transactionsBucket.ForEach(func(k, v []byte) error {
-			protoTx := stakerproto.TrackedTransaction{}
+			protoTx := proto.TrackedTransaction{}
 
-			err := proto.Unmarshal(v, &protoTx)
+			err := pm.Unmarshal(v, &protoTx)
 			if err != nil {
 				return err
 			}

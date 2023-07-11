@@ -16,7 +16,7 @@ import (
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
-	"github.com/babylonchain/btc-staker/stakerproto"
+	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
@@ -426,7 +426,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	require.Equal(t, 1, len(allCurrentDelegations))
 	require.Equal(t, txHash.String(), allCurrentDelegations[0].StakingTxHash)
-	require.Equal(t, stakerproto.TransactionState_SENT_TO_BTC, allCurrentDelegations[0].State)
+	require.Equal(t, proto.TransactionState_SENT_TO_BTC, allCurrentDelegations[0].State)
 
 	require.Eventually(t, func() bool {
 		return len(submittedTransactions) == 1
@@ -463,6 +463,6 @@ func TestSendingStakingTransaction(t *testing.T) {
 	require.Eventually(t, func() bool {
 		allCurrentDelegations, err = tm.Sa.GetAllDelegations()
 		require.NoError(t, err)
-		return len(allCurrentDelegations) == 1 && allCurrentDelegations[0].State == stakerproto.TransactionState_SENT_TO_BABYLON
+		return len(allCurrentDelegations) == 1 && allCurrentDelegations[0].State == proto.TransactionState_SENT_TO_BABYLON
 	}, eventuallyWaitTimeOut, eventuallyPollTime)
 }

@@ -33,4 +33,4 @@ RUN cd /tmp \
 
 WORKDIR /build
 
-CMD ["/bin/bash", "/build/stakerproto/protocgen.sh"]
+CMD ["/bin/bash", "/build/proto/protocgen.sh"]

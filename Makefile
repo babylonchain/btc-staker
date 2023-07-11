@@ -45,6 +45,6 @@ test-e2e:
 
 proto-gen:
 	@$(call print, "Compiling protos.")
-	cd ./stakerproto; ./gen_protos_docker.sh
+	cd ./proto; ./gen_protos_docker.sh
 
 .PHONY: proto-gen

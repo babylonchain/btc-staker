@@ -29,7 +29,7 @@ function format() {
 }
 
 # Compile and format the stakerproto package.
-pushd stakerproto
+pushd proto
 format
 generate
 popd
