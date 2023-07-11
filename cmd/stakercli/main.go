@@ -98,6 +98,7 @@ func main() {
 	app.Commands = append(app.Commands, scriptsCommands...)
 	app.Commands = append(app.Commands, transactionCommands...)
 	app.Commands = append(app.Commands, daemonCommands...)
+	app.Commands = append(app.Commands, adminCommands...)
 
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)
