@@ -45,6 +45,11 @@ func newLensClient(ccc *lensclient.ChainClientConfig, kro ...keyring.Option) (*l
 	if err := cc.Init(); err != nil {
 		return nil, err
 	}
+
+	if _, err := cc.GetKeyAddress(); err != nil {
+		return nil, err
+	}
+
 	return cc, nil
 }
 
@@ -116,9 +121,7 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 	stakingTrackerParams, err := bc.QueryStakingTracker()
 
 	if err != nil {
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	return &StakingParams{
@@ -132,10 +135,10 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 }
 
 func (bc *BabylonController) GetKeyAddress() sdk.AccAddress {
-	// get key addres, retrieves address based on key name which is configured in
+	// get key address, retrieves address based on key name which is configured in
 	// cfg *stakercfg.BBNConfig. If this fails, it mean we have misconfiguration problem
 	// and we should panic.
-	// TODO: Check this earlier and panic earlier
+	// This is checked at the start of BabylonController, so if it fails something is really wrong
 	addr, err := bc.ChainClient.GetKeyAddress()
 
 	if err != nil {
@@ -145,40 +148,49 @@ func (bc *BabylonController) GetKeyAddress() sdk.AccAddress {
 	return addr
 }
 
-func (bc *BabylonController) GetPubKey() *secp256k1.PubKey {
-	address := bc.GetKeyAddress()
-	record, err := bc.Keybase.KeyByAddress(address)
+func (bc *BabylonController) getPubKeyInternal() (*secp256k1.PubKey, error) {
+	record, err := bc.Keybase.KeyByAddress(bc.GetKeyAddress())
 
 	if err != nil {
-		panic(fmt.Sprintf("Failed to get key record: %s", err))
+		return nil, err
 	}
 
 	pubKey, err := record.GetPubKey()
 
 	if err != nil {
-		panic(fmt.Sprintf("Failed to get pubkey: %s", err))
+		return nil, err
 	}
 
 	switch v := pubKey.(type) {
 	case *secp256k1.PubKey:
-		return v
+		return v, nil
 	default:
-		panic("Unsupported key type in keyring")
+		return nil, fmt.Errorf("Unsupported key type in keyring")
 	}
 }
 
-func (bc *BabylonController) Sign(msg []byte, address sdk.AccAddress) ([]byte, *secp256k1.PubKey, error) {
-	sign, kt, err := bc.Keybase.SignByAddress(address, msg)
+func (bc *BabylonController) GetPubKey() *secp256k1.PubKey {
+	pubKey, err := bc.getPubKeyInternal()
 
 	if err != nil {
-		return nil, nil, err
+		panic(fmt.Sprintf("Failed to get public key: %v", err))
+	}
+
+	return pubKey
+}
+
+func (bc *BabylonController) Sign(msg []byte) ([]byte, error) {
+	sign, kt, err := bc.Keybase.SignByAddress(bc.GetKeyAddress(), msg)
+
+	if err != nil {
+		return nil, err
 	}
 
 	switch v := kt.(type) {
 	case *secp256k1.PubKey:
-		return sign, v, nil
+		return sign, nil
 	default:
-		panic("Unsupported key type in keyring")
+		panic(fmt.Sprintf("Unsupported key type in keyring: %s", v.Type()))
 	}
 }
 
@@ -188,7 +200,7 @@ type DelegationData struct {
 	StakingTransactionScript         []byte
 	StakingTransactionInclusionProof []byte
 	SlashingTransaction              *wire.MsgTx
-	SlashingTransactionsSig          *schnorr.Signature
+	SlashingTransactionSig           *schnorr.Signature
 	BabylonPk                        *secp256k1.PubKey
 	BabylonEcdsaSigOverBtcPk         []byte
 	BtcSchnorrSigOverBabylonSig      []byte
@@ -209,18 +221,17 @@ func delegationDataToMsg(dg *DelegationData) (*types.MsgCreateBTCDelegation, err
 		return nil, err
 	}
 
-	serializedSlashingTransaction, err := utils.SerializeBtcTransaction(dg.SlashingTransaction)
+	hash := dg.StakingTransaction.TxHash()
+	// TODO: why do we need to convert it to header hash ?
+	bcctypesHash := bbntypes.NewBTCHeaderHashBytesFromChainhash(&hash)
+
+	slashingTx, err := types.NewBTCSlashingTxFromMsgTx(dg.SlashingTransaction)
 
 	if err != nil {
 		return nil, err
 	}
 
-	hash := dg.StakingTransaction.TxHash()
-	// TODO: why do we need to convert it to header hash ?
-	bcctypesHash := bbntypes.NewBTCHeaderHashBytesFromChainhash(&hash)
-
-	slashingTx := types.BTCSlashingTx(serializedSlashingTransaction)
-	slashingTxSig := bbntypes.BIP340Signature(dg.SlashingTransactionsSig.Serialize())
+	slashingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(dg.SlashingTransactionSig)
 
 	return &types.MsgCreateBTCDelegation{
 		BabylonPk: dg.BabylonPk,
@@ -243,7 +254,7 @@ func delegationDataToMsg(dg *DelegationData) (*types.MsgCreateBTCDelegation, err
 			Transaction: serizalizedStakingTransaction,
 			Proof:       dg.StakingTransactionInclusionProof,
 		},
-		SlashingTx:   &slashingTx,
+		SlashingTx:   slashingTx,
 		DelegatorSig: &slashingTxSig,
 	}, nil
 }

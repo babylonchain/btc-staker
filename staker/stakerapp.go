@@ -6,9 +6,9 @@ import (
 
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
+	"github.com/babylonchain/btc-staker/proto"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
-	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -268,7 +268,7 @@ func (app *StakerApp) buildDelegationData(
 		StakingTransactionScript:         stakingTxScript,
 		StakingTransactionInclusionProof: proof,
 		SlashingTransaction:              slashingTx,
-		SlashingTransactionsSig:          signature,
+		SlashingTransactionSig:           signature,
 		BabylonPk:                        babylonPk,
 		BabylonEcdsaSigOverBtcPk:         proofOfPossession.BabylonSigOverBtcPk,
 		BtcSchnorrSigOverBabylonSig:      proofOfPossession.BtcSchnorrSigOverBabylonSig,
@@ -410,6 +410,39 @@ func (app *StakerApp) BabylonController() cl.BabylonClient {
 	return app.babylonClient
 }
 
+// Generate proof of possesions for staker address.
+// Requieres btc wallet to unlocked!
+func (app *StakerApp) generatePop(stakerPrivKey *btcec.PrivateKey) (*stakerdb.ProofOfPossession, error) {
+	// build proof of possesion, no point moving forward if staker do not have all
+	// the necessary keys
+	stakerKey := stakerPrivKey.PubKey()
+
+	encodedPubKey := schnorr.SerializePubKey(stakerKey)
+
+	babylonSig, err := app.babylonClient.Sign(
+		encodedPubKey,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	babylonSigHash := tmhash.Sum(babylonSig)
+
+	btcSig, err := schnorr.Sign(stakerPrivKey, babylonSigHash)
+
+	if err != nil {
+		return nil, err
+	}
+
+	pop := stakerdb.NewProofOfPossession(
+		babylonSig,
+		btcSig.Serialize(),
+	)
+
+	return pop, nil
+}
+
 func (app *StakerApp) StakeFunds(
 	stakerAddress btcutil.Address,
 	stakingAmount btcutil.Amount,
@@ -461,39 +494,14 @@ func (app *StakerApp) StakeFunds(
 		return nil, err
 	}
 
-	babylonAddress := app.babylonClient.GetKeyAddress()
+	pop, err := app.generatePop(stakerPrivKey)
 
 	if err != nil {
 		return nil, err
 	}
-
-	stakerKey := stakerPrivKey.PubKey()
-
-	encodedPubKey := schnorr.SerializePubKey(stakerKey)
-
-	babylonSig, _, err := app.babylonClient.Sign(
-		encodedPubKey, babylonAddress,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	babylonSigHash := tmhash.Sum(babylonSig)
-
-	btcSig, err := schnorr.Sign(stakerPrivKey, babylonSigHash)
-
-	if err != nil {
-		return nil, err
-	}
-
-	pop := stakerdb.NewProofOfPossession(
-		babylonSig,
-		btcSig.Serialize(),
-	)
 
 	output, script, err := staking.BuildStakingOutput(
-		stakerKey,
+		stakerPrivKey.PubKey(),
 		validatorPk,
 		&params.JuryPk,
 		stakingTimeBlocks,

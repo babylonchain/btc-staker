@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	transactionBucket = []byte("transactions")
+	transactionBucketName = []byte("transactions")
 )
 
 type TrackedTransactionStore struct {
@@ -61,7 +61,7 @@ func NewTrackedTransactionStore(db kvdb.Backend) (*TrackedTransactionStore,
 
 func (c *TrackedTransactionStore) initBuckets() error {
 	return kvdb.Batch(c.db, func(tx kvdb.RwTx) error {
-		_, err := tx.CreateTopLevelBucket(transactionBucket)
+		_, err := tx.CreateTopLevelBucket(transactionBucketName)
 		if err != nil {
 			return err
 		}
@@ -101,7 +101,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 	txHashBytes := txHash[:]
 
 	return kvdb.Batch(c.db, func(tx kvdb.RwTx) error {
-		transactionsBucket := tx.ReadWriteBucket(transactionBucket)
+		transactionsBucket := tx.ReadWriteBucket(transactionBucketName)
 		if transactionsBucket == nil {
 			return ErrCorruptedTransactionsDb
 		}
@@ -141,7 +141,7 @@ func (c *TrackedTransactionStore) setTxState(txHash *chainhash.Hash, state proto
 	txHashBytes := txHash.CloneBytes()
 
 	return kvdb.Batch(c.db, func(tx kvdb.RwTx) error {
-		transactionsBucket := tx.ReadWriteBucket(transactionBucket)
+		transactionsBucket := tx.ReadWriteBucket(transactionBucketName)
 		if transactionsBucket == nil {
 			return ErrCorruptedTransactionsDb
 		}
@@ -180,7 +180,7 @@ func (c *TrackedTransactionStore) SetTxSentToBabylon(txHash *chainhash.Hash) err
 func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*StoredTransaction, error) {
 	var storedTx *StoredTransaction
 	err := c.db.View(func(tx kvdb.RTx) error {
-		transactionsBucket := tx.ReadBucket(transactionBucket)
+		transactionsBucket := tx.ReadBucket(transactionBucketName)
 		if transactionsBucket == nil {
 			return ErrCorruptedTransactionsDb
 		}
@@ -218,7 +218,7 @@ func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*Store
 func (c *TrackedTransactionStore) GetAllStoredTransactions() ([]*StoredTransaction, error) {
 	var storedTx []*StoredTransaction
 	err := c.db.View(func(tx kvdb.RTx) error {
-		transactionsBucket := tx.ReadBucket(transactionBucket)
+		transactionsBucket := tx.ReadBucket(transactionBucketName)
 		if transactionsBucket == nil {
 			return ErrCorruptedTransactionsDb
 		}

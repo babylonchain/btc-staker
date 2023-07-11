@@ -25,11 +25,16 @@ type StakingParams struct {
 	SlashingAddress btcutil.Address
 }
 
-type BabylonClient interface {
-	Params() (*StakingParams, error)
-	Sign(msg []byte, address sdk.AccAddress) ([]byte, *secp256k1.PubKey, error)
+// SingleKeyCosmosKeyring represents a keyring that supports only one pritvate/public key pair
+type SingleKeyKeyring interface {
+	Sign(msg []byte) ([]byte, error)
 	GetKeyAddress() sdk.AccAddress
 	GetPubKey() *secp256k1.PubKey
+}
+
+type BabylonClient interface {
+	SingleKeyKeyring
+	Params() (*StakingParams, error)
 	Delegate(dg *DelegationData) (*sdk.TxResponse, error)
 }
 
@@ -45,16 +50,13 @@ func (m *MockBabylonClient) Params() (*StakingParams, error) {
 	return m.ClientParams, nil
 }
 
-func (m *MockBabylonClient) Sign(msg []byte, address sdk.AccAddress) ([]byte, *secp256k1.PubKey, error) {
+func (m *MockBabylonClient) Sign(msg []byte) ([]byte, error) {
 	sig, err := m.babylonKey.Sign(msg)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
-	pubKey := m.babylonKey.PubKey().(*secp256k1.PubKey)
-
-	return sig, pubKey, nil
+	return sig, nil
 }
 
 func (m *MockBabylonClient) GetKeyAddress() sdk.AccAddress {

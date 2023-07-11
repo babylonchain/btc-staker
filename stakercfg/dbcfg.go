@@ -10,13 +10,6 @@ const (
 	defaultDbName = "staker.db"
 )
 
-// BoltBackendConfig: kvdb.BoltBackendConfig{
-// 	NoFreelistSync:    true,
-// 	AutoCompact:       false,
-// 	AutoCompactMinAge: kvdb.DefaultBoltAutoCompactMinAge,
-// 	DBTimeout:         kvdb.DefaultDBTimeout,
-// },
-
 type DBConfig struct {
 	// DBPath is the directory path in which the database file should be
 	// stored.
