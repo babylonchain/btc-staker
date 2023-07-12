@@ -6,14 +6,15 @@ ARG VERSION="HEAD"
 # Use muslc for static libs
 ARG BUILD_TAGS="muslc"
 
-ARG GITHUB_ACCESS_TOKEN
 
 RUN apk add --no-cache --update openssh git make build-base linux-headers libc-dev \
                                 pkgconfig zeromq-dev musl-dev alpine-sdk libsodium-dev \
                                 libzmq-static libsodium-static gcc
 
-# this is needed as we are using private repos as our dependencies
-RUN git config --global url."https://${GITHUB_ACCESS_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+
+RUN mkdir -p /root/.ssh && ssh-keyscan github.com >> /root/.ssh/known_hosts
+RUN git config --global url."git@github.com:".insteadOf "https://github.com/"
+ENV GOPRIVATE=github.com/babylonchain/babylon-private
 
 # Build
 WORKDIR /go/src/github.com/babylonchain/btc-staker
@@ -40,15 +41,11 @@ RUN CGO_LDFLAGS="$CGO_LDFLAGS -lstdc++ -lm -lsodium" \
 # FINAL IMAGE
 FROM alpine:3.16 AS run
 
-# Define a root volume for data persistence.
-VOLUME /root/.stakerd
+RUN addgroup --gid 1138 -S btcstaker && adduser --uid 1138 -S btcstaker -G btcstaker
 
 RUN apk add bash curl jq
 
 COPY --from=builder /go/src/github.com/babylonchain/btc-staker/build/stakerd /bin/
 COPY --from=builder /go/src/github.com/babylonchain/btc-staker/build/stakercli /bin/
-
-# Default staker rpc port
-EXPOSE 15812
 
 ENTRYPOINT ["stakerd"]
