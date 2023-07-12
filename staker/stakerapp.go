@@ -1,6 +1,7 @@
 package staker
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/cometbft/cometbft/crypto/tmhash"
+	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	notifier "github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/sirupsen/logrus"
@@ -37,8 +39,31 @@ type stakingRequest struct {
 type confirmationEvent struct {
 	txHash        chainhash.Hash
 	txIndex       uint32
+	blckHash      chainhash.Hash
+	blckHeight    uint32
 	tx            *wire.MsgTx
 	inlusionBlock *wire.MsgBlock
+}
+
+type sendToBabylonRequest struct {
+	txHash        chainhash.Hash
+	txIndex       uint32
+	inlusionBlock *wire.MsgBlock
+}
+
+type sendToBabylonResponse struct {
+	txHash *chainhash.Hash
+	err    error
+}
+
+type externalDelegationData struct {
+	// stakerPrivKey needs to be retrieved from btc wallet
+	stakerPrivKey *btcec.PrivateKey
+	// slashingAddress need to be retrieved from babylon
+	slashingAddress btcutil.Address
+
+	// babylonPubKey need to be retrieved from babylon keyring
+	babylonPubKey *secp256k1.PubKey
 }
 
 type Delegation struct {
@@ -49,6 +74,10 @@ type Delegation struct {
 const (
 	// Temporary hack to get around the fees and the fact that babylon slashing fee is 1 satoshi
 	minSlashingFeeAdjustment = 1000
+
+	// maximum number of delegations that can be pending(waiting to be sent to babylon)
+	// at the same time
+	maxNumPendingDelegations = 1000
 )
 
 type StakerApp struct {
@@ -57,15 +86,17 @@ type StakerApp struct {
 	wg        sync.WaitGroup
 	quit      chan struct{}
 
-	babylonClient         cl.BabylonClient
-	wc                    walletcontroller.WalletController
-	notifier              notifier.ChainNotifier
-	network               *chaincfg.Params
-	config                *scfg.Config
-	logger                *logrus.Logger
-	txTracker             *stakerdb.TrackedTransactionStore
-	stakingRequestChan    chan *stakingRequest
-	confirmationEventChan chan *confirmationEvent
+	babylonClient             cl.BabylonClient
+	wc                        walletcontroller.WalletController
+	notifier                  notifier.ChainNotifier
+	network                   *chaincfg.Params
+	config                    *scfg.Config
+	logger                    *logrus.Logger
+	txTracker                 *stakerdb.TrackedTransactionStore
+	stakingRequestChan        chan *stakingRequest
+	confirmationEventChan     chan *confirmationEvent
+	sendToBabylonRequestChan  chan *sendToBabylonRequest
+	sendToBabylonResponseChan chan *sendToBabylonResponse
 }
 
 func NewStakerAppFromConfig(
@@ -86,7 +117,7 @@ func NewStakerAppFromConfig(
 		return nil, err
 	}
 
-	cl, err := cl.NewBabylonController(config.BabylonConfig, &config.ActiveNetParams)
+	cl, err := cl.NewBabylonController(config.BabylonConfig, &config.ActiveNetParams, logger)
 
 	if err != nil {
 		return nil, err
@@ -117,16 +148,23 @@ func NewStakerAppFromDeps(
 	tracker *stakerdb.TrackedTransactionStore,
 ) (*StakerApp, error) {
 	return &StakerApp{
-		babylonClient:         cl,
-		wc:                    walletClient,
-		notifier:              nodeNotifier,
-		network:               &config.ActiveNetParams,
-		txTracker:             tracker,
-		config:                config,
-		logger:                logger,
-		quit:                  make(chan struct{}),
-		stakingRequestChan:    make(chan *stakingRequest),
+		babylonClient:      cl,
+		wc:                 walletClient,
+		notifier:           nodeNotifier,
+		network:            &config.ActiveNetParams,
+		txTracker:          tracker,
+		config:             config,
+		logger:             logger,
+		quit:               make(chan struct{}),
+		stakingRequestChan: make(chan *stakingRequest),
+		// event for when transaction is confirmed on BTC
 		confirmationEventChan: make(chan *confirmationEvent),
+		// Buffered channels so we do not block receiving confirmations if there is backlog of
+		// request to sent to babylon
+		sendToBabylonRequestChan: make(chan *sendToBabylonRequest, maxNumPendingDelegations),
+
+		// event for when delegation is sent to babylon and included in babylon
+		sendToBabylonResponseChan: make(chan *sendToBabylonResponse),
 	}, nil
 }
 
@@ -147,7 +185,8 @@ func (app *StakerApp) Start() error {
 
 		app.logger.Infof("Successfully connected to node backend: %s", app.config.BtcNodeBackendConfig.Nodetype)
 
-		app.wg.Add(1)
+		app.wg.Add(2)
+		go app.handleSentToBabylon()
 		go app.handleStaking()
 	})
 
@@ -170,7 +209,7 @@ func (app *StakerApp) Stop() error {
 	return stopErr
 }
 
-func (app *StakerApp) WaitForConfirmation(ev *notifier.ConfirmationEvent) {
+func (app *StakerApp) waitForConfirmation(txHash chainhash.Hash, ev *notifier.ConfirmationEvent) {
 	// check we are not shutting down
 	select {
 	case <-app.quit:
@@ -188,11 +227,18 @@ func (app *StakerApp) WaitForConfirmation(ev *notifier.ConfirmationEvent) {
 			app.confirmationEventChan <- &confirmationEvent{
 				txHash:        conf.Tx.TxHash(),
 				txIndex:       conf.TxIndex,
+				blckHash:      *conf.BlockHash,
+				blckHeight:    conf.BlockHeight,
 				tx:            conf.Tx,
 				inlusionBlock: conf.Block,
 			}
 			ev.Cancel()
 			return
+		case u := <-ev.Updates:
+			app.logger.WithFields(logrus.Fields{
+				"btcTxHash": txHash,
+				"confLeft":  u,
+			}).Debugf("Staking transaction received confirmation")
 		case <-app.quit:
 			// app is quitting, cancel the event
 			ev.Cancel()
@@ -202,6 +248,7 @@ func (app *StakerApp) WaitForConfirmation(ev *notifier.ConfirmationEvent) {
 }
 
 func (app *StakerApp) buildDelegationData(
+	delegationData *externalDelegationData,
 	inclusionBlock *wire.MsgBlock,
 	stakingTxIdx uint32,
 	stakerAddress btcutil.Address,
@@ -211,13 +258,75 @@ func (app *StakerApp) buildDelegationData(
 	proofOfPossession *stakerdb.ProofOfPossession,
 	minSlashingFee int64) (*cl.DelegationData, error) {
 
+	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
+		stakingTx,
+		stakingOutputIdx,
+		delegationData.slashingAddress,
+		// use minimum slashing fee
+		// TODO: consider dust rules and the fact that staking amount must cover two fees i.e
+		// staking tx fee and slashing tx fee
+		int64(minSlashingFee),
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("buidling slashing transaction failed: %w", err)
+	}
+
+	signature, err := staking.SignTxWithOneScriptSpendInputFromScript(
+		slashingTx,
+		stakingTx.TxOut[stakingOutputIdx],
+		delegationData.stakerPrivKey,
+		stakingTxScript,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("signing slashing transaction failed: %w", err)
+	}
+
+	proof, err := cl.GenerateProof(inclusionBlock, stakingTxIdx)
+
+	if err != nil {
+		return nil, fmt.Errorf("genereting inclusiong proof failed: %w", err)
+	}
+
+	dg := cl.DelegationData{
+		StakingTransaction:               stakingTx,
+		StakingTransactionIdx:            stakingTxIdx,
+		StakingTransactionScript:         stakingTxScript,
+		StakingTransactionInclusionProof: proof,
+		SlashingTransaction:              slashingTx,
+		SlashingTransactionSig:           signature,
+		BabylonPk:                        delegationData.babylonPubKey,
+		BabylonEcdsaSigOverBtcPk:         proofOfPossession.BabylonSigOverBtcPk,
+		BtcSchnorrSigOverBabylonSig:      proofOfPossession.BtcSchnorrSigOverBabylonSig,
+	}
+
+	return &dg, nil
+}
+
+// helper to retrieve transaction when we are sure it must be in the store
+func (app *StakerApp) mustGetTransactionAndStakerAddress(txHash *chainhash.Hash) (*stakerdb.StoredTransaction, btcutil.Address) {
+	ts, err := app.txTracker.GetTransaction(txHash)
+
+	if err != nil {
+		app.logger.Fatalf("Error getting transaction state for tx %s. Eff: %v", txHash, err)
+	}
+
+	stakerAddress, err := btcutil.DecodeAddress(ts.StakerAddress, app.network)
+
+	if err != nil {
+		app.logger.Fatalf("Error decoding staker address: %s. Err: %v", ts.StakerAddress, err)
+	}
+
+	return ts, stakerAddress
+}
+
+func (app *StakerApp) getDelegationData(stakerAddress btcutil.Address) (*externalDelegationData, error) {
 	params, err := app.babylonClient.Params()
 
 	if err != nil {
 		return nil, err
 	}
-
-	babylonPk := app.babylonClient.GetPubKey()
 
 	err = app.wc.UnlockWallet(15)
 
@@ -231,50 +340,114 @@ func (app *StakerApp) buildDelegationData(
 		return nil, err
 	}
 
-	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
-		stakingTx,
-		stakingOutputIdx,
-		params.SlashingAddress,
-		// use minimum slashing fee
-		// TODO: consider dust rules and the fact that staking amount must cover two fees i.e
-		// staking tx fee and slashing tx fee
-		int64(minSlashingFee),
-	)
+	return &externalDelegationData{
+		stakerPrivKey:   privkey,
+		slashingAddress: params.SlashingAddress,
+		babylonPubKey:   app.babylonClient.GetPubKey(),
+	}, nil
+}
 
-	if err != nil {
-		return nil, err
+func (app *StakerApp) handleSentToBabylon() {
+	defer app.wg.Done()
+	for {
+		select {
+		case req := <-app.sendToBabylonRequestChan:
+			storedTx, stakerAddress := app.mustGetTransactionAndStakerAddress(&req.txHash)
+
+			app.logger.WithFields(logrus.Fields{
+				"btcTxHash":     req.txHash,
+				"stakerAddress": stakerAddress,
+			}).Debugf("Initiating delegation to babylon")
+
+			delegationData, err := app.getDelegationData(stakerAddress)
+
+			if err != nil {
+				// TODO: Most probably communication with babylon failed.
+				app.logger.WithFields(logrus.Fields{
+					"btcTxHash":     req.txHash,
+					"stakerAddress": stakerAddress,
+					"err":           err,
+				}).Error("Error getting delegation data before sending delegation to babylon")
+
+				app.sendToBabylonResponseChan <- &sendToBabylonResponse{
+					txHash: nil,
+					err:    fmt.Errorf("error while getting delegation data for tx with hash %s: %w", req.txHash.String(), err),
+				}
+				continue
+			}
+
+			dg, err := app.buildDelegationData(
+				delegationData,
+				req.inlusionBlock,
+				req.txIndex,
+				stakerAddress,
+				storedTx.BtcTx,
+				storedTx.TxScript,
+				storedTx.StakingOutputIndex,
+				storedTx.Pop,
+				minSlashingFeeAdjustment,
+			)
+
+			if err != nil {
+				// This is truly unexpected, most probably programming error we have
+				// valid and btc confirmed staking transacion, but for some reason we cannot
+				// build delegation data using our own set of libraries
+				app.logger.WithFields(logrus.Fields{
+					"btcTxHash":     req.txHash,
+					"stakerAddress": stakerAddress,
+					"err":           err,
+				}).Fatalf("Failed to build delegation data for already confirmed staking transaction")
+			}
+
+			txResp, err := app.babylonClient.Delegate(dg)
+
+			if err != nil {
+				if errors.Is(err, cl.ErrInvalidBabylonDelegation) {
+					// TODO: For not just kill the app to avoid construction more invalid delegations
+					app.logger.WithFields(logrus.Fields{
+						"btcTxHash":          req.txHash,
+						"babylonTxHash":      txResp.TxHash,
+						"babylonBlockHeight": txResp.Height,
+						"babylonErrorCode":   txResp.Code,
+						"babylonLog":         txResp.RawLog,
+					}).Fatalf("Invalid delegation data sent to babylon")
+				}
+
+				// TODO: Most probably communication with babylon failed.
+				app.logger.WithFields(logrus.Fields{
+					"btcTxHash":     req.txHash,
+					"stakerAddress": stakerAddress,
+					"err":           err,
+				}).Error("Error while sending delegation data to babylon")
+
+				app.sendToBabylonResponseChan <- &sendToBabylonResponse{
+					txHash: nil,
+					err:    fmt.Errorf("error while sending delegation to babylon for btc tx with hash %s: %w", req.txHash.String(), err),
+				}
+				continue
+			}
+
+			// Allo good we have successful delegation
+			app.sendToBabylonResponseChan <- &sendToBabylonResponse{
+				txHash: &req.txHash,
+			}
+
+		case <-app.quit:
+			return
+		}
 	}
+}
 
-	signature, err := staking.SignTxWithOneScriptSpendInputFromScript(
-		slashingTx,
-		stakingTx.TxOut[stakingOutputIdx],
-		privkey,
-		stakingTxScript,
-	)
-
-	if err != nil {
-		return nil, err
+func (app *StakerApp) sendDelegationWithTxToBabylon(
+	txHash chainhash.Hash,
+	txIndex uint32,
+	inlusionBlock *wire.MsgBlock,
+) {
+	app.sendToBabylonRequestChan <- &sendToBabylonRequest{
+		txHash:        txHash,
+		txIndex:       txIndex,
+		inlusionBlock: inlusionBlock,
 	}
-
-	proof, err := cl.GenerateProof(inclusionBlock, stakingTxIdx)
-
-	if err != nil {
-		return nil, err
-	}
-
-	dg := cl.DelegationData{
-		StakingTransaction:               stakingTx,
-		StakingTransactionIdx:            stakingTxIdx,
-		StakingTransactionScript:         stakingTxScript,
-		StakingTransactionInclusionProof: proof,
-		SlashingTransaction:              slashingTx,
-		SlashingTransactionSig:           signature,
-		BabylonPk:                        babylonPk,
-		BabylonEcdsaSigOverBtcPk:         proofOfPossession.BabylonSigOverBtcPk,
-		BtcSchnorrSigOverBabylonSig:      proofOfPossession.BtcSchnorrSigOverBabylonSig,
-	}
-
-	return &dg, nil
 }
 
 // main event loop for the staker app
@@ -284,14 +457,18 @@ func (app *StakerApp) handleStaking() {
 	for {
 		select {
 		case req := <-app.stakingRequestChan:
-			txHash := req.stakingTx.TxHash().String()
+			txHash := req.stakingTx.TxHash()
 			bestBlockHeight, err := app.wc.BestBlockHeight()
-			app.logger.Debugf("Received staking request for tx %s. Current best block height: %d", txHash, bestBlockHeight)
 
 			if err != nil {
 				req.errChan <- err
 				continue
 			}
+
+			app.logger.WithFields(logrus.Fields{
+				"btcTxHash":              txHash,
+				"currentBestBlockHeight": bestBlockHeight,
+			}).Infof("Received new staking request")
 
 			hash, err := app.wc.SendRawTransaction(req.stakingTx, true)
 			if err != nil {
@@ -312,8 +489,6 @@ func (app *StakerApp) handleStaking() {
 				continue
 			}
 
-			app.logger.Infof("Saved staking tx %s to db", txHash)
-
 			confEvent, err := app.notifier.RegisterConfirmationsNtfn(
 				hash,
 				// TODO: staking script is necessary here, to support light clients. Maybe we could
@@ -332,14 +507,16 @@ func (app *StakerApp) handleStaking() {
 			}
 			// TODO: add some wait group here, to wait for all go routines to finish
 			// before returning from this function
-			go app.WaitForConfirmation(confEvent)
+			go app.waitForConfirmation(txHash, confEvent)
 
-			app.logger.Debugf("Staking tx %s sent", txHash)
+			app.logger.WithFields(logrus.Fields{
+				"btcTxHash": hash,
+				"confLeft":  req.numConfirmations,
+			}).Infof("Staking transaction successfully sent to BTC network. Waiting for confirmations")
+
 			req.successChan <- hash
 
 		case confEvent := <-app.confirmationEventChan:
-			app.logger.Debugf("Received confirmation event for tx %s", confEvent.txHash)
-
 			err := app.txTracker.SetTxConfirmed(&confEvent.txHash)
 
 			if err != nil {
@@ -348,53 +525,46 @@ func (app *StakerApp) handleStaking() {
 				app.logger.Fatalf("Error setting state for tx %s: %s", confEvent.txHash, err)
 			}
 
-			// TODO Following code should porobably be started in seprarate go routine
-			// to not block main event loop
-			ts, err := app.txTracker.GetTransaction(&confEvent.txHash)
+			app.logger.WithFields(logrus.Fields{
+				"btcTxHash":  confEvent.txHash,
+				"blockHash":  confEvent.blckHash,
+				"blckHeight": confEvent.blckHeight,
+			}).Infof("BTC transaction has been confirmed")
 
-			if err != nil {
-				app.logger.Fatalf("Error getting transaction state for tx %s. Eff: %v", confEvent.txHash, err)
-			}
-
-			app.logger.Debugf("Staker address is: %v", ts.StakerAddress)
-
-			stakerAddress, err := btcutil.DecodeAddress(ts.StakerAddress, app.network)
-
-			if err != nil {
-				app.logger.Fatalf("Error decoding staker address: %s. Err: %v", ts.StakerAddress, err)
-			}
-
-			dg, err := app.buildDelegationData(
-				confEvent.inlusionBlock,
+			app.sendDelegationWithTxToBabylon(
+				confEvent.txHash,
 				confEvent.txIndex,
-				stakerAddress,
-				ts.BtcTx,
-				ts.TxScript,
-				ts.StakingOutputIndex,
-				ts.Pop,
-				minSlashingFeeAdjustment,
+				confEvent.inlusionBlock,
 			)
 
-			if err != nil {
-				// all data here should be correct and validated, lets just kill the app
-				app.logger.Fatalf("Error building delegation data: %v", err)
+		case sentToBabylonConf := <-app.sendToBabylonResponseChan:
+			if sentToBabylonConf.err != nil {
+				// TODO: For now we just kill the app, in case comms with babylon failed.
+				// Ultimately we probably should:
+				// 1. Add additional state in db - failedToSendToBabylon. So that after app restart
+				// we can retry sending delegation which were failed
+				// 2. Have some retry counter in sendToBabylonRequest which counts how many times
+				// each request was already retried
+				// 3. If some request was retried too many times we can:
+				// a. kill the app - maybe there is no point in continuing if we cannot communicate with babylon
+				// b. have some recovery mode - which diallow sending new delegations, and occasionaly
+				// retry sending oldes failed delegations
+				app.logger.WithFields(logrus.Fields{
+					"err": sentToBabylonConf.err,
+				}).Fatalf("Error sending delegation to babylon")
 			}
 
-			// TODO Handle retries
-			_, err = app.babylonClient.Delegate(dg)
-
-			if err != nil {
-				app.logger.Debugf("Error sending delegation: %v", err)
-				continue
-			}
-
-			err = app.txTracker.SetTxSentToBabylon(&confEvent.txHash)
+			err := app.txTracker.SetTxSentToBabylon(sentToBabylonConf.txHash)
 
 			if err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
-				app.logger.Fatalf("Error setting state for tx %s: %s", confEvent.txHash, err)
+				app.logger.Fatalf("Error setting state for tx %s: %s", sentToBabylonConf.txHash, err)
 			}
+
+			app.logger.WithFields(logrus.Fields{
+				"btcTxHash": sentToBabylonConf.txHash,
+			}).Infof("BTC transaction successfully sent to babylon as part of delegation")
 
 		case <-app.quit:
 			return
@@ -468,7 +638,7 @@ func (app *StakerApp) StakeFunds(
 	// TODO: Adding 1000 satoshis to cover fees for now as babylon return 1sat currently
 	var minSlashingFee = params.MinSlashingTxFeeSat + minSlashingFeeAdjustment
 
-	if stakingAmount < minSlashingFee {
+	if stakingAmount <= minSlashingFee {
 		return nil, fmt.Errorf("staking amount %d is less than minimum slashing fee %d",
 			stakingAmount, params.MinSlashingTxFeeSat)
 	}
@@ -538,6 +708,11 @@ func (app *StakerApp) StakeFunds(
 
 	select {
 	case reqErr := <-req.errChan:
+		app.logger.WithFields(logrus.Fields{
+			"stakerAddress": stakerAddress,
+			"err":           reqErr,
+		}).Debugf("Sending staking tx failed")
+
 		return nil, reqErr
 	case hash := <-req.successChan:
 		return hash, nil
