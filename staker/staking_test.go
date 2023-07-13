@@ -2,7 +2,6 @@ package staker_test
 
 import (
 	"encoding/hex"
-	"fmt"
 	"math"
 	"math/rand"
 	"testing"
@@ -13,7 +12,6 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,25 +44,4 @@ func FuzzScriptGeneration(f *testing.F) {
 		_, err = btcutil.DecodeAddress(resp.Address, &chaincfg.MainNetParams)
 		require.NoError(t, err)
 	})
-}
-
-func TestFooo(t *testing.T) {
-
-	var DefaultRelayFeePerKb btcutil.Amount = 1e3
-	var FeePerKwFloor chainfee.SatPerKWeight = 250
-
-	satKW := chainfee.SatPerKWeight(12500)
-
-	satKb := satKW.FeePerKVByte()
-
-	fallRate := chainfee.SatPerKVByte(25 * 1000)
-
-	fmt.Println(satKb)
-	fmt.Println(satKb / 1000)
-	fmt.Println(DefaultRelayFeePerKb)
-	fmt.Println(FeePerKwFloor.FeePerKVByte())
-	fmt.Println("fall rate")
-	fmt.Println(fallRate)
-
-	require.Equal(t, 1, 1)
 }
