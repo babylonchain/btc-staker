@@ -37,5 +37,6 @@ func DefaultBitcoindConfig() Bitcoind {
 		RPCPolling:           true,
 		BlockPollingInterval: 30 * time.Second,
 		TxPollingInterval:    30 * time.Second,
+		EstimateMode:         "CONSERVATIVE",
 	}
 }

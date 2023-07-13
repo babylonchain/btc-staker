@@ -41,6 +41,13 @@ const (
 	BtcdNodeBackend
 )
 
+type FeeEstimationMode int
+
+const (
+	StaticFeeEstimation FeeEstimationMode = iota
+	DynamicFeeEstimation
+)
+
 var (
 	//   C:\Users\<username>\AppData\Local\stakerd on Windows
 	//   ~/.stakerd on Linux
@@ -99,8 +106,10 @@ type JsonRpcServerConfig struct {
 
 type BtcNodeBackendConfig struct {
 	Nodetype          string    `long:"nodetype" description:"type of node to connect to {bitcoind, btcd}"`
+	FeeMode           string    `long:"feemode" description:"fee mode to use for fee estimation {static, dynamic}. In dynamic mode fee will be estimated using backend node"`
 	BtcdConfig        *Btcd     `group:"btcd" namespace:"btcd"`
 	Bitcoind          *Bitcoind `group:"bitcoind" namespace:"bitcoind"`
+	EstimationMode    FeeEstimationMode
 	ActiveNodeBackend SupportedNodeBackend
 }
 
@@ -109,6 +118,7 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 	bitcoindConfig := DefaultBitcoindConfig()
 	return BtcNodeBackendConfig{
 		Nodetype:   "btcd",
+		FeeMode:    "static",
 		BtcdConfig: &btcdConfig,
 		Bitcoind:   &bitcoindConfig,
 	}
@@ -382,6 +392,15 @@ func ValidateConfig(cfg Config) (*Config, error) {
 		cfg.BtcNodeBackendConfig.ActiveNodeBackend = BitcoindNodeBackend
 	default:
 		return nil, mkErr(fmt.Sprintf("invalid nodetype: %s", cfg.BtcNodeBackendConfig.Nodetype))
+	}
+
+	switch cfg.BtcNodeBackendConfig.FeeMode {
+	case "static":
+		cfg.BtcNodeBackendConfig.EstimationMode = StaticFeeEstimation
+	case "dynamic":
+		cfg.BtcNodeBackendConfig.EstimationMode = DynamicFeeEstimation
+	default:
+		return nil, mkErr(fmt.Sprintf("invalid fee estimation mode: %s", cfg.BtcNodeBackendConfig.Nodetype))
 	}
 
 	// TODO: Validate node host and port

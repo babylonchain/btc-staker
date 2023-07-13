@@ -213,6 +213,14 @@ func newStakerAppWithMockBabylonClient(
 		return nil, nil, nil, err
 	}
 
+	// lets use dyamic estimator to see if btcd works
+	feeEstimator, err := staker.NewDynamicBtcFeeEstimator(
+		config.BtcNodeBackendConfig,
+		&config.ActiveNetParams,
+		logger,
+	)
+	require.NoError(t, err)
+
 	dirPath := filepath.Join(os.TempDir(), "stakerd", "e2etest")
 	err = os.MkdirAll(dirPath, 0755)
 	require.NoError(t, err)
@@ -233,6 +241,7 @@ func newStakerAppWithMockBabylonClient(
 		cl,
 		walletClient,
 		nodeNotifier,
+		feeEstimator,
 		tracker,
 	)
 
