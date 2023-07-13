@@ -20,7 +20,7 @@ ENV GOPRIVATE=github.com/babylonchain/babylon-private
 WORKDIR /go/src/github.com/babylonchain/btc-staker
 # Cache dependencies
 COPY go.mod go.sum /go/src/github.com/babylonchain/btc-staker/
-RUN go mod download
+RUN --mount=type=secret,id=sshKey,target=/root/.ssh/id_rsa go mod download
 # Copy the rest of the files
 COPY ./ /go/src/github.com/babylonchain/btc-staker/
 
@@ -45,7 +45,13 @@ RUN addgroup --gid 1138 -S btcstaker && adduser --uid 1138 -S btcstaker -G btcst
 
 RUN apk add bash curl jq
 
-COPY --from=builder /go/src/github.com/babylonchain/btc-staker/build/stakerd /bin/
-COPY --from=builder /go/src/github.com/babylonchain/btc-staker/build/stakercli /bin/
+COPY --from=builder /go/src/github.com/babylonchain/btc-staker/build/stakerd /bin/stakerd
+COPY --from=builder /go/src/github.com/babylonchain/btc-staker/build/stakercli /bin/stakercli
 
-ENTRYPOINT ["stakerd"]
+WORKDIR /home/btcstaker
+RUN chown -R btcstaker /home/btcstaker
+USER btcstaker
+
+ENTRYPOINT ["/bin/stakerd"]
+CMD []
+STOPSIGNAL SIGTERM
