@@ -13,10 +13,10 @@ import (
 
 	staking "github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/btc-staker/babylonclient"
+	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
-	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"

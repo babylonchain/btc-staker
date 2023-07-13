@@ -2,10 +2,12 @@ package babylonclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/avast/retry-go/v4"
 	bbntypes "github.com/babylonchain/babylon/types"
 	bcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
 	"github.com/babylonchain/babylon/x/btcstaking/types"
@@ -23,9 +25,22 @@ import (
 	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	grpctypes "github.com/cosmos/cosmos-sdk/types/grpc"
+	"github.com/sirupsen/logrus"
 	lensclient "github.com/strangelove-ventures/lens/client"
 	lensquery "github.com/strangelove-ventures/lens/client/query"
 	"google.golang.org/grpc/metadata"
+)
+
+var (
+	// Maybe configurable ?
+	RtyAttNum = uint(5)
+	RtyAtt    = retry.Attempts(RtyAttNum)
+	RtyDel    = retry.Delay(time.Millisecond * 400)
+	RtyErr    = retry.LastErrorOnly(true)
+)
+
+var (
+	ErrInvalidBabylonDelegation = errors.New("sent ivalid babylon delegation")
 )
 
 func newLensClient(ccc *lensclient.ChainClientConfig, kro ...keyring.Option) (*lensclient.ChainClient, error) {
@@ -58,6 +73,7 @@ type BabylonController struct {
 	*query.QueryClient
 	cfg       *stakercfg.BBNConfig
 	btcParams *chaincfg.Params
+	logger    *logrus.Logger
 }
 
 var _ BabylonClient = (*BabylonController)(nil)
@@ -65,6 +81,7 @@ var _ BabylonClient = (*BabylonController)(nil)
 func NewBabylonController(
 	cfg *stakercfg.BBNConfig,
 	btcParams *chaincfg.Params,
+	logger *logrus.Logger,
 ) (*BabylonController, error) {
 	babylonConfig := stakercfg.BBNConfigToBabylonConfig(cfg)
 
@@ -91,6 +108,7 @@ func NewBabylonController(
 		queryClient,
 		cfg,
 		btcParams,
+		logger,
 	}
 
 	return client, nil
@@ -112,21 +130,45 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 	// TODO: uint64 are quite silly types for these params, pobably uint8 or uint16 would be enough
 	// as we do not expect finalization to be more than 255 or in super extreme 65535
 	// TODO: it would probably be good to have separate methods for those
-	params, err := bc.QueryClient.BTCCheckpointParams()
-
-	if err != nil {
+	var bccParams *bcctypes.Params
+	if err := retry.Do(func() error {
+		response, err := bc.QueryClient.BTCCheckpointParams()
+		if err != nil {
+			return err
+		}
+		bccParams = &response.Params
+		return nil
+	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
+		bc.logger.WithFields(logrus.Fields{
+			"attempt":      n + 1,
+			"max_attempts": RtyAttNum,
+			"error":        err,
+		}).Error("Failed to query babylon client for btc checkpoint params")
+	})); err != nil {
 		return nil, err
 	}
 
-	stakingTrackerParams, err := bc.QueryStakingTracker()
-
-	if err != nil {
+	var stakingTrackerParams *StakingTrackerResonse
+	if err := retry.Do(func() error {
+		trackerParams, err := bc.QueryStakingTracker()
+		if err != nil {
+			return err
+		}
+		stakingTrackerParams = trackerParams
+		return nil
+	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
+		bc.logger.WithFields(logrus.Fields{
+			"attempt":      n + 1,
+			"max_attempts": RtyAttNum,
+			"error":        err,
+		}).Error("Failed to query babylon client for staking tracker params")
+	})); err != nil {
 		return nil, err
 	}
 
 	return &StakingParams{
-		ComfirmationTimeBlocks:    uint32(params.Params.BtcConfirmationDepth),
-		FinalizationTimeoutBlocks: uint32(params.Params.CheckpointFinalizationTimeout),
+		ComfirmationTimeBlocks:    uint32(bccParams.BtcConfirmationDepth),
+		FinalizationTimeoutBlocks: uint32(bccParams.CheckpointFinalizationTimeout),
 		SlashingAddress:           stakingTrackerParams.SlashingAddress,
 		JuryPk:                    stakingTrackerParams.JuryPk,
 		// TODO: Currently hardcoded on babylon level.
@@ -212,7 +254,6 @@ func delegationDataToMsg(dg *DelegationData) (*types.MsgCreateBTCDelegation, err
 
 	if err != nil {
 		return nil, err
-
 	}
 
 	serizalizedStakingTransaction, err := utils.SerializeBtcTransaction(dg.StakingTransaction)
@@ -270,11 +311,41 @@ func (bc *BabylonController) Delegate(dg *DelegationData) (*sdk.TxResponse, erro
 
 	// Internal context for now, this means delegate is non cancellable for external callers
 	ctx := context.Background()
-	res, err := bc.ChainClient.SendMsg(ctx, delegateMsg, "")
-	if err != nil {
+
+	// TODO: Consider using differnt client (maybe CosmosProvider from releayer impl?) this one is not particularly
+	// great as it bundles all the functionality: builidng tx, signing, broadcasting to mempool, waiting for inclusion in block
+	// therefore this operation can tak a lot of time i.e at most cfg.BlockTimeout
+	var response *sdk.TxResponse
+	if err := retry.Do(func() error {
+		resp, err := bc.ChainClient.SendMsg(ctx, delegateMsg, "")
+		if err != nil {
+			// Our transactions was correct, but it was not included in the block for cfg.BlockTimeout
+			// no point in retrying
+			if errors.Is(err, lensclient.ErrTimeoutAfterWaitingForTxBroadcast) {
+				return retry.Unrecoverable(err)
+			}
+			return err
+		}
+		response = resp
+		return nil
+	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
+		bc.logger.WithFields(logrus.Fields{
+			"attempt":      n + 1,
+			"max_attempts": RtyAttNum,
+			"error":        err,
+		}).Error("Failed to send delegation transaction to babylon client")
+	})); err != nil {
 		return nil, err
 	}
-	return res, err
+
+	if response.Code != 0 {
+		// This quite specific case in which we send delegation to babylon, it was included in the block
+		// but it execution failed. It is a bit criticial error, as we are wasting gas on invalid transaction
+		// we return error and response so that caller decides what to do with it.
+		return response, ErrInvalidBabylonDelegation
+	}
+
+	return response, nil
 }
 
 func getQueryContext(timeout time.Duration) (context.Context, context.CancelFunc) {

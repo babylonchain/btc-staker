@@ -38,9 +38,11 @@ func DefaultBBNConfig() BBNConfig {
 		KeyDirectory:   DefaultStakerdDir,
 		Debug:          dc.Debug,
 		Timeout:        dc.Timeout,
-		BlockTimeout:   dc.BlockTimeout,
-		OutputFormat:   dc.OutputFormat,
-		SignModeStr:    dc.SignModeStr,
+		// Setting this to relatively low value, out currnet babylon client (lens) will
+		// block for this amout of time to wait for transaction inclusion in block
+		BlockTimeout: 1 * time.Minute,
+		OutputFormat: dc.OutputFormat,
+		SignModeStr:  dc.SignModeStr,
 	}
 }
 
