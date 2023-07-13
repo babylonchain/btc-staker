@@ -77,7 +77,7 @@ const (
 
 	// maximum number of delegations that can be pending(waiting to be sent to babylon)
 	// at the same time
-	maxNumPendingDelegations = 1000
+	maxNumPendingDelegations = 100
 )
 
 type StakerApp struct {
@@ -427,7 +427,7 @@ func (app *StakerApp) handleSentToBabylon() {
 				continue
 			}
 
-			// Allo good we have successful delegation
+			// All good we have successful delegation
 			app.sendToBabylonResponseChan <- &sendToBabylonResponse{
 				txHash: &req.txHash,
 			}
@@ -443,11 +443,23 @@ func (app *StakerApp) sendDelegationWithTxToBabylon(
 	txIndex uint32,
 	inlusionBlock *wire.MsgBlock,
 ) {
-	app.sendToBabylonRequestChan <- &sendToBabylonRequest{
+
+	req := &sendToBabylonRequest{
 		txHash:        txHash,
 		txIndex:       txIndex,
 		inlusionBlock: inlusionBlock,
 	}
+
+	numOfQueuedDelegations := len(app.sendToBabylonRequestChan)
+
+	app.logger.WithFields(logrus.Fields{
+		"btcTxHash": txHash,
+		"btcTxIdx":  txIndex,
+		"limit":     maxNumPendingDelegations,
+		"lenQueue":  numOfQueuedDelegations,
+	}).Debug("Queuing delegation to be send to babylon")
+
+	app.sendToBabylonRequestChan <- req
 }
 
 // main event loop for the staker app
