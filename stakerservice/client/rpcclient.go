@@ -31,3 +31,12 @@ func (c *StakerServiceJsonRpcClient) Health(ctx context.Context) (*service.Resul
 	}
 	return result, nil
 }
+
+func (c *StakerServiceJsonRpcClient) ListOutputs(ctx context.Context) (*service.OutputsResponse, error) {
+	result := new(service.OutputsResponse)
+	_, err := c.client.Call(ctx, "list_outputs", map[string]interface{}{}, result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}

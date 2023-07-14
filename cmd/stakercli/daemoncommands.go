@@ -16,7 +16,8 @@ var daemonCommands = []cli.Command{
 		Usage:     "More advanced commands which require staker daemon to be running",
 		Category:  "Daemon commands",
 		Subcommands: []cli.Command{
-			checkDaemonHealth,
+			checkDaemonHealthCmd,
+			listOutputsCmd,
 		},
 	},
 }
@@ -29,7 +30,7 @@ var (
 	defaultStakingDaemonAddress = "tcp://127.0.0.1:" + strconv.Itoa(scfg.DefaultRPCPort)
 )
 
-var checkDaemonHealth = cli.Command{
+var checkDaemonHealthCmd = cli.Command{
 	Name:      "check-health",
 	ShortName: "ch",
 	Usage:     "Check if staker daemon is running",
@@ -41,6 +42,20 @@ var checkDaemonHealth = cli.Command{
 		},
 	},
 	Action: checkHealth,
+}
+
+var listOutputsCmd = cli.Command{
+	Name:      "list-outputs",
+	ShortName: "lo",
+	Usage:     "List unspend outputs in connected wallet",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+	},
+	Action: listOutputs,
 }
 
 func checkHealth(ctx *cli.Context) error {
@@ -59,6 +74,26 @@ func checkHealth(ctx *cli.Context) error {
 	}
 
 	printRespJSON(health)
+
+	return nil
+}
+
+func listOutputs(ctx *cli.Context) error {
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+
+	outputs, err := client.ListOutputs(sctx)
+
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(outputs)
 
 	return nil
 }

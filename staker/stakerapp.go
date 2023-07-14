@@ -785,3 +785,7 @@ func (app *StakerApp) GetAllDelegations() ([]*Delegation, error) {
 func (app *StakerApp) GetStoredTransaction(txHash *chainhash.Hash) (*stakerdb.StoredTransaction, error) {
 	return app.txTracker.GetTransaction(txHash)
 }
+
+func (app *StakerApp) ListUnspentOutputs() ([]walletcontroller.Utxo, error) {
+	return app.wc.ListOutputs(false)
+}

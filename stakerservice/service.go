@@ -125,6 +125,28 @@ func (s *StakerService) stakingDetails(_ *rpctypes.Context,
 	}, nil
 }
 
+func (s *StakerService) listOutputs(_ *rpctypes.Context) (*OutputsResponse, error) {
+
+	outputs, err := s.staker.ListUnspentOutputs()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var outputDetails []OutputDetail
+
+	for _, output := range outputs {
+		outputDetails = append(outputDetails, OutputDetail{
+			Address: output.Address,
+			Amount:  output.Amount.String(),
+		})
+	}
+
+	return &OutputsResponse{
+		Outputs: outputDetails,
+	}, nil
+}
+
 func (s *StakerService) GetRoutes() RoutesMap {
 	return RoutesMap{
 		// info AP
@@ -132,6 +154,9 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// staking API
 		"stake":           rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
 		"staking_details": rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
+
+		//Wallet api
+		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),
 	}
 }
 
