@@ -64,6 +64,8 @@ type externalDelegationData struct {
 
 	// babylonPubKey need to be retrieved from babylon keyring
 	babylonPubKey *secp256k1.PubKey
+
+	slashingFee btcutil.Amount
 }
 
 type Delegation struct {
@@ -73,7 +75,9 @@ type Delegation struct {
 
 const (
 	// Temporary hack to get around the fees and the fact that babylon slashing fee is 1 satoshi
-	minSlashingFeeAdjustment = 1000
+	// Slashing tx is around 113 bytes (depending on output address which we need to chose), with pretty large fee of 25 sat/b
+	// this gives 2825 sats fee. Let round it up to 3000 sats just to be sure.
+	minSlashingFeeAdjustment = 3000
 
 	// maximum number of delegations that can be pending(waiting to be sent to babylon)
 	// at the same time
@@ -89,6 +93,7 @@ type StakerApp struct {
 	babylonClient             cl.BabylonClient
 	wc                        walletcontroller.WalletController
 	notifier                  notifier.ChainNotifier
+	feeEstimator              FeeEstimator
 	network                   *chaincfg.Params
 	config                    *scfg.Config
 	logger                    *logrus.Logger
@@ -129,12 +134,26 @@ func NewStakerAppFromConfig(
 		return nil, err
 	}
 
+	var feeEstimator FeeEstimator
+	switch config.BtcNodeBackendConfig.EstimationMode {
+	case scfg.StaticFeeEstimation:
+		feeEstimator = NewStaticBtcFeeEstimator()
+	case scfg.DynamicFeeEstimation:
+		feeEstimator, err = NewDynamicBtcFeeEstimator(config.BtcNodeBackendConfig, &config.ActiveNetParams, logger)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unknown fee estimation mode: %d", config.BtcNodeBackendConfig.EstimationMode)
+	}
+
 	return NewStakerAppFromDeps(
 		config,
 		logger,
 		cl,
 		walletClient,
 		nodeNotifier,
+		feeEstimator,
 		tracker,
 	)
 }
@@ -145,12 +164,14 @@ func NewStakerAppFromDeps(
 	cl cl.BabylonClient,
 	walletClient walletcontroller.WalletController,
 	nodeNotifier notifier.ChainNotifier,
+	feeEestimator FeeEstimator,
 	tracker *stakerdb.TrackedTransactionStore,
 ) (*StakerApp, error) {
 	return &StakerApp{
 		babylonClient:      cl,
 		wc:                 walletClient,
 		notifier:           nodeNotifier,
+		feeEstimator:       feeEestimator,
 		network:            &config.ActiveNetParams,
 		txTracker:          tracker,
 		config:             config,
@@ -344,6 +365,7 @@ func (app *StakerApp) getDelegationData(stakerAddress btcutil.Address) (*externa
 		stakerPrivKey:   privkey,
 		slashingAddress: params.SlashingAddress,
 		babylonPubKey:   app.babylonClient.GetPubKey(),
+		slashingFee:     params.MinSlashingTxFeeSat,
 	}, nil
 }
 
@@ -385,7 +407,7 @@ func (app *StakerApp) handleSentToBabylon() {
 				storedTx.TxScript,
 				storedTx.StakingOutputIndex,
 				storedTx.Pop,
-				minSlashingFeeAdjustment,
+				int64(delegationData.slashingFee)+minSlashingFeeAdjustment,
 			)
 
 			if err != nil {
@@ -695,12 +717,20 @@ func (app *StakerApp) StakeFunds(
 		return nil, err
 	}
 
-	// todo: fix fees
-	tx, err := app.wc.CreateAndSignTx([]*wire.TxOut{output}, 100, stakerAddress)
+	feeRate := app.feeEstimator.EstimateFeePerKb()
+
+	tx, err := app.wc.CreateAndSignTx([]*wire.TxOut{output}, btcutil.Amount(feeRate), stakerAddress)
 
 	if err != nil {
 		return nil, err
 	}
+
+	app.logger.WithFields(logrus.Fields{
+		"stakerAddress": stakerAddress,
+		"stakingAmount": output.Value,
+		"btxTxHash":     tx.TxHash(),
+		"fee":           feeRate,
+	}).Info("Created and signed staking transaction")
 
 	req := &stakingRequest{
 		stakerAddress:         stakerAddress,

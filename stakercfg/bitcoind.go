@@ -8,6 +8,8 @@ const (
 	// DefaultTxPollingJitter defines the default TxPollingIntervalJitter
 	// to be used for bitcoind backend.
 	DefaultTxPollingJitter = 0.5
+
+	DefaultEstimateMode = "CONSERVATIVE"
 )
 
 // Bitcoind holds the configuration options for the daemon's connection to
@@ -37,5 +39,6 @@ func DefaultBitcoindConfig() Bitcoind {
 		RPCPolling:           true,
 		BlockPollingInterval: 30 * time.Second,
 		TxPollingInterval:    30 * time.Second,
+		EstimateMode:         DefaultEstimateMode,
 	}
 }
