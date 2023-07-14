@@ -177,6 +177,10 @@ func (c *TrackedTransactionStore) SetTxSentToBabylon(txHash *chainhash.Hash) err
 	return c.setTxState(txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
 
+func (c *TrackedTransactionStore) SetTxSpentOnBtc(txHash *chainhash.Hash) error {
+	return c.setTxState(txHash, proto.TransactionState_SPENT_ON_BTC)
+}
+
 func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*StoredTransaction, error) {
 	var storedTx *StoredTransaction
 	err := c.db.View(func(tx kvdb.RTx) error {

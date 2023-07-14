@@ -125,6 +125,25 @@ func (s *StakerService) stakingDetails(_ *rpctypes.Context,
 	}, nil
 }
 
+func (s *StakerService) spendStakingTx(_ *rpctypes.Context,
+	stakingTxHash string) (*SpendTxDetails, error) {
+	txHash, err := chainhash.NewHashFromStr(stakingTxHash)
+
+	if err != nil {
+		return nil, err
+	}
+
+	spendTxHash, _, err := s.staker.SpendStakingOutput(txHash)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &SpendTxDetails{
+		TxHash: spendTxHash.String(),
+	}, nil
+}
+
 func (s *StakerService) listOutputs(_ *rpctypes.Context) (*OutputsResponse, error) {
 
 	outputs, err := s.staker.ListUnspentOutputs()
@@ -152,8 +171,9 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
 		// staking API
-		"stake":           rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
-		"staking_details": rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
+		"stake":            rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
+		"staking_details":  rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
+		"spend_staking_tx": rpc.NewRPCFunc(s.spendStakingTx, "stakingTxHash"),
 
 		//Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),

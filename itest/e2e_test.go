@@ -369,7 +369,7 @@ func ImportWalletSpendingKey(
 
 // MineBlocksWithTxes mines a single block to include the specifies
 // transactions only.
-func mineBlockWithTxes(t *testing.T, h *rpctest.Harness, txes []*btcutil.Tx) *wire.MsgBlock {
+func mineBlockWithTxs(t *testing.T, h *rpctest.Harness, txes []*btcutil.Tx) *wire.MsgBlock {
 	var emptyTime time.Time
 
 	// Generate a block.
@@ -405,7 +405,8 @@ func waitForNOutputs(t *testing.T, walletClient walletcontroller.WalletControlle
 }
 
 func TestSendingStakingTransaction(t *testing.T) {
-	numMatureOutputs := uint32(5)
+	// need to have at least 300 block on testnet as only then segwit is activated
+	numMatureOutputs := uint32(200)
 	var submittedTransactions []*chainhash.Hash
 
 	// We are setting handler for transaction hitting the mempool, to be sure we will
@@ -443,7 +444,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	require.Equal(t, txHash, submittedTransactions[0])
 
-	mBlock := mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
+	mBlock := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
 	require.Equal(t, 2, len(mBlock.Transactions))
 
 	cl := tm.Sa.BabylonController()
@@ -455,7 +456,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 		// mine confirmation time blocks in background
 		for i := 0; i < int(params.ComfirmationTimeBlocks); i++ {
 			time.Sleep(1 * time.Second)
-			mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+			mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
 		}
 	}()
 
@@ -474,4 +475,54 @@ func TestSendingStakingTransaction(t *testing.T) {
 		require.NoError(t, err)
 		return len(allCurrentDelegations) == 1 && allCurrentDelegations[0].State == proto.TransactionState_SENT_TO_BABYLON
 	}, eventuallyWaitTimeOut, eventuallyPollTime)
+
+	submittedTransactions = []*chainhash.Hash{}
+
+	// Need to mine two blocks, so that staking tx time lock is expired.
+	mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+
+	_, _, err = tm.Sa.SpendStakingOutput(stakingtxHash)
+	// Here we expect error as staking tx time lock is not yet expired.
+	require.Error(t, err)
+
+	mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+	spendTxHash, spendTxValue, err := tm.Sa.SpendStakingOutput(stakingtxHash)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return len(submittedTransactions) == 1
+	}, eventuallyWaitTimeOut, eventuallyPollTime)
+
+	require.True(t, spendTxHash.IsEqual(submittedTransactions[0]))
+
+	// Block with spend is mined
+	mBlock1 := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
+	require.Equal(t, 2, len(mBlock1.Transactions))
+
+	go func() {
+		// mine confirmation time blocks in background
+		for i := 0; i < int(params.ComfirmationTimeBlocks); i++ {
+			time.Sleep(1 * time.Second)
+			mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+		}
+	}()
+
+	require.Eventually(t, func() bool {
+		allCurrentDelegations, err = tm.Sa.GetAllDelegations()
+		require.NoError(t, err)
+		return len(allCurrentDelegations) == 1 && allCurrentDelegations[0].State == proto.TransactionState_SPENT_ON_BTC
+	}, eventuallyWaitTimeOut, eventuallyPollTime)
+
+	unspentOutputs, err := tm.Sa.ListUnspentOutputs()
+	require.NoError(t, err)
+
+	var containsOutputFromSpendStakeTx bool = false
+
+	for _, output := range unspentOutputs {
+		if output.Address == tm.MinerAddr.String() && int64(output.Amount) == int64(*spendTxValue) {
+			containsOutputFromSpendStakeTx = true
+		}
+	}
+
+	require.True(t, containsOutputFromSpendStakeTx)
 }

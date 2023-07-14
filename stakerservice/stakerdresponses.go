@@ -20,3 +20,6 @@ type OutputDetail struct {
 type OutputsResponse struct {
 	Outputs []OutputDetail `json:"outputs"`
 }
+type SpendTxDetails struct {
+	TxHash string `json:"txHash"`
+}

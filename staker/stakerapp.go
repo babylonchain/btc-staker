@@ -1,9 +1,11 @@
 package staker
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
@@ -16,7 +18,10 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcwallet/wallet/txrules"
+	"github.com/btcsuite/btcwallet/wallet/txsizes"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	notifier "github.com/lightningnetwork/lnd/chainntnfs"
@@ -56,6 +61,10 @@ type sendToBabylonResponse struct {
 	err    error
 }
 
+type spendTxConfirmationEvent struct {
+	stakingTxHash chainhash.Hash
+}
+
 type externalDelegationData struct {
 	// stakerPrivKey needs to be retrieved from btc wallet
 	stakerPrivKey *btcec.PrivateKey
@@ -82,6 +91,16 @@ const (
 	// maximum number of delegations that can be pending(waiting to be sent to babylon)
 	// at the same time
 	maxNumPendingDelegations = 100
+
+	// after this many confirmations we consided transaction which spends staking tx as
+	// as confirmend on btc
+	stakingTxSpendTxConfirmation = 3
+
+	// 2 hours seems like reasonale timeout waiting for spend tx confirmations given
+	// probablisitc nature of bitcoin
+	timeoutWaitingForSpendCOnfirmation = 2 * time.Hour
+
+	defaultWalletUnlockTimeout = 15
 )
 
 type StakerApp struct {
@@ -102,6 +121,7 @@ type StakerApp struct {
 	confirmationEventChan     chan *confirmationEvent
 	sendToBabylonRequestChan  chan *sendToBabylonRequest
 	sendToBabylonResponseChan chan *sendToBabylonResponse
+	spendTxConfirmationChan   chan *spendTxConfirmationEvent
 }
 
 func NewStakerAppFromConfig(
@@ -186,6 +206,9 @@ func NewStakerAppFromDeps(
 
 		// event for when delegation is sent to babylon and included in babylon
 		sendToBabylonResponseChan: make(chan *sendToBabylonResponse),
+
+		// event emitted upon transaction which spends staking transaction is confirmed on BTC
+		spendTxConfirmationChan: make(chan *spendTxConfirmationEvent),
 	}, nil
 }
 
@@ -349,7 +372,7 @@ func (app *StakerApp) getDelegationData(stakerAddress btcutil.Address) (*externa
 		return nil, err
 	}
 
-	err = app.wc.UnlockWallet(15)
+	err = app.wc.UnlockWallet(defaultWalletUnlockTimeout)
 
 	if err != nil {
 		return nil, err
@@ -551,9 +574,7 @@ func (app *StakerApp) handleStaking() {
 			req.successChan <- hash
 
 		case confEvent := <-app.confirmationEventChan:
-			err := app.txTracker.SetTxConfirmed(&confEvent.txHash)
-
-			if err != nil {
+			if err := app.txTracker.SetTxConfirmed(&confEvent.txHash); err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
 				app.logger.Fatalf("Error setting state for tx %s: %s", confEvent.txHash, err)
@@ -588,9 +609,7 @@ func (app *StakerApp) handleStaking() {
 				}).Fatalf("Error sending delegation to babylon")
 			}
 
-			err := app.txTracker.SetTxSentToBabylon(sentToBabylonConf.txHash)
-
-			if err != nil {
+			if err := app.txTracker.SetTxSentToBabylon(sentToBabylonConf.txHash); err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
 				app.logger.Fatalf("Error setting state for tx %s: %s", sentToBabylonConf.txHash, err)
@@ -599,6 +618,17 @@ func (app *StakerApp) handleStaking() {
 			app.logger.WithFields(logrus.Fields{
 				"btcTxHash": sentToBabylonConf.txHash,
 			}).Infof("BTC transaction successfully sent to babylon as part of delegation")
+
+		case spendTxConf := <-app.spendTxConfirmationChan:
+			if err := app.txTracker.SetTxSpentOnBtc(&spendTxConf.stakingTxHash); err != nil {
+				// TODO: handle this error somehow, it means we received spend stake confirmation for tx which we do not store
+				// which is seems like programming error. Maybe panic?
+				app.logger.Fatalf("Error setting state for tx %s: %s", spendTxConf.stakingTxHash, err)
+			}
+
+			app.logger.WithFields(logrus.Fields{
+				"btcTxHash": spendTxConf.stakingTxHash,
+			}).Infof("BTC Staking transaction successfully spent and confirmed on BTC network")
 
 		case <-app.quit:
 			return
@@ -684,7 +714,7 @@ func (app *StakerApp) StakeFunds(
 
 	// unlock wallet for the rest of the operations
 	// TODO consider unlock/lock with defer
-	err = app.wc.UnlockWallet(15)
+	err = app.wc.UnlockWallet(defaultWalletUnlockTimeout)
 
 	if err != nil {
 		return nil, err
@@ -788,4 +818,203 @@ func (app *StakerApp) GetStoredTransaction(txHash *chainhash.Hash) (*stakerdb.St
 
 func (app *StakerApp) ListUnspentOutputs() ([]walletcontroller.Utxo, error) {
 	return app.wc.ListOutputs(false)
+}
+func (app *StakerApp) spendStakingTx(
+	destAddress btcutil.Address,
+	stakingTx *wire.MsgTx,
+	stakingTxHash *chainhash.Hash,
+	stakingTxScript []byte,
+	stakingOutputIdx uint32,
+) (*wire.MsgTx, *btcutil.Amount, error) {
+	destAddressScript, err := txscript.PayToAddrScript(destAddress)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot spend staking output. Cannot built destination script: %w", err)
+	}
+
+	script, err := staking.ParseStakingTransactionScript(stakingTxScript)
+
+	if err != nil {
+		app.logger.WithFields(logrus.Fields{
+			"err": err,
+		}).Fatal("error parsing staking transaction script from db")
+	}
+
+	stakingOutput := stakingTx.TxOut[stakingOutputIdx]
+	newOutput := wire.NewTxOut(stakingOutput.Value, destAddressScript)
+
+	stakingOutputOutpoint := wire.NewOutPoint(stakingTxHash, stakingOutputIdx)
+	stakingOutputAsInput := wire.NewTxIn(stakingOutputOutpoint, nil, nil)
+	// need to set valid sequence to unlock tx.
+	stakingOutputAsInput.Sequence = uint32(script.StakingTime)
+
+	spendTx := wire.NewMsgTx(2)
+	spendTx.AddTxIn(stakingOutputAsInput)
+	spendTx.AddTxOut(newOutput)
+
+	feeRate := app.feeEstimator.EstimateFeePerKb()
+
+	// transaction have 1 P2TR input and does not have any change
+	txSize := txsizes.EstimateVirtualSize(0, 1, 0, 0, []*wire.TxOut{newOutput}, 0)
+
+	fee := txrules.FeeForSerializeSize(btcutil.Amount(feeRate), txSize)
+
+	spendTx.TxOut[0].Value = spendTx.TxOut[0].Value - int64(fee)
+
+	return spendTx, &fee, nil
+}
+
+func (app *StakerApp) waitForSpendConfirmation(stakingTxHash chainhash.Hash, ev *notifier.ConfirmationEvent) {
+	// check we are not shutting down
+	select {
+	case <-app.quit:
+		ev.Cancel()
+		return
+
+	default:
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutWaitingForSpendCOnfirmation)
+	defer cancel()
+	for {
+		select {
+		case <-ev.Confirmed:
+			// transaction which spends staking transaction is confirmed on BTC inform
+			// main loop about it
+			app.spendTxConfirmationChan <- &spendTxConfirmationEvent{
+				stakingTxHash,
+			}
+			ev.Cancel()
+			return
+		case <-ctx.Done():
+			// we timed out waiting for confirmation, transaction is stuck in mempool
+			return
+
+		case <-app.quit:
+			// app is quitting, cancel the event
+			ev.Cancel()
+			return
+		}
+	}
+}
+
+func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainhash.Hash, *btcutil.Amount, error) {
+	// check we are not shutting down
+	select {
+	case <-app.quit:
+		return nil, nil, nil
+
+	default:
+	}
+
+	tx, err := app.txTracker.GetTransaction(stakingTxHash)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	//	If transaction is not confirmed at least, fail fast
+	if tx.State < proto.TransactionState_CONFIRMED_ON_BTC {
+		return nil, nil, fmt.Errorf("cannot spend staking which was not sent to babylon")
+	}
+
+	// this is necessary to later register notification for spending tx confirmation
+	// better do this now to fail fast if we cannot get best block height
+	currentBestBlock, err := app.wc.BestBlockHeight()
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot spend staking output. Error getting best block height: %w", err)
+	}
+
+	// this coud happen if we stared staker on wrong network.
+	// TODO: consider storing data for different networks in different folders
+	// to avoid this
+	// Currently we spend funds from staking transaction to the same address. This
+	// could be improved by allowing user to specify destination address, although
+	// this destination address would need to control the expcted priv key to sign
+	// transaction
+	destAddress, err := btcutil.DecodeAddress(tx.StakerAddress, app.network)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot spend staking output. Error decoding staker address: %w", err)
+	}
+
+	stakingOutput := tx.BtcTx.TxOut[tx.StakingOutputIndex]
+
+	spendTx, calculatedFee, err := app.spendStakingTx(
+		destAddress,
+		tx.BtcTx,
+		stakingTxHash,
+		tx.TxScript,
+		tx.StakingOutputIndex,
+	)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = app.wc.UnlockWallet(defaultWalletUnlockTimeout)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot spend staking output. Error unlocking wallet: %w", err)
+	}
+
+	privKey, err := app.wc.DumpPrivateKey(destAddress)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot spend staking output. Error getting private key: %w", err)
+	}
+
+	witness, err := staking.BuildWitnessToSpendStakingOutput(
+		spendTx,
+		stakingOutput,
+		tx.TxScript,
+		privKey,
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot spend staking output. Error building witness: %w", err)
+	}
+
+	spendTx.TxIn[0].Witness = witness
+
+	// We do not check if transaction is spendable i.e the staking time has passed
+	// as this is validated in mempool so in of not meeting this time requirement
+	// we will receive error here: `transaction's sequence locks on inputs not met`
+	spendTxHash, err := app.wc.SendRawTransaction(spendTx, true)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot spend staking output. Error sending tx: %w", err)
+	}
+
+	spendTxValue := btcutil.Amount(spendTx.TxOut[0].Value)
+
+	app.logger.WithFields(logrus.Fields{
+		"stakeValue":    btcutil.Amount(stakingOutput.Value),
+		"spendTxHash":   spendTxHash,
+		"spendTxValue":  spendTxValue,
+		"fee":           calculatedFee,
+		"stakerAddress": destAddress,
+		"destAddress":   destAddress,
+	}).Infof("Successfully sent transaction spending staking output")
+
+	confEvent, err := app.notifier.RegisterConfirmationsNtfn(
+		spendTxHash,
+		spendTx.TxOut[0].PkScript,
+		stakingTxSpendTxConfirmation,
+		uint32(currentBestBlock),
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("spend tx sent. Error registering confirmation notifcation: %w", err)
+	}
+
+	// We are gonna mark our staking transaction as spent on BTC network, only when
+	// we receive enough confirmations on btc network. This means that btc staker can send another
+	// tx which will spend this staking output concurrently. In that case the first one
+	// confirmed on btc networks which will mark our staking transaction as spent on BTC network.
+	// TODO: we can reconsider this approach in the future.
+	go app.waitForSpendConfirmation(*stakingTxHash, confEvent)
+
+	return spendTxHash, &spendTxValue, nil
 }
