@@ -32,6 +32,7 @@ const (
 	// (14 months * 30 days * 24 hours).
 	defaultTLSCertDuration = 14 * 30 * 24 * time.Hour
 	defaultConfigFileName  = "stakerd.conf"
+	defaultFeeMode         = "static"
 )
 
 type SupportedNodeBackend int
@@ -118,7 +119,7 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 	bitcoindConfig := DefaultBitcoindConfig()
 	return BtcNodeBackendConfig{
 		Nodetype:   "btcd",
-		FeeMode:    "static",
+		FeeMode:    defaultFeeMode,
 		BtcdConfig: &btcdConfig,
 		Bitcoind:   &bitcoindConfig,
 	}

@@ -15,6 +15,12 @@ const (
 	// that tx will be confirmed in reasonable time
 	// It is also default fee if dynamic fee estimation fails
 	DefaultBtcFee = chainfee.SatPerKVByte(25 * 1000)
+
+
+	// Default number of blocks to use for fee estimation. 1 means we want our transactions
+	// to be confirmed in next block.
+	// TODO: make this configurable ?
+	DefaultNumBlockForEstimation = 1
 )
 
 type FeeEstimator interface {
@@ -103,7 +109,7 @@ func (e *DynamicBtcFeeEstimator) Stop() error {
 }
 
 func (e *DynamicBtcFeeEstimator) EstimateFeePerKb() chainfee.SatPerKVByte {
-	fee, err := e.estimator.EstimateFeePerKW(1)
+	fee, err := e.estimator.EstimateFeePerKW(DefaultNumBlockForEstimation)
 
 	if err != nil {
 		logrus.WithFields(logrus.Fields{

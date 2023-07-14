@@ -135,16 +135,14 @@ func NewStakerAppFromConfig(
 	}
 
 	var feeEstimator FeeEstimator
-
 	switch config.BtcNodeBackendConfig.EstimationMode {
 	case scfg.StaticFeeEstimation:
 		feeEstimator = NewStaticBtcFeeEstimator()
 	case scfg.DynamicFeeEstimation:
-		est, err := NewDynamicBtcFeeEstimator(config.BtcNodeBackendConfig, &config.ActiveNetParams, logger)
+		feeEstimator, err = NewDynamicBtcFeeEstimator(config.BtcNodeBackendConfig, &config.ActiveNetParams, logger)
 		if err != nil {
 			return nil, err
 		}
-		feeEstimator = est
 	default:
 		return nil, fmt.Errorf("unknown fee estimation mode: %d", config.BtcNodeBackendConfig.EstimationMode)
 	}
@@ -719,9 +717,9 @@ func (app *StakerApp) StakeFunds(
 		return nil, err
 	}
 
-	fee := app.feeEstimator.EstimateFeePerKb()
+	feeRate := app.feeEstimator.EstimateFeePerKb()
 
-	tx, err := app.wc.CreateAndSignTx([]*wire.TxOut{output}, btcutil.Amount(fee), stakerAddress)
+	tx, err := app.wc.CreateAndSignTx([]*wire.TxOut{output}, btcutil.Amount(feeRate), stakerAddress)
 
 	if err != nil {
 		return nil, err
@@ -731,7 +729,7 @@ func (app *StakerApp) StakeFunds(
 		"stakerAddress": stakerAddress,
 		"stakingAmount": output.Value,
 		"btxTxHash":     tx.TxHash(),
-		"fee":           fee,
+		"fee":           feeRate,
 	}).Info("Created and signed staking transaction")
 
 	req := &stakingRequest{
