@@ -1018,3 +1018,7 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 
 	return spendTxHash, &spendTxValue, nil
 }
+
+func (app *StakerApp) ListActiveValidators() ([]cl.ValidatorInfo, error) {
+	return app.babylonClient.QueryValidators()
+}

@@ -18,6 +18,7 @@ var daemonCommands = []cli.Command{
 		Subcommands: []cli.Command{
 			checkDaemonHealthCmd,
 			listOutputsCmd,
+			babylonValidatorsCmd,
 		},
 	},
 }
@@ -58,6 +59,20 @@ var listOutputsCmd = cli.Command{
 	Action: listOutputs,
 }
 
+var babylonValidatorsCmd = cli.Command{
+	Name:      "babylon-validatos",
+	ShortName: "bv",
+	Usage:     "List current validators on babylon chain",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+	},
+	Action: babylonValidators,
+}
+
 func checkHealth(ctx *cli.Context) error {
 	daemonAddress := ctx.String(stakingDaemonAddressFlag)
 	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
@@ -94,6 +109,26 @@ func listOutputs(ctx *cli.Context) error {
 	}
 
 	printRespJSON(outputs)
+
+	return nil
+}
+
+func babylonValidators(ctx *cli.Context) error {
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+
+	validators, err := client.BabylonValidators(sctx)
+
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(validators)
 
 	return nil
 }

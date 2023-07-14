@@ -114,9 +114,14 @@ func NewBabylonController(
 	return client, nil
 }
 
-type StakingTrackerResonse struct {
+type StakingTrackerResponse struct {
 	SlashingAddress btcutil.Address
 	JuryPk          btcec.PublicKey
+}
+
+type ValidatorInfo struct {
+	BabylonPk secp256k1.PubKey
+	BtcPk     btcec.PublicKey
 }
 
 // Copied from vigilante. Weirdly, there is only Stop function (no Start function ?)
@@ -148,7 +153,7 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 		return nil, err
 	}
 
-	var stakingTrackerParams *StakingTrackerResonse
+	var stakingTrackerParams *StakingTrackerResponse
 	if err := retry.Do(func() error {
 		trackerParams, err := bc.QueryStakingTracker()
 		if err != nil {
@@ -356,7 +361,7 @@ func getQueryContext(timeout time.Duration) (context.Context, context.CancelFunc
 	return ctx, cancel
 }
 
-func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResonse, error) {
+func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, error) {
 	ctx, cancel := getQueryContext(bc.cfg.Timeout)
 	defer cancel()
 
@@ -381,8 +386,52 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResonse, erro
 		return nil, err
 	}
 
-	return &StakingTrackerResonse{
+	return &StakingTrackerResponse{
 		SlashingAddress: slashingAddress,
 		JuryPk:          *juryPk,
 	}, nil
+}
+
+func (bc *BabylonController) QueryValidators() ([]ValidatorInfo, error) {
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
+	queryClient := types.NewQueryClient(clientCtx)
+
+	var response *types.QueryBTCValidatorsResponse
+	if err := retry.Do(func() error {
+		resp, err := queryClient.BTCValidators(ctx, &types.QueryBTCValidatorsRequest{})
+		if err != nil {
+			return err
+		}
+		response = resp
+		return nil
+	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
+		bc.logger.WithFields(logrus.Fields{
+			"attempt":      n + 1,
+			"max_attempts": RtyAttNum,
+			"error":        err,
+		}).Error("Failed to query babylon for the list of registered validators")
+	})); err != nil {
+		return nil, err
+	}
+
+	var validators []ValidatorInfo
+	for _, validator := range response.BtcValidators {
+		validatorBtcKey, err := validator.BtcPk.ToBTCPK()
+		if err != nil {
+			return nil, fmt.Errorf("query validators error: %w", err)
+		}
+		validatorBabylonPk := validator.BabylonPk
+
+		validatorInfo := ValidatorInfo{
+			BabylonPk: *validatorBabylonPk,
+			BtcPk:     *validatorBtcKey,
+		}
+
+		validators = append(validators, validatorInfo)
+	}
+
+	return validators, nil
 }

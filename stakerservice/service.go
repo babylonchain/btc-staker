@@ -166,6 +166,29 @@ func (s *StakerService) listOutputs(_ *rpctypes.Context) (*OutputsResponse, erro
 	}, nil
 }
 
+func (s *StakerService) validators(_ *rpctypes.Context) (*ValidatorsResponse, error) {
+	validators, err := s.staker.ListActiveValidators()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var validatorInfos []ValidatorInfoResponse
+
+	for _, validator := range validators {
+		v := ValidatorInfoResponse{
+			BabylonPublicKey: hex.EncodeToString(validator.BabylonPk.Key),
+			BtcPublicKey:     hex.EncodeToString(schnorr.SerializePubKey(&validator.BtcPk)),
+		}
+
+		validatorInfos = append(validatorInfos, v)
+	}
+
+	return &ValidatorsResponse{
+		Validators: validatorInfos,
+	}, nil
+}
+
 func (s *StakerService) GetRoutes() RoutesMap {
 	return RoutesMap{
 		// info AP
@@ -175,8 +198,11 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"staking_details":  rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_staking_tx": rpc.NewRPCFunc(s.spendStakingTx, "stakingTxHash"),
 
-		//Wallet api
+		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),
+
+		// Babylon api
+		"babylon_validators": rpc.NewRPCFunc(s.validators, ""),
 	}
 }
 
