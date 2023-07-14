@@ -207,7 +207,7 @@ func NewStakerAppFromDeps(
 		// event for when delegation is sent to babylon and included in babylon
 		sendToBabylonResponseChan: make(chan *sendToBabylonResponse),
 
-		// event for when transaction which spends staking transaction is confirmed on BTC
+		// event emitted upon transaction which spends staking transaction is confirmed on BTC
 		spendTxConfirmationChan: make(chan *spendTxConfirmationEvent),
 	}, nil
 }
@@ -574,9 +574,7 @@ func (app *StakerApp) handleStaking() {
 			req.successChan <- hash
 
 		case confEvent := <-app.confirmationEventChan:
-			err := app.txTracker.SetTxConfirmed(&confEvent.txHash)
-
-			if err != nil {
+			if err := app.txTracker.SetTxConfirmed(&confEvent.txHash); err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
 				app.logger.Fatalf("Error setting state for tx %s: %s", confEvent.txHash, err)
@@ -611,9 +609,7 @@ func (app *StakerApp) handleStaking() {
 				}).Fatalf("Error sending delegation to babylon")
 			}
 
-			err := app.txTracker.SetTxSentToBabylon(sentToBabylonConf.txHash)
-
-			if err != nil {
+			if err := app.txTracker.SetTxSentToBabylon(sentToBabylonConf.txHash); err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
 				app.logger.Fatalf("Error setting state for tx %s: %s", sentToBabylonConf.txHash, err)
@@ -624,9 +620,7 @@ func (app *StakerApp) handleStaking() {
 			}).Infof("BTC transaction successfully sent to babylon as part of delegation")
 
 		case spendTxConf := <-app.spendTxConfirmationChan:
-			err := app.txTracker.SetTxSpentOnBtc(&spendTxConf.stakingTxHash)
-
-			if err != nil {
+			if err := app.txTracker.SetTxSpentOnBtc(&spendTxConf.stakingTxHash); err != nil {
 				// TODO: handle this error somehow, it means we received spend stake confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
 				app.logger.Fatalf("Error setting state for tx %s: %s", spendTxConf.stakingTxHash, err)
@@ -835,7 +829,7 @@ func (app *StakerApp) spendStakingTx(
 	destAddressScript, err := txscript.PayToAddrScript(destAddress)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot spend staking output. Caonnot built destination script: %w", err)
+		return nil, nil, fmt.Errorf("cannot spend staking output. Cannot built destination script: %w", err)
 	}
 
 	script, err := staking.ParseStakingTransactionScript(stakingTxScript)
@@ -919,7 +913,7 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 		return nil, nil, err
 	}
 
-	// If transaction it not confirmed at least, fail fast
+	//	If transaction is not confirmed at least, fail fast
 	if tx.State < proto.TransactionState_CONFIRMED_ON_BTC {
 		return nil, nil, fmt.Errorf("cannot spend staking which was not sent to babylon")
 	}

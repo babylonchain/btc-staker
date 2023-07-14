@@ -369,7 +369,7 @@ func ImportWalletSpendingKey(
 
 // MineBlocksWithTxes mines a single block to include the specifies
 // transactions only.
-func mineBlockWithTxes(t *testing.T, h *rpctest.Harness, txes []*btcutil.Tx) *wire.MsgBlock {
+func mineBlockWithTxs(t *testing.T, h *rpctest.Harness, txes []*btcutil.Tx) *wire.MsgBlock {
 	var emptyTime time.Time
 
 	// Generate a block.
@@ -444,7 +444,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	require.Equal(t, txHash, submittedTransactions[0])
 
-	mBlock := mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
+	mBlock := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
 	require.Equal(t, 2, len(mBlock.Transactions))
 
 	cl := tm.Sa.BabylonController()
@@ -456,7 +456,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 		// mine confirmation time blocks in background
 		for i := 0; i < int(params.ComfirmationTimeBlocks); i++ {
 			time.Sleep(1 * time.Second)
-			mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+			mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
 		}
 	}()
 
@@ -478,14 +478,14 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	submittedTransactions = []*chainhash.Hash{}
 
-	// Need to mine two blocks so that spending tranas
-	mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+	// Need to mine two blocks, so that staking tx time lock is expired.
+	mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
 
 	_, _, err = tm.Sa.SpendStakingOutput(stakingtxHash)
 	// Here we expect error as staking tx time lock is not yet expired.
 	require.Error(t, err)
 
-	mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+	mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
 	spendTxHash, spendTxValue, err := tm.Sa.SpendStakingOutput(stakingtxHash)
 	require.NoError(t, err)
 
@@ -496,14 +496,14 @@ func TestSendingStakingTransaction(t *testing.T) {
 	require.True(t, spendTxHash.IsEqual(submittedTransactions[0]))
 
 	// Block with spend is mined
-	mBlock1 := mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
+	mBlock1 := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
 	require.Equal(t, 2, len(mBlock1.Transactions))
 
 	go func() {
 		// mine confirmation time blocks in background
 		for i := 0; i < int(params.ComfirmationTimeBlocks); i++ {
 			time.Sleep(1 * time.Second)
-			mineBlockWithTxes(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+			mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
 		}
 	}()
 
