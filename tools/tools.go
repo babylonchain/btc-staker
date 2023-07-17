@@ -1,7 +1,7 @@
 //go:build tools
 // +build tools
 
-package vigilante
+package btcstaker
 
 import (
 	_ "github.com/btcsuite/btcd"

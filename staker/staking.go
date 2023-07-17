@@ -17,7 +17,7 @@ func EncodeSchnorrPkToHexString(pk *btcec.PublicKey) string {
 	return hex.EncodeToString(schnorr.SerializePubKey(pk))
 }
 
-func ParseSchnorPk(key string) (*btcec.PublicKey, error) {
+func ParseSchnorrPk(key string) (*btcec.PublicKey, error) {
 	keyBytes, err := hex.DecodeString(key)
 	if err != nil {
 		return nil, err
@@ -46,18 +46,18 @@ func ParseStakingScriptData(
 	juryPk string,
 	stakingTime uint64) (*staking.StakingScriptData, error) {
 
-	stakerKey, err := ParseSchnorPk(stakerPk)
+	stakerKey, err := ParseSchnorrPk(stakerPk)
 	if err != nil {
 		return nil, err
 	}
 
-	delegatorKey, err := ParseSchnorPk(delegatorPk)
+	delegatorKey, err := ParseSchnorrPk(delegatorPk)
 
 	if err != nil {
 		return nil, err
 	}
 
-	juryKey, err := ParseSchnorPk(juryPk)
+	juryKey, err := ParseSchnorrPk(juryPk)
 
 	if err != nil {
 		return nil, err

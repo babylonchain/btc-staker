@@ -123,7 +123,6 @@ func NewNodeBackend(
 	cfg *scfg.BtcNodeBackendConfig,
 	params *chaincfg.Params,
 ) (*NodeBackend, error) {
-	blockCache := blockcache.NewBlockCache(1000)
 	mockHintCache := newMockHintCache()
 	switch cfg.ActiveNodeBackend {
 	case scfg.BitcoindNodeBackend:
@@ -164,7 +163,7 @@ func NewNodeBackend(
 
 		chainNotifier := bitcoindnotify.New(
 			bitcoindConn, params, mockHintCache,
-			mockHintCache, blockCache,
+			mockHintCache, blockcache.NewBlockCache(cfg.Bitcoind.BlockCacheSize),
 		)
 
 		return &NodeBackend{
@@ -172,11 +171,11 @@ func NewNodeBackend(
 		}, nil
 
 	case scfg.BtcdNodeBackend:
-		btcdUser := cfg.BtcdConfig.RPCUser
-		btcdPass := cfg.BtcdConfig.RPCPass
-		btcdHost := cfg.BtcdConfig.RPCHost
+		btcdUser := cfg.Btcd.RPCUser
+		btcdPass := cfg.Btcd.RPCPass
+		btcdHost := cfg.Btcd.RPCHost
 
-		cert, err := scfg.ReadCertFile(cfg.BtcdConfig.RawRPCCert, cfg.BtcdConfig.RPCCert)
+		cert, err := scfg.ReadCertFile(cfg.Btcd.RawRPCCert, cfg.Btcd.RPCCert)
 
 		if err != nil {
 			return nil, err
@@ -195,7 +194,7 @@ func NewNodeBackend(
 
 		chainNotifier, err := btcdnotify.New(
 			rpcConfig, params, mockHintCache,
-			mockHintCache, blockCache,
+			mockHintCache, blockcache.NewBlockCache(cfg.Btcd.BlockCacheSize),
 		)
 
 		if err != nil {

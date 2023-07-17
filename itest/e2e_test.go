@@ -74,10 +74,10 @@ func defaultStakerConfig(btcdCert []byte, btcdHost string) *stakercfg.Config {
 	defaultConfig := stakercfg.DefaultConfig()
 	// configure node backend
 	defaultConfig.BtcNodeBackendConfig.Nodetype = "btcd"
-	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RPCHost = btcdHost
-	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RawRPCCert = hex.EncodeToString(btcdCert)
-	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RPCUser = "user"
-	defaultConfig.BtcNodeBackendConfig.BtcdConfig.RPCPass = "pass"
+	defaultConfig.BtcNodeBackendConfig.Btcd.RPCHost = btcdHost
+	defaultConfig.BtcNodeBackendConfig.Btcd.RawRPCCert = hex.EncodeToString(btcdCert)
+	defaultConfig.BtcNodeBackendConfig.Btcd.RPCUser = "user"
+	defaultConfig.BtcNodeBackendConfig.Btcd.RPCPass = "pass"
 	defaultConfig.BtcNodeBackendConfig.ActiveNodeBackend = stakercfg.BtcdNodeBackend
 
 	// configre wallet rpc

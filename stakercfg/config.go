@@ -74,7 +74,7 @@ func DefaultChainConfig() ChainConfig {
 }
 
 type WalletConfig struct {
-	WalletName string `long:"walletname" description:"name of the wallet to sign btc transactions"`
+	WalletName string `long:"walletname" description:"name of the wallet to sign Bitcoin transactions"`
 	WalletPass string `long:"walletpassphrase" description:"passphrase to unlock the wallet"`
 }
 
@@ -108,7 +108,7 @@ type JsonRpcServerConfig struct {
 type BtcNodeBackendConfig struct {
 	Nodetype          string    `long:"nodetype" description:"type of node to connect to {bitcoind, btcd}"`
 	FeeMode           string    `long:"feemode" description:"fee mode to use for fee estimation {static, dynamic}. In dynamic mode fee will be estimated using backend node"`
-	BtcdConfig        *Btcd     `group:"btcd" namespace:"btcd"`
+	Btcd              *Btcd     `group:"btcd" namespace:"btcd"`
 	Bitcoind          *Bitcoind `group:"bitcoind" namespace:"bitcoind"`
 	EstimationMode    FeeEstimationMode
 	ActiveNodeBackend SupportedNodeBackend
@@ -118,10 +118,10 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 	btcdConfig := DefaultBtcdConfig()
 	bitcoindConfig := DefaultBitcoindConfig()
 	return BtcNodeBackendConfig{
-		Nodetype:   "btcd",
-		FeeMode:    defaultFeeMode,
-		BtcdConfig: &btcdConfig,
-		Bitcoind:   &bitcoindConfig,
+		Nodetype: "btcd",
+		FeeMode:  defaultFeeMode,
+		Btcd:     &btcdConfig,
+		Bitcoind: &bitcoindConfig,
 	}
 }
 

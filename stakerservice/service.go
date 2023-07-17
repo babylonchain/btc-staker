@@ -51,7 +51,7 @@ func NewStakerService(
 	}
 }
 
-func (s *StakerService) health(*rpctypes.Context) (*ResultHealth, error) {
+func (s *StakerService) health(_ *rpctypes.Context) (*ResultHealth, error) {
 	return &ResultHealth{}, nil
 }
 
@@ -175,7 +175,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"staking_details":  rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_staking_tx": rpc.NewRPCFunc(s.spendStakingTx, "stakingTxHash"),
 
-		//Wallet api
+		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),
 	}
 }

@@ -23,7 +23,7 @@ import (
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/wallet/txsizes"
 	"github.com/cometbft/cometbft/crypto/tmhash"
-	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	notifier "github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/sirupsen/logrus"
@@ -45,7 +45,7 @@ type confirmationEvent struct {
 	txHash        chainhash.Hash
 	txIndex       uint32
 	blckHash      chainhash.Hash
-	blckHeight    uint32
+	blockHeight    uint32
 	tx            *wire.MsgTx
 	inlusionBlock *wire.MsgBlock
 }
@@ -68,10 +68,10 @@ type spendTxConfirmationEvent struct {
 type externalDelegationData struct {
 	// stakerPrivKey needs to be retrieved from btc wallet
 	stakerPrivKey *btcec.PrivateKey
-	// slashingAddress need to be retrieved from babylon
+	// slashingAddress needs to be retrieved from babylon
 	slashingAddress btcutil.Address
 
-	// babylonPubKey need to be retrieved from babylon keyring
+	// babylonPubKey needs to be retrieved from babylon keyring
 	babylonPubKey *secp256k1.PubKey
 
 	slashingFee btcutil.Amount
@@ -88,17 +88,17 @@ const (
 	// this gives 2825 sats fee. Let round it up to 3000 sats just to be sure.
 	minSlashingFeeAdjustment = 3000
 
-	// maximum number of delegations that can be pending(waiting to be sent to babylon)
+	// maximum number of delegations that can be pending (waiting to be sent to babylon)
 	// at the same time
 	maxNumPendingDelegations = 100
 
-	// after this many confirmations we consided transaction which spends staking tx as
-	// as confirmend on btc
+	// after this many confirmations we consider transaction which spends staking tx as
+	// confirmed on btc
 	stakingTxSpendTxConfirmation = 3
 
-	// 2 hours seems like reasonale timeout waiting for spend tx confirmations given
-	// probablisitc nature of bitcoin
-	timeoutWaitingForSpendCOnfirmation = 2 * time.Hour
+	// 2 hours seems like a reasonable timeout waiting for spend tx confirmations given
+	// probabilistic nature of bitcoin
+	timeoutWaitingForSpendConfirmation = 2 * time.Hour
 
 	defaultWalletUnlockTimeout = 15
 )
@@ -201,7 +201,7 @@ func NewStakerAppFromDeps(
 		// event for when transaction is confirmed on BTC
 		confirmationEventChan: make(chan *confirmationEvent),
 		// Buffered channels so we do not block receiving confirmations if there is backlog of
-		// request to sent to babylon
+		// requests to send to babylon
 		sendToBabylonRequestChan: make(chan *sendToBabylonRequest, maxNumPendingDelegations),
 
 		// event for when delegation is sent to babylon and included in babylon
@@ -217,7 +217,7 @@ func (app *StakerApp) Start() error {
 	app.startOnce.Do(func() {
 		app.logger.Infof("Starting StakerApp")
 
-		// TODO: This can take a long time as it conntects to node. Maybe make it cancellable?
+		// TODO: This can take a long time as it connects to node. Maybe make it cancellable?
 		// although staker without node is not very useful
 
 		app.logger.Infof("Connecting to node backend: %s", app.config.BtcNodeBackendConfig.Nodetype)
@@ -272,7 +272,7 @@ func (app *StakerApp) waitForConfirmation(txHash chainhash.Hash, ev *notifier.Co
 				txHash:        conf.Tx.TxHash(),
 				txIndex:       conf.TxIndex,
 				blckHash:      *conf.BlockHash,
-				blckHeight:    conf.BlockHeight,
+				blockHeight:    conf.BlockHeight,
 				tx:            conf.Tx,
 				inlusionBlock: conf.Block,
 			}
@@ -295,7 +295,6 @@ func (app *StakerApp) buildDelegationData(
 	delegationData *externalDelegationData,
 	inclusionBlock *wire.MsgBlock,
 	stakingTxIdx uint32,
-	stakerAddress btcutil.Address,
 	stakingTx *wire.MsgTx,
 	stakingTxScript []byte,
 	stakingOutputIdx uint32,
@@ -309,7 +308,7 @@ func (app *StakerApp) buildDelegationData(
 		// use minimum slashing fee
 		// TODO: consider dust rules and the fact that staking amount must cover two fees i.e
 		// staking tx fee and slashing tx fee
-		int64(minSlashingFee),
+		minSlashingFee,
 	)
 
 	if err != nil {
@@ -425,7 +424,6 @@ func (app *StakerApp) handleSentToBabylon() {
 				delegationData,
 				req.inlusionBlock,
 				req.txIndex,
-				stakerAddress,
 				storedTx.BtcTx,
 				storedTx.TxScript,
 				storedTx.StakingOutputIndex,
@@ -448,7 +446,7 @@ func (app *StakerApp) handleSentToBabylon() {
 
 			if err != nil {
 				if errors.Is(err, cl.ErrInvalidBabylonDelegation) {
-					// TODO: For not just kill the app to avoid construction more invalid delegations
+					// TODO: For now just kill the app to avoid construction more invalid delegations
 					app.logger.WithFields(logrus.Fields{
 						"btcTxHash":          req.txHash,
 						"babylonTxHash":      txResp.TxHash,
@@ -549,7 +547,7 @@ func (app *StakerApp) handleStaking() {
 			confEvent, err := app.notifier.RegisterConfirmationsNtfn(
 				hash,
 				// TODO: staking script is necessary here, to support light clients. Maybe we could
-				// suppport neutrino backends, so stakers could use spv wallets.
+				// support neutrino backends, so stakers could use spv wallets.
 				req.stakingOutputPkScript,
 				req.numConfirmations,
 				uint32(bestBlockHeight),
@@ -583,7 +581,7 @@ func (app *StakerApp) handleStaking() {
 			app.logger.WithFields(logrus.Fields{
 				"btcTxHash":  confEvent.txHash,
 				"blockHash":  confEvent.blckHash,
-				"blckHeight": confEvent.blckHeight,
+				"blockHeight": confEvent.blockHeight,
 			}).Infof("BTC transaction has been confirmed")
 
 			app.sendDelegationWithTxToBabylon(
@@ -592,8 +590,8 @@ func (app *StakerApp) handleStaking() {
 				confEvent.inlusionBlock,
 			)
 
-		case sentToBabylonConf := <-app.sendToBabylonResponseChan:
-			if sentToBabylonConf.err != nil {
+		case sendToBabylonConf := <-app.sendToBabylonResponseChan:
+			if sendToBabylonConf.err != nil {
 				// TODO: For now we just kill the app, in case comms with babylon failed.
 				// Ultimately we probably should:
 				// 1. Add additional state in db - failedToSendToBabylon. So that after app restart
@@ -605,18 +603,18 @@ func (app *StakerApp) handleStaking() {
 				// b. have some recovery mode - which diallow sending new delegations, and occasionaly
 				// retry sending oldes failed delegations
 				app.logger.WithFields(logrus.Fields{
-					"err": sentToBabylonConf.err,
+					"err": sendToBabylonConf.err,
 				}).Fatalf("Error sending delegation to babylon")
 			}
 
-			if err := app.txTracker.SetTxSentToBabylon(sentToBabylonConf.txHash); err != nil {
+			if err := app.txTracker.SetTxSentToBabylon(sendToBabylonConf.txHash); err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
-				app.logger.Fatalf("Error setting state for tx %s: %s", sentToBabylonConf.txHash, err)
+				app.logger.Fatalf("Error setting state for tx %s: %s", sendToBabylonConf.txHash, err)
 			}
 
 			app.logger.WithFields(logrus.Fields{
-				"btcTxHash": sentToBabylonConf.txHash,
+				"btcTxHash": sendToBabylonConf.txHash,
 			}).Infof("BTC transaction successfully sent to babylon as part of delegation")
 
 		case spendTxConf := <-app.spendTxConfirmationChan:
@@ -644,10 +642,10 @@ func (app *StakerApp) BabylonController() cl.BabylonClient {
 	return app.babylonClient
 }
 
-// Generate proof of possesions for staker address.
-// Requieres btc wallet to unlocked!
+// Generate proof of possessions for staker address.
+// Requires btc wallet to be unlocked!
 func (app *StakerApp) generatePop(stakerPrivKey *btcec.PrivateKey) (*stakerdb.ProofOfPossession, error) {
-	// build proof of possesion, no point moving forward if staker do not have all
+	// build proof of possession, no point moving forward if staker does not have all
 	// the necessary keys
 	stakerKey := stakerPrivKey.PubKey()
 
@@ -874,7 +872,7 @@ func (app *StakerApp) waitForSpendConfirmation(stakingTxHash chainhash.Hash, ev 
 	default:
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutWaitingForSpendCOnfirmation)
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutWaitingForSpendConfirmation)
 	defer cancel()
 	for {
 		select {

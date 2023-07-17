@@ -9,7 +9,7 @@ var transactionCommands = []cli.Command{
 	{
 		Name:      "transactions",
 		ShortName: "tr",
-		Usage:     "Creating and managment of transactions necessary for staking",
+		Usage:     "Creation and management of transactions necessary for staking.",
 		Category:  "Transactions",
 		Subcommands: []cli.Command{
 			createStakingTransactionCmd,
@@ -26,21 +26,21 @@ const (
 var createStakingTransactionCmd = cli.Command{
 	Name:      "create-staking-transaction",
 	ShortName: "cst",
-	Usage:     "Create and sign staking transaction",
+	Usage:     "Create and sign a staking transaction.",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakerAddressFlag,
-			Usage: "bech32 encoded BTC address of the staker",
+			Usage: "Bech32 encoded Bitcoin address of the staker",
 		},
 		cli.StringFlag{
 			Name:     stakingScriptFlag,
-			Usage:    "hex encoded valid staking script corresponding to the staker address",
+			Usage:    "Hex encoded valid staking script corresponding to the staker address",
 			Required: true,
 		},
 
 		cli.Int64Flag{
 			Name:     stakingAmountFlag,
-			Usage:    "staking amount in satoshis",
+			Usage:    "Staking amount in satoshis",
 			Required: true,
 		},
 	},
@@ -50,21 +50,21 @@ var createStakingTransactionCmd = cli.Command{
 var sendStakingTransactionCmd = cli.Command{
 	Name:      "send-staking-transaction",
 	ShortName: "sst",
-	Usage:     "Creates, signs and sends staking transaction",
+	Usage:     "Creates, signs, and sends staking transaction.",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakerAddressFlag,
-			Usage: "bech32 encoded address of the staker",
+			Usage: "Bech32 encoded Bitcoin address of the staker",
 		},
 		cli.StringFlag{
 			Name:     stakingScriptFlag,
-			Usage:    "hex encoded valid staking script corresponding to the staker address",
+			Usage:    "Hex encoded valid staking script corresponding to the staker address",
 			Required: true,
 		},
 
 		cli.Int64Flag{
 			Name:     stakingAmountFlag,
-			Usage:    "staking amount in satoshis",
+			Usage:    "Staking amount in satoshis",
 			Required: true,
 		},
 	},
