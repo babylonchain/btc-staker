@@ -64,7 +64,7 @@ var listOutputsCmd = cli.Command{
 var babylonValidatorsCmd = cli.Command{
 	Name:      "babylon-validators",
 	ShortName: "bv",
-	Usage:     "List current validators on babylon chain",
+	Usage:     "List current BTC validators on Babylon chain",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakingDaemonAddressFlag,
