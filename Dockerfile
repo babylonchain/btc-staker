@@ -12,13 +12,12 @@ RUN apk add --no-cache --update openssh git make build-base linux-headers libc-d
                                 libzmq-static libsodium-static gcc
 
 
+# TODO: babylon private stuff, remove once public
 ARG GH_TOKEN
-ARG GH_USER
 
 ENV GO111MODULE=on
 ENV GOPRIVATE=github.com/babylonchain/babylon-private
-RUN mkdir -p -m 0700 /root/.ssh && ssh-keyscan github.com >> /root/.ssh/known_hosts
-RUN echo "machine github.com login ${GH_USER} password ${GH_TOKEN}" >> ~/.netrc
+RUN git config --global url."https://${GH_TOKEN}:@github.com/".insteadOf "https://github.com/"
 
 # Build
 WORKDIR /go/src/github.com/babylonchain/btc-staker

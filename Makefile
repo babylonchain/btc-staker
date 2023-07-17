@@ -36,7 +36,7 @@ $(BUILDDIR)/:
 	mkdir -p $(BUILDDIR)/
 
 build-docker:
-	$(DOCKER) build --build-arg GH_USER=$(GH_USER) --build-arg GH_TOKEN=$(GH_TOKEN) \
+	$(DOCKER) build --build-arg GH_TOKEN=$(GH_TOKEN) \
 		--tag babylonchain/btc-staker -f Dockerfile \
 		$(shell git rev-parse --show-toplevel)
 
