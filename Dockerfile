@@ -12,18 +12,15 @@ RUN apk add --no-cache --update openssh git make build-base linux-headers libc-d
                                 libzmq-static libsodium-static gcc
 
 
-# TODO: babylon private stuff, remove once public
-ARG GH_TOKEN
-
-ENV GO111MODULE=on
+RUN mkdir -p /root/.ssh && ssh-keyscan github.com >> /root/.ssh/known_hosts
+RUN git config --global url."git@github.com:".insteadOf "https://github.com/"
 ENV GOPRIVATE=github.com/babylonchain/babylon-private
-RUN git config --global url."https://${GH_TOKEN}:@github.com/".insteadOf "https://github.com/"
 
 # Build
 WORKDIR /go/src/github.com/babylonchain/btc-staker
 # Cache dependencies
 COPY go.mod go.sum /go/src/github.com/babylonchain/btc-staker/
-RUN go mod download
+RUN --mount=type=secret,id=sshKey,target=/root/.ssh/id_rsa go mod download
 # Copy the rest of the files
 COPY ./ /go/src/github.com/babylonchain/btc-staker/
 
