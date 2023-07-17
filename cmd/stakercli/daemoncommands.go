@@ -18,12 +18,15 @@ var daemonCommands = []cli.Command{
 		Subcommands: []cli.Command{
 			checkDaemonHealthCmd,
 			listOutputsCmd,
+			babylonValidatorsCmd,
 		},
 	},
 }
 
 const (
 	stakingDaemonAddressFlag = "daemon-address"
+	validatorsOffsetFlag     = "offset"
+	validatorsLimitFlag      = "limit"
 )
 
 var (
@@ -56,6 +59,30 @@ var listOutputsCmd = cli.Command{
 		},
 	},
 	Action: listOutputs,
+}
+
+var babylonValidatorsCmd = cli.Command{
+	Name:      "babylon-validators",
+	ShortName: "bv",
+	Usage:     "List current BTC validators on Babylon chain",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+		cli.IntFlag{
+			Name:  validatorsOffsetFlag,
+			Usage: "offset of the first validator to return",
+			Value: 0,
+		},
+		cli.IntFlag{
+			Name:  validatorsLimitFlag,
+			Usage: "maximum number of validators to return",
+			Value: 100,
+		},
+	},
+	Action: babylonValidators,
 }
 
 func checkHealth(ctx *cli.Context) error {
@@ -94,6 +121,38 @@ func listOutputs(ctx *cli.Context) error {
 	}
 
 	printRespJSON(outputs)
+
+	return nil
+}
+
+func babylonValidators(ctx *cli.Context) error {
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+
+	offset := ctx.Int(validatorsOffsetFlag)
+
+	if offset < 0 {
+		return cli.NewExitError("Offset must be non-negative", 1)
+	}
+
+	limit := ctx.Int(validatorsLimitFlag)
+
+	if limit < 0 {
+		return cli.NewExitError("Limit must be non-negative", 1)
+	}
+
+	validators, err := client.BabylonValidators(sctx, &offset, &limit)
+
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(validators)
 
 	return nil
 }

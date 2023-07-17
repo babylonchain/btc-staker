@@ -36,12 +36,14 @@ type BabylonClient interface {
 	SingleKeyKeyring
 	Params() (*StakingParams, error)
 	Delegate(dg *DelegationData) (*sdk.TxResponse, error)
+	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
 }
 
 type MockBabylonClient struct {
-	ClientParams *StakingParams
-	babylonKey   *secp256k1.PrivKey
-	SentMessages chan *types.MsgCreateBTCDelegation
+	ClientParams    *StakingParams
+	babylonKey      *secp256k1.PrivKey
+	SentMessages    chan *types.MsgCreateBTCDelegation
+	ActiveValidator *ValidatorInfo
 }
 
 var _ BabylonClient = (*MockBabylonClient)(nil)
@@ -88,6 +90,13 @@ func (m *MockBabylonClient) Delegate(dg *DelegationData) (*sdk.TxResponse, error
 	return &sdk.TxResponse{Code: 0}, nil
 }
 
+func (m *MockBabylonClient) QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error) {
+	return &ValidatorsClientResponse{
+		Validators: []ValidatorInfo{*m.ActiveValidator},
+		Total:      1,
+	}, nil
+}
+
 func GetMockClient() *MockBabylonClient {
 	juryPk, err := btcec.NewPrivateKey()
 
@@ -99,6 +108,20 @@ func GetMockClient() *MockBabylonClient {
 
 	slashingAddress, _ := btcutil.NewAddressPubKey(juryPk.PubKey().SerializeCompressed(), &chaincfg.SimNetParams)
 
+	validatorBtcPrivKey, err := btcec.NewPrivateKey()
+
+	if err != nil {
+		panic(err)
+	}
+
+	validatorBabaylonPrivKey := secp256k1.GenPrivKey()
+	validatorBabaylonPubKey := validatorBabaylonPrivKey.PubKey().(*secp256k1.PubKey)
+
+	vi := ValidatorInfo{
+		BabylonPk: *validatorBabaylonPubKey,
+		BtcPk:     *validatorBtcPrivKey.PubKey(),
+	}
+
 	return &MockBabylonClient{
 		ClientParams: &StakingParams{
 			ComfirmationTimeBlocks:    2,
@@ -107,7 +130,8 @@ func GetMockClient() *MockBabylonClient {
 			JuryPk:                    *juryPk.PubKey(),
 			SlashingAddress:           slashingAddress,
 		},
-		babylonKey:   priv,
-		SentMessages: make(chan *types.MsgCreateBTCDelegation),
+		babylonKey:      priv,
+		SentMessages:    make(chan *types.MsgCreateBTCDelegation),
+		ActiveValidator: &vi,
 	}
 }

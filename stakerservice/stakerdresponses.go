@@ -23,3 +23,15 @@ type OutputsResponse struct {
 type SpendTxDetails struct {
 	TxHash string `json:"txHash"`
 }
+
+type ValidatorInfoResponse struct {
+	// Hex encoded Babylon public secp256k1 key in compressed format
+	BabylonPublicKey string `json:"babylonPublicKey"`
+	// Hex encoded Bitcoin public secp256k1 key in BIP340 format
+	BtcPublicKey string `json:"btcPublicKey"`
+}
+
+type ValidatorsResponse struct {
+	Validators          []ValidatorInfoResponse `json:"validators"`
+	TotalValidatorCount string                  `json:"totalValidatorCount"`
+}

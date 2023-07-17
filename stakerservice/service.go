@@ -6,6 +6,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -21,6 +22,12 @@ import (
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/signal"
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	defaultOffset = 0
+	defaultLimit  = 50
+	maxLimit      = 100
 )
 
 type RoutesMap map[string]*rpc.RPCFunc
@@ -166,6 +173,67 @@ func (s *StakerService) listOutputs(_ *rpctypes.Context) (*OutputsResponse, erro
 	}, nil
 }
 
+type PageParams struct {
+	Offset uint64
+	Limit  uint64
+}
+
+func getPageParams(offsetPtr *int, limitPtr *int) PageParams {
+	var limit uint64
+
+	if limitPtr == nil {
+		limit = defaultLimit
+	} else {
+		limit = uint64(*limitPtr)
+	}
+
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+
+	var offset uint64
+
+	if offsetPtr == nil {
+		offset = defaultOffset
+	} else {
+		offset = uint64(*offsetPtr)
+	}
+
+	return PageParams{
+		Offset: offset,
+		Limit:  limit,
+	}
+}
+
+func (s *StakerService) validators(_ *rpctypes.Context, offset, limit *int) (*ValidatorsResponse, error) {
+
+	pageParams := getPageParams(offset, limit)
+
+	validatorsResp, err := s.staker.ListActiveValidators(pageParams.Limit, pageParams.Offset)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var validatorInfos []ValidatorInfoResponse
+
+	for _, validator := range validatorsResp.Validators {
+		v := ValidatorInfoResponse{
+			BabylonPublicKey: hex.EncodeToString(validator.BabylonPk.Key),
+			BtcPublicKey:     hex.EncodeToString(schnorr.SerializePubKey(&validator.BtcPk)),
+		}
+
+		validatorInfos = append(validatorInfos, v)
+	}
+
+	totalCount := strconv.FormatUint(validatorsResp.Total, 10)
+
+	return &ValidatorsResponse{
+		Validators:          validatorInfos,
+		TotalValidatorCount: totalCount,
+	}, nil
+}
+
 func (s *StakerService) GetRoutes() RoutesMap {
 	return RoutesMap{
 		// info AP
@@ -175,8 +243,11 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"staking_details":  rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_staking_tx": rpc.NewRPCFunc(s.spendStakingTx, "stakingTxHash"),
 
-		//Wallet api
+		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),
+
+		// Babylon api
+		"babylon_validators": rpc.NewRPCFunc(s.validators, "offset,limit"),
 	}
 }
 
