@@ -36,7 +36,7 @@ type BabylonClient interface {
 	SingleKeyKeyring
 	Params() (*StakingParams, error)
 	Delegate(dg *DelegationData) (*sdk.TxResponse, error)
-	QueryValidators() ([]ValidatorInfo, error)
+	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
 }
 
 type MockBabylonClient struct {
@@ -90,8 +90,11 @@ func (m *MockBabylonClient) Delegate(dg *DelegationData) (*sdk.TxResponse, error
 	return &sdk.TxResponse{Code: 0}, nil
 }
 
-func (m *MockBabylonClient) QueryValidators() ([]ValidatorInfo, error) {
-	return []ValidatorInfo{*m.ActiveValidator}, nil
+func (m *MockBabylonClient) QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error) {
+	return &ValidatorsClientResponse{
+		Validators: []ValidatorInfo{*m.ActiveValidator},
+		Total:      1,
+	}, nil
 }
 
 func GetMockClient() *MockBabylonClient {

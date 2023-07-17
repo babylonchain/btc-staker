@@ -25,6 +25,7 @@ import (
 	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	grpctypes "github.com/cosmos/cosmos-sdk/types/grpc"
+	bq "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/sirupsen/logrus"
 	lensclient "github.com/strangelove-ventures/lens/client"
 	lensquery "github.com/strangelove-ventures/lens/client/query"
@@ -122,6 +123,11 @@ type StakingTrackerResponse struct {
 type ValidatorInfo struct {
 	BabylonPk secp256k1.PubKey
 	BtcPk     btcec.PublicKey
+}
+
+type ValidatorsClientResponse struct {
+	Validators []ValidatorInfo
+	Total      uint64
 }
 
 // Copied from vigilante. Weirdly, there is only Stop function (no Start function ?)
@@ -392,7 +398,9 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 	}, nil
 }
 
-func (bc *BabylonController) QueryValidators() ([]ValidatorInfo, error) {
+func (bc *BabylonController) QueryValidators(
+	offset uint64,
+	limit uint64) (*ValidatorsClientResponse, error) {
 	ctx, cancel := getQueryContext(bc.cfg.Timeout)
 	defer cancel()
 
@@ -401,7 +409,16 @@ func (bc *BabylonController) QueryValidators() ([]ValidatorInfo, error) {
 
 	var response *types.QueryBTCValidatorsResponse
 	if err := retry.Do(func() error {
-		resp, err := queryClient.BTCValidators(ctx, &types.QueryBTCValidatorsRequest{})
+		resp, err := queryClient.BTCValidators(
+			ctx,
+			&types.QueryBTCValidatorsRequest{
+				Pagination: &bq.PageRequest{
+					Offset:     offset,
+					Limit:      limit,
+					CountTotal: true,
+				},
+			},
+		)
 		if err != nil {
 			return err
 		}
@@ -433,5 +450,8 @@ func (bc *BabylonController) QueryValidators() ([]ValidatorInfo, error) {
 		validators = append(validators, validatorInfo)
 	}
 
-	return validators, nil
+	return &ValidatorsClientResponse{
+		Validators: validators,
+		Total:      response.Pagination.Total,
+	}, nil
 }

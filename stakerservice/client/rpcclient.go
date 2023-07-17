@@ -41,9 +41,20 @@ func (c *StakerServiceJsonRpcClient) ListOutputs(ctx context.Context) (*service.
 	return result, nil
 }
 
-func (c *StakerServiceJsonRpcClient) BabylonValidators(ctx context.Context) (*service.ValidatorsResponse, error) {
+func (c *StakerServiceJsonRpcClient) BabylonValidators(ctx context.Context, offset *int, limit *int) (*service.ValidatorsResponse, error) {
 	result := new(service.ValidatorsResponse)
-	_, err := c.client.Call(ctx, "babylon_validators", map[string]interface{}{}, result)
+
+	params := make(map[string]interface{})
+
+	if limit != nil {
+		params["limit"] = limit
+	}
+
+	if offset != nil {
+		params["offset"] = offset
+	}
+
+	_, err := c.client.Call(ctx, "babylon_validators", params, result)
 	if err != nil {
 		return nil, err
 	}

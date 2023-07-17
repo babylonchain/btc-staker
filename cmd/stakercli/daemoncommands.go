@@ -25,6 +25,8 @@ var daemonCommands = []cli.Command{
 
 const (
 	stakingDaemonAddressFlag = "daemon-address"
+	validatorsOffsetFlag     = "offset"
+	validatorsLimitFlag      = "limit"
 )
 
 var (
@@ -60,7 +62,7 @@ var listOutputsCmd = cli.Command{
 }
 
 var babylonValidatorsCmd = cli.Command{
-	Name:      "babylon-validatos",
+	Name:      "babylon-validators",
 	ShortName: "bv",
 	Usage:     "List current validators on babylon chain",
 	Flags: []cli.Flag{
@@ -68,6 +70,16 @@ var babylonValidatorsCmd = cli.Command{
 			Name:  stakingDaemonAddressFlag,
 			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
 			Value: defaultStakingDaemonAddress,
+		},
+		cli.IntFlag{
+			Name:  validatorsOffsetFlag,
+			Usage: "offset of the first validator to return",
+			Value: 0,
+		},
+		cli.IntFlag{
+			Name:  validatorsLimitFlag,
+			Usage: "maximum number of validators to return",
+			Value: 100,
 		},
 	},
 	Action: babylonValidators,
@@ -122,7 +134,19 @@ func babylonValidators(ctx *cli.Context) error {
 
 	sctx := context.Background()
 
-	validators, err := client.BabylonValidators(sctx)
+	offset := ctx.Int(validatorsOffsetFlag)
+
+	if offset < 0 {
+		return cli.NewExitError("Offset must be non-negative", 1)
+	}
+
+	limit := ctx.Int(validatorsLimitFlag)
+
+	if limit < 0 {
+		return cli.NewExitError("Limit must be non-negative", 1)
+	}
+
+	validators, err := client.BabylonValidators(sctx, &offset, &limit)
 
 	if err != nil {
 		return err

@@ -32,5 +32,6 @@ type ValidatorInfoResponse struct {
 }
 
 type ValidatorsResponse struct {
-	Validators []ValidatorInfoResponse `json:"validators"`
+	Validators          []ValidatorInfoResponse `json:"validators"`
+	TotalValidatorCount string                  `json:"totalValidatorCount"`
 }
