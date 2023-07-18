@@ -18,7 +18,7 @@ var adminCommands = []cli.Command{
 	{
 		Name:      "admin",
 		ShortName: "ad",
-		Usage:     "Differnt utility and admin commands",
+		Usage:     "Different utility and admin commands",
 		Category:  "Admin",
 		Subcommands: []cli.Command{
 			dumpCfgCommand,
@@ -38,11 +38,11 @@ var (
 var dumpCfgCommand = cli.Command{
 	Name:      "dump-config",
 	ShortName: "dc",
-	Usage:     "dump default configuration file",
+	Usage:     "Dump default configuration file.",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  configFileDirFlag,
-			Usage: "path to the directory where the config file will be dumped",
+			Usage: "Path to where the default config file will be dumped",
 			Value: defaultConfigPath,
 		},
 	},
@@ -157,9 +157,9 @@ func createKeyRing(c *cli.Context) error {
 		return err
 	}
 
-	fmt.Println("Accounts in keyring:")
+	fmt.Println("Keyring created! Accounts in keyring:")
 	for _, r := range list {
-		fmt.Println(r.Name)
+		fmt.Println("-", r.Name)
 	}
 
 	return nil
@@ -168,8 +168,8 @@ func createKeyRing(c *cli.Context) error {
 var createCosmosKeyringCommand = cli.Command{
 	Name:      "create-keyring",
 	ShortName: "ck",
-	Usage: "Creates cosmos keyring with secp256k1 key with and account with provided name." +
-		"If account already existis in the keyring, new address will be created for given key.",
+	Usage: "Create cosmos keyring with secp256k1 key with an account with provided name." +
+		" If account already exists in the keyring, a new address will be created for the given key.",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  keyNameFlag,
@@ -183,7 +183,7 @@ var createCosmosKeyringCommand = cli.Command{
 		},
 		cli.StringFlag{
 			Name:  chainIdFlag,
-			Usage: "Chain ID for which account are created",
+			Usage: "Chain ID for which account is created",
 			Value: defaultChainID,
 		},
 		cli.StringFlag{

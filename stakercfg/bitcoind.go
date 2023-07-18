@@ -9,7 +9,11 @@ const (
 	// to be used for bitcoind backend.
 	DefaultTxPollingJitter = 0.5
 
-	DefaultEstimateMode = "CONSERVATIVE"
+	DefaultEstimateMode           = "CONSERVATIVE"
+	defaultBitcoindRpcHost        = "127.0.0.1:8334"
+	defaultBitcoindRPCUser        = "user"
+	defaultBitcoindRPCPass        = "pass"
+	defaultBitcoindBlockCacheSize = 1000
 )
 
 // Bitcoind holds the configuration options for the daemon's connection to
@@ -29,16 +33,18 @@ type Bitcoind struct {
 	RPCPolling           bool          `long:"rpcpolling" description:"Poll the bitcoind RPC interface for block and transaction notifications instead of using the ZMQ interface"`
 	BlockPollingInterval time.Duration `long:"blockpollinginterval" description:"The interval that will be used to poll bitcoind for new blocks. Only used if rpcpolling is true."`
 	TxPollingInterval    time.Duration `long:"txpollinginterval" description:"The interval that will be used to poll bitcoind for new tx. Only used if rpcpolling is true."`
+	BlockCacheSize       uint64        `long:"block-cache-size" description:"size of the Bitcoin blocks cache"`
 }
 
 func DefaultBitcoindConfig() Bitcoind {
 	return Bitcoind{
-		RPCHost:              "127.0.0.1:8334",
-		RPCUser:              "user",
-		RPCPass:              "pass",
+		RPCHost:              defaultBitcoindRpcHost,
+		RPCUser:              defaultBitcoindRPCUser,
+		RPCPass:              defaultBitcoindRPCPass,
 		RPCPolling:           true,
 		BlockPollingInterval: 30 * time.Second,
 		TxPollingInterval:    30 * time.Second,
 		EstimateMode:         DefaultEstimateMode,
+		BlockCacheSize:       defaultBitcoindBlockCacheSize,
 	}
 }

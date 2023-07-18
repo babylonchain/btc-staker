@@ -33,7 +33,7 @@ import (
 )
 
 var (
-	// Maybe configurable ?
+	// TODO: Maybe configurable?
 	RtyAttNum = uint(5)
 	RtyAtt    = retry.Attempts(RtyAttNum)
 	RtyDel    = retry.Delay(time.Millisecond * 400)
@@ -41,7 +41,7 @@ var (
 )
 
 var (
-	ErrInvalidBabylonDelegation = errors.New("sent ivalid babylon delegation")
+	ErrInvalidBabylonDelegation = errors.New("sent invalid babylon delegation")
 )
 
 func newLensClient(ccc *lensclient.ChainClientConfig, kro ...keyring.Option) (*lensclient.ChainClient, error) {

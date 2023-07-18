@@ -58,7 +58,7 @@ func NewStakerService(
 	}
 }
 
-func (s *StakerService) health(*rpctypes.Context) (*ResultHealth, error) {
+func (s *StakerService) health(_ *rpctypes.Context) (*ResultHealth, error) {
 	return &ResultHealth{}, nil
 }
 

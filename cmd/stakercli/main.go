@@ -67,31 +67,31 @@ func getStakerControllerFromCtx(ctx *cli.Context) (*staker.StakerController, err
 func main() {
 	app := cli.NewApp()
 	app.Name = "stakercli"
-	app.Usage = "btc staking controller"
+	app.Usage = "Bitcoin staking controller"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:  btcNetworkFlag,
-			Usage: "btc network on which staking should take place",
+			Usage: "Bitcoin network on which staking should take place",
 			Value: "testnet3",
 		},
 		cli.StringFlag{
 			Name:  btcWalletHostFlag,
-			Usage: "btc wallet rpc host",
+			Usage: "Bitcoin wallet rpc host",
 			Value: "127.0.0.1:18554",
 		},
 		cli.StringFlag{
 			Name:  btcWalletRpcUserFlag,
-			Usage: "btc wallet rpc user",
+			Usage: "Bitcoin wallet rpc user",
 			Value: "user",
 		},
 		cli.StringFlag{
 			Name:  btcWalletRpcPassFlag,
-			Usage: "btc wallet rpc password",
+			Usage: "Bitcoin wallet rpc password",
 			Value: "pass",
 		},
 		cli.StringFlag{
 			Name:  btcWalletPassphraseFlag,
-			Usage: "btc wallet passphrase",
+			Usage: "Bitcoin wallet passphrase",
 		},
 	}
 

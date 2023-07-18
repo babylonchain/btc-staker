@@ -11,14 +11,13 @@ import (
 )
 
 const (
-	// Relativly larage fee 25 sat/byte to be used for estimatiing fees this is to be sure
-	// that tx will be confirmed in reasonable time
+	// DefaultBtcFee Relativly large fee 25 sat/byte to be used for estimating fees.
+	// This is to be sure that tx will be confirmed in reasonable time.
 	// It is also default fee if dynamic fee estimation fails
 	DefaultBtcFee = chainfee.SatPerKVByte(25 * 1000)
 
-
-	// Default number of blocks to use for fee estimation. 1 means we want our transactions
-	// to be confirmed in next block.
+	// DefaultNumBlockForEstimation Default number of blocks to use for fee estimation.
+	// 1 means we want our transactions to be confirmed in the next block.
 	// TODO: make this configurable ?
 	DefaultNumBlockForEstimation = 1
 )
@@ -64,17 +63,17 @@ func NewDynamicBtcFeeEstimator(
 		}, nil
 
 	case scfg.BtcdNodeBackend:
-		cert, err := scfg.ReadCertFile(cfg.BtcdConfig.RawRPCCert, cfg.BtcdConfig.RPCCert)
+		cert, err := scfg.ReadCertFile(cfg.Btcd.RawRPCCert, cfg.Btcd.RPCCert)
 
 		if err != nil {
 			return nil, err
 		}
 
 		rpcConfig := rpcclient.ConnConfig{
-			Host:                 cfg.BtcdConfig.RPCHost,
+			Host:                 cfg.Btcd.RPCHost,
 			Endpoint:             "ws",
-			User:                 cfg.BtcdConfig.RPCUser,
-			Pass:                 cfg.BtcdConfig.RPCPass,
+			User:                 cfg.Btcd.RPCUser,
+			Pass:                 cfg.Btcd.RPCPass,
 			Certificates:         cert,
 			DisableTLS:           false,
 			DisableConnectOnNew:  true,

@@ -13,7 +13,7 @@ var scriptsCommands = []cli.Command{
 	{
 		Name:      "scripts",
 		ShortName: "scr",
-		Usage:     "Creating and managment of scripts necessary for staking",
+		Usage:     "Creation and management of scripts necessary for staking.",
 		Category:  "Scripts",
 		Subcommands: []cli.Command{
 			generateStakingScript,
@@ -32,29 +32,29 @@ const (
 var generateStakingScript = cli.Command{
 	Name:      "generate-staking-script",
 	ShortName: "gscr",
-	Usage:     "Generate a staking script and staking taproot address",
+	Usage:     "Generate a staking script and staking taproot address.",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakerKeyFlag,
-			Usage: "hex encoded Bitcoin public key of the staker in bip340 format",
+			Usage: "Hex encoded Bitcoin public key of the staker in bip340 format",
 		},
 		cli.StringFlag{
 			Name:  stakerAddressFlag,
-			Usage: "bech32 encoded address of the staker",
+			Usage: "Bech32 encoded address of the staker",
 		},
 		cli.StringFlag{
 			Name:     delegatorKeyFlag,
-			Usage:    "hex encoded public key of the delegator in bip340 format",
+			Usage:    "Hex encoded Bitcoin public key of the delegator in bip340 format",
 			Required: true,
 		},
 		cli.StringFlag{
 			Name:     juryKeyFlag,
-			Usage:    "hex encoded public key of the jury in bip340 format",
+			Usage:    "Hex encoded Bitcoin public key of the jury in bip340 format",
 			Required: true,
 		},
 		cli.Uint64Flag{
 			Name:     stakingTimeFlag,
-			Usage:    "staking time in Bitcoin blocks. Max value is 65535",
+			Usage:    "Staking time in Bitcoin blocks. Max value is 65535",
 			Required: true,
 		},
 	},

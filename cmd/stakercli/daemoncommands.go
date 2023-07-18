@@ -13,7 +13,7 @@ var daemonCommands = []cli.Command{
 	{
 		Name:      "daemon",
 		ShortName: "dn",
-		Usage:     "More advanced commands which require staker daemon to be running",
+		Usage:     "More advanced commands which require staker daemon to be running.",
 		Category:  "Daemon commands",
 		Subcommands: []cli.Command{
 			checkDaemonHealthCmd,
@@ -36,11 +36,11 @@ var (
 var checkDaemonHealthCmd = cli.Command{
 	Name:      "check-health",
 	ShortName: "ch",
-	Usage:     "Check if staker daemon is running",
+	Usage:     "Check if staker daemon is running.",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakingDaemonAddressFlag,
-			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Usage: "Full address of the staker daemon in format tcp:://<host>:<port>",
 			Value: defaultStakingDaemonAddress,
 		},
 	},
@@ -50,11 +50,11 @@ var checkDaemonHealthCmd = cli.Command{
 var listOutputsCmd = cli.Command{
 	Name:      "list-outputs",
 	ShortName: "lo",
-	Usage:     "List unspend outputs in connected wallet",
+	Usage:     "List unspent outputs in connected wallet.",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakingDaemonAddressFlag,
-			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Usage: "Full address of the staker daemon in format tcp:://<host>:<port>",
 			Value: defaultStakingDaemonAddress,
 		},
 	},
