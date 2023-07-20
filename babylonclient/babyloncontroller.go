@@ -22,7 +22,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
-	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	grpctypes "github.com/cosmos/cosmos-sdk/types/grpc"
 	bq "github.com/cosmos/cosmos-sdk/types/query"
@@ -406,8 +406,8 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 }
 
 func (bc *BabylonController) QueryValidators(
-	offset uint64,
-	limit uint64) (*ValidatorsClientResponse, error) {
+	limit uint64,
+	offset uint64) (*ValidatorsClientResponse, error) {
 	ctx, cancel := getQueryContext(bc.cfg.Timeout)
 	defer cancel()
 
