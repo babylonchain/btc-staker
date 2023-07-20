@@ -201,6 +201,12 @@ func (bc *BabylonController) GetKeyAddress() sdk.AccAddress {
 	return addr
 }
 
+func (bc *BabylonController) getTxSigner() string {
+	signer := bc.GetKeyAddress()
+	prefix := bc.cfg.AccountPrefix
+	return sdk.MustBech32ifyAddressBytes(prefix, signer)
+}
+
 func (bc *BabylonController) getPubKeyInternal() (*secp256k1.PubKey, error) {
 	record, err := bc.Keybase.KeyByAddress(bc.GetKeyAddress())
 
@@ -259,7 +265,7 @@ type DelegationData struct {
 	BtcSchnorrSigOverBabylonSig      []byte
 }
 
-func delegationDataToMsg(dg *DelegationData) (*types.MsgCreateBTCDelegation, error) {
+func delegationDataToMsg(signer string, dg *DelegationData) (*types.MsgCreateBTCDelegation, error) {
 
 	schnorSig, err := bbntypes.NewBIP340Signature(dg.BtcSchnorrSigOverBabylonSig)
 
@@ -286,6 +292,7 @@ func delegationDataToMsg(dg *DelegationData) (*types.MsgCreateBTCDelegation, err
 	slashingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(dg.SlashingTransactionSig)
 
 	return &types.MsgCreateBTCDelegation{
+		Signer:    signer,
 		BabylonPk: dg.BabylonPk,
 		Pop: &types.ProofOfPossession{
 			BabylonSig: dg.BabylonEcdsaSigOverBtcPk,
@@ -314,7 +321,7 @@ func delegationDataToMsg(dg *DelegationData) (*types.MsgCreateBTCDelegation, err
 // TODO: for now return sdk.TxResponse, it will ease up debugging/testing
 // ultimately we should create our own type ate
 func (bc *BabylonController) Delegate(dg *DelegationData) (*sdk.TxResponse, error) {
-	delegateMsg, err := delegationDataToMsg(dg)
+	delegateMsg, err := delegationDataToMsg(bc.getTxSigner(), dg)
 
 	if err != nil {
 		return nil, err
