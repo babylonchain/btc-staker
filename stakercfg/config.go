@@ -3,6 +3,7 @@ package stakercfg
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/babylonchain/btc-staker/types"
 	"io"
 	"net"
 	"os"
@@ -33,13 +34,6 @@ const (
 	defaultTLSCertDuration = 14 * 30 * 24 * time.Hour
 	defaultConfigFileName  = "stakerd.conf"
 	defaultFeeMode         = "static"
-)
-
-type SupportedNodeBackend int
-
-const (
-	BitcoindNodeBackend SupportedNodeBackend = iota
-	BtcdNodeBackend
 )
 
 type FeeEstimationMode int
@@ -111,7 +105,7 @@ type BtcNodeBackendConfig struct {
 	Btcd              *Btcd     `group:"btcd" namespace:"btcd"`
 	Bitcoind          *Bitcoind `group:"bitcoind" namespace:"bitcoind"`
 	EstimationMode    FeeEstimationMode
-	ActiveNodeBackend SupportedNodeBackend
+	ActiveNodeBackend types.SupportedNodeBackend
 }
 
 func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
@@ -386,14 +380,11 @@ func ValidateConfig(cfg Config) (*Config, error) {
 			cfg.ChainConfig.Network))
 	}
 
-	switch cfg.BtcNodeBackendConfig.Nodetype {
-	case "btcd":
-		cfg.BtcNodeBackendConfig.ActiveNodeBackend = BtcdNodeBackend
-	case "bitcoind":
-		cfg.BtcNodeBackendConfig.ActiveNodeBackend = BitcoindNodeBackend
-	default:
-		return nil, mkErr(fmt.Sprintf("invalid nodetype: %s", cfg.BtcNodeBackendConfig.Nodetype))
+	backend, err := types.NewNodeBackend(cfg.BtcNodeBackendConfig.Nodetype)
+	if err != nil {
+		return nil, mkErr("error getting node backend: %v", err)
 	}
+	cfg.BtcNodeBackendConfig.ActiveNodeBackend = backend
 
 	switch cfg.BtcNodeBackendConfig.FeeMode {
 	case "static":
@@ -453,7 +444,7 @@ func ValidateConfig(cfg Config) (*Config, error) {
 		)
 	}
 
-	_, err := logrus.ParseLevel(cfg.DebugLevel)
+	_, err = logrus.ParseLevel(cfg.DebugLevel)
 
 	if err != nil {
 		return nil, mkErr("error parsing debuglevel: %v", err)
