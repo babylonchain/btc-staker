@@ -33,7 +33,7 @@ const (
 	btcWalletRpcUserFlag    = "btc-wallet-rpc-user"
 	btcWalletRpcPassFlag    = "btc-wallet-rpc-pass"
 	btcWalletPassphraseFlag = "btc-wallet-passphrase"
-	btcBackendFlag          = "btc-backend"
+	btcWalletBackendFlag    = "btc-wallet-backend"
 )
 
 func getStakerControllerFromCtx(ctx *cli.Context) (*staker.StakerController, error) {
@@ -41,14 +41,14 @@ func getStakerControllerFromCtx(ctx *cli.Context) (*staker.StakerController, err
 	walletUser := ctx.String(btcWalletRpcUserFlag)
 	walletPass := ctx.String(btcWalletRpcPassFlag)
 	network := ctx.String(btcNetworkFlag)
-	backendStr := ctx.String(btcBackendFlag)
+	backendStr := ctx.String(btcWalletBackendFlag)
 
 	if !ctx.IsSet(btcWalletPassphraseFlag) {
 		return nil, fmt.Errorf("to interact with wallet it is necesary to provide wallet passphrase")
 	}
 
 	passphrase := ctx.String(btcWalletPassphraseFlag)
-	backend, err := types.NewNodeBackend(backendStr)
+	backend, err := types.NewWalletBackend(backendStr)
 	if err != nil {
 		return nil, err
 	}
@@ -102,8 +102,8 @@ func main() {
 			Usage: "Bitcoin wallet passphrase",
 		},
 		cli.StringFlag{
-			Name:  btcBackendFlag,
-			Usage: "Bitcoin backend (btcd|bitcoind)",
+			Name:  btcWalletBackendFlag,
+			Usage: "Bitcoin backend (btcwallet|bitcoind)",
 			Value: "btcd",
 		},
 	}

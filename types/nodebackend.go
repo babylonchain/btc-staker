@@ -16,7 +16,6 @@ func NewNodeBackend(backend string) (SupportedNodeBackend, error) {
 	case "bitcoind":
 		return BitcoindNodeBackend, nil
 	default:
-		return BtcdNodeBackend, fmt.Errorf("invalid nodetype: %s", backend)
+		return BtcdNodeBackend, fmt.Errorf("invalid node type: %s", backend)
 	}
-
 }

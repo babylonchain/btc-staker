@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/babylonchain/btc-staker/types"
 	"sync"
 	"time"
 
@@ -156,9 +157,9 @@ func NewStakerAppFromConfig(
 
 	var feeEstimator FeeEstimator
 	switch config.BtcNodeBackendConfig.EstimationMode {
-	case scfg.StaticFeeEstimation:
+	case types.StaticFeeEstimation:
 		feeEstimator = NewStaticBtcFeeEstimator()
-	case scfg.DynamicFeeEstimation:
+	case types.DynamicFeeEstimation:
 		feeEstimator, err = NewDynamicBtcFeeEstimator(config.BtcNodeBackendConfig, &config.ActiveNetParams, logger)
 		if err != nil {
 			return nil, err

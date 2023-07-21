@@ -80,8 +80,9 @@ func defaultStakerConfig(btcdCert []byte, btcdHost string) *stakercfg.Config {
 	defaultConfig.BtcNodeBackendConfig.Btcd.RPCUser = "user"
 	defaultConfig.BtcNodeBackendConfig.Btcd.RPCPass = "pass"
 	defaultConfig.BtcNodeBackendConfig.ActiveNodeBackend = types.BtcdNodeBackend
+	defaultConfig.BtcNodeBackendConfig.ActiveWalletBackend = types.BtcwalletWalletBackend
 
-	// configre wallet rpc
+	// configure wallet rpc
 	defaultConfig.ChainConfig.Network = "simnet"
 	defaultConfig.ActiveNetParams = *simnetParams
 	// Config setting necessary to connect btcwallet daemon

@@ -19,7 +19,7 @@ type RpcWalletController struct {
 	*rpcclient.Client
 	walletPassphrase string
 	network          string
-	backend          types.SupportedNodeBackend
+	backend          types.SupportedWalletBackend
 }
 
 var _ WalletController = (*RpcWalletController)(nil)
@@ -31,7 +31,7 @@ func NewRpcWalletController(scfg *stakercfg.Config) (*RpcWalletController, error
 		scfg.WalletRpcConfig.Pass,
 		scfg.ActiveNetParams.Name,
 		scfg.WalletConfig.WalletPass,
-		scfg.BtcNodeBackendConfig.ActiveNodeBackend,
+		scfg.BtcNodeBackendConfig.ActiveWalletBackend,
 		// TODO for now just disable tls
 		true,
 	)
@@ -43,7 +43,7 @@ func NewRpcWalletControllerFromArgs(
 	pass string,
 	network string,
 	walletPassphrase string,
-	nodeBackend types.SupportedNodeBackend,
+	nodeBackend types.SupportedWalletBackend,
 	disableTls bool,
 ) (*RpcWalletController, error) {
 
@@ -173,9 +173,9 @@ func (w *RpcWalletController) CreateAndSignTx(
 
 func (w *RpcWalletController) SignRawTransaction(tx *wire.MsgTx) (*wire.MsgTx, bool, error) {
 	switch w.backend {
-	case types.BitcoindNodeBackend:
+	case types.BitcoindWalletBackend:
 		return w.Client.SignRawTransactionWithWallet(tx)
-	case types.BtcdNodeBackend:
+	case types.BtcwalletWalletBackend:
 		return w.Client.SignRawTransaction(tx)
 	default:
 		return nil, false, fmt.Errorf("invalid bitcoin backend")
