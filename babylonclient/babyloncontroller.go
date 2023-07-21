@@ -10,6 +10,7 @@ import (
 	"github.com/avast/retry-go/v4"
 	bbntypes "github.com/babylonchain/babylon/types"
 	bcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
+	btclctypes "github.com/babylonchain/babylon/x/btclightclient/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/utils"
@@ -461,4 +462,23 @@ func (bc *BabylonController) QueryValidators(
 		Validators: validators,
 		Total:      response.Pagination.Total,
 	}, nil
+}
+
+// Inserta block header using rpc client
+func (bc *BabylonController) InsertBlockHeaders(headers []*wire.BlockHeader) (*sdk.TxResponse, error) {
+	ctx := context.Background()
+
+	// convert to []sdk.Msg type
+	imsgs := []sdk.Msg{}
+	for _, h := range headers {
+		headerBytes := bbntypes.NewBTCHeaderBytesFromBlockHeader(h)
+		msg := btclctypes.MsgInsertHeader{
+			Header: &headerBytes,
+			Signer: bc.getTxSigner(),
+		}
+
+		imsgs = append(imsgs, &msg)
+	}
+
+	return bc.ChainClient.SendMsgs(ctx, imsgs, "")
 }
