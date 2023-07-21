@@ -14,6 +14,9 @@ const (
 	defaultBitcoindRPCUser        = "user"
 	defaultBitcoindRPCPass        = "pass"
 	defaultBitcoindBlockCacheSize = 1000
+	defaultZMQPubRawBlock         = "tcp://127.0.0.1:29001"
+	defaultZMQPubRawTx            = "tcp://127.0.0.1:29002"
+	defaultZMQReadDeadline        = 30 * time.Second
 )
 
 // Bitcoind holds the configuration options for the daemon's connection to
@@ -46,5 +49,8 @@ func DefaultBitcoindConfig() Bitcoind {
 		TxPollingInterval:    30 * time.Second,
 		EstimateMode:         DefaultEstimateMode,
 		BlockCacheSize:       defaultBitcoindBlockCacheSize,
+		ZMQPubRawBlock:       defaultZMQPubRawBlock,
+		ZMQPubRawTx:          defaultZMQPubRawTx,
+		ZMQReadDeadline:      defaultZMQReadDeadline,
 	}
 }

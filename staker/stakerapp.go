@@ -552,7 +552,7 @@ func (app *StakerApp) handleStaking() {
 				req.stakingOutputPkScript,
 				req.numConfirmations,
 				uint32(bestBlockHeight),
-				// notication must include block that mined the tx, this is necessary to build
+				// notification must include block that mined the tx, this is necessary to build
 				// inclusion proof
 				notifier.WithIncludeBlock(),
 			)
