@@ -77,10 +77,6 @@ func createTx(ctx *cli.Context) error {
 		return err
 	}
 
-	if err != nil {
-		return err
-	}
-
 	stakerAddress := ctx.String(stakerAddressFlag)
 	stakingScript := ctx.String(stakingScriptFlag)
 	stakingAmount := ctx.Int64(stakingAmountFlag)

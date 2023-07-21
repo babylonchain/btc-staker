@@ -19,6 +19,7 @@ var daemonCommands = []cli.Command{
 			checkDaemonHealthCmd,
 			listOutputsCmd,
 			babylonValidatorsCmd,
+			stakeCmd,
 		},
 	},
 }
@@ -27,6 +28,8 @@ const (
 	stakingDaemonAddressFlag = "daemon-address"
 	validatorsOffsetFlag     = "offset"
 	validatorsLimitFlag      = "limit"
+	validatorPkFlag          = "delegator-pk"
+	stakingTimeBlocksFlag    = "staking-time"
 )
 
 var (
@@ -83,6 +86,40 @@ var babylonValidatorsCmd = cli.Command{
 		},
 	},
 	Action: babylonValidators,
+}
+
+var stakeCmd = cli.Command{
+	Name:      "stake",
+	ShortName: "st",
+	Usage:     "Stake an amount of BTC to Babylon",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+		cli.StringFlag{
+			Name:     stakerAddressFlag,
+			Usage:    "BTC address of the staker in hex",
+			Required: true,
+		},
+		cli.Int64Flag{
+			Name:     stakingAmountFlag,
+			Usage:    "Staking amount in satoshis",
+			Required: true,
+		},
+		cli.StringFlag{
+			Name:     validatorPkFlag,
+			Usage:    "BTC address of the validator in hex",
+			Required: true,
+		},
+		cli.Int64Flag{
+			Name:     stakingTimeBlocksFlag,
+			Usage:    "Staking time in BTC blocks",
+			Required: true,
+		},
+	},
+	Action: stake,
 }
 
 func checkHealth(ctx *cli.Context) error {
@@ -153,6 +190,30 @@ func babylonValidators(ctx *cli.Context) error {
 	}
 
 	printRespJSON(validators)
+
+	return nil
+}
+
+func stake(ctx *cli.Context) error {
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+
+	stakerAddress := ctx.String(stakerAddressFlag)
+	stakingAmount := ctx.Int64(stakingAmountFlag)
+	validatorPk := ctx.String(validatorPkFlag)
+	stakingTimeBlocks := ctx.Int64(stakingTimeFlag)
+
+	results, err := client.Stake(sctx, stakerAddress, stakingAmount, validatorPk, stakingTimeBlocks)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(results)
 
 	return nil
 }
