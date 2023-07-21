@@ -2,6 +2,7 @@ package staker
 
 import (
 	"fmt"
+	"github.com/babylonchain/btc-staker/types"
 
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -34,11 +35,11 @@ type DynamicBtcFeeEstimator struct {
 
 func NewDynamicBtcFeeEstimator(
 	cfg *scfg.BtcNodeBackendConfig,
-	params *chaincfg.Params,
-	logger *logrus.Logger) (*DynamicBtcFeeEstimator, error) {
+	_ *chaincfg.Params,
+	_ *logrus.Logger) (*DynamicBtcFeeEstimator, error) {
 
 	switch cfg.ActiveNodeBackend {
-	case scfg.BitcoindNodeBackend:
+	case types.BitcoindNodeBackend:
 		rpcConfig := rpcclient.ConnConfig{
 			Host:                 cfg.Bitcoind.RPCHost,
 			User:                 cfg.Bitcoind.RPCUser,
@@ -62,7 +63,7 @@ func NewDynamicBtcFeeEstimator(
 			estimator: est,
 		}, nil
 
-	case scfg.BtcdNodeBackend:
+	case types.BtcdNodeBackend:
 		cert, err := scfg.ReadCertFile(cfg.Btcd.RawRPCCert, cfg.Btcd.RPCCert)
 
 		if err != nil {

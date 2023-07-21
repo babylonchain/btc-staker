@@ -3,6 +3,7 @@ package stakercfg
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/babylonchain/btc-staker/types"
 	"io"
 	"net"
 	"os"
@@ -33,20 +34,6 @@ const (
 	defaultTLSCertDuration = 14 * 30 * 24 * time.Hour
 	defaultConfigFileName  = "stakerd.conf"
 	defaultFeeMode         = "static"
-)
-
-type SupportedNodeBackend int
-
-const (
-	BitcoindNodeBackend SupportedNodeBackend = iota
-	BtcdNodeBackend
-)
-
-type FeeEstimationMode int
-
-const (
-	StaticFeeEstimation FeeEstimationMode = iota
-	DynamicFeeEstimation
 )
 
 var (
@@ -106,12 +93,14 @@ type JsonRpcServerConfig struct {
 }
 
 type BtcNodeBackendConfig struct {
-	Nodetype          string    `long:"nodetype" description:"type of node to connect to {bitcoind, btcd}"`
-	FeeMode           string    `long:"feemode" description:"fee mode to use for fee estimation {static, dynamic}. In dynamic mode fee will be estimated using backend node"`
-	Btcd              *Btcd     `group:"btcd" namespace:"btcd"`
-	Bitcoind          *Bitcoind `group:"bitcoind" namespace:"bitcoind"`
-	EstimationMode    FeeEstimationMode
-	ActiveNodeBackend SupportedNodeBackend
+	Nodetype            string    `long:"nodetype" description:"type of node to connect to {bitcoind, btcd}"`
+	WalletType          string    `long:"wallettype" description:"type of wallet to connect to {bitcoind, btcwallet}"`
+	FeeMode             string    `long:"feemode" description:"fee mode to use for fee estimation {static, dynamic}. In dynamic mode fee will be estimated using backend node"`
+	Btcd                *Btcd     `group:"btcd" namespace:"btcd"`
+	Bitcoind            *Bitcoind `group:"bitcoind" namespace:"bitcoind"`
+	EstimationMode      types.FeeEstimationMode
+	ActiveNodeBackend   types.SupportedNodeBackend
+	ActiveWalletBackend types.SupportedWalletBackend
 }
 
 func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
@@ -386,20 +375,23 @@ func ValidateConfig(cfg Config) (*Config, error) {
 			cfg.ChainConfig.Network))
 	}
 
-	switch cfg.BtcNodeBackendConfig.Nodetype {
-	case "btcd":
-		cfg.BtcNodeBackendConfig.ActiveNodeBackend = BtcdNodeBackend
-	case "bitcoind":
-		cfg.BtcNodeBackendConfig.ActiveNodeBackend = BitcoindNodeBackend
-	default:
-		return nil, mkErr(fmt.Sprintf("invalid nodetype: %s", cfg.BtcNodeBackendConfig.Nodetype))
+	nodeBackend, err := types.NewNodeBackend(cfg.BtcNodeBackendConfig.Nodetype)
+	if err != nil {
+		return nil, mkErr("error getting node backend: %v", err)
 	}
+	cfg.BtcNodeBackendConfig.ActiveNodeBackend = nodeBackend
+
+	walletBackend, err := types.NewWalletBackend(cfg.BtcNodeBackendConfig.WalletType)
+	if err != nil {
+		return nil, mkErr("error getting wallet backend: %v", err)
+	}
+	cfg.BtcNodeBackendConfig.ActiveWalletBackend = walletBackend
 
 	switch cfg.BtcNodeBackendConfig.FeeMode {
 	case "static":
-		cfg.BtcNodeBackendConfig.EstimationMode = StaticFeeEstimation
+		cfg.BtcNodeBackendConfig.EstimationMode = types.StaticFeeEstimation
 	case "dynamic":
-		cfg.BtcNodeBackendConfig.EstimationMode = DynamicFeeEstimation
+		cfg.BtcNodeBackendConfig.EstimationMode = types.DynamicFeeEstimation
 	default:
 		return nil, mkErr(fmt.Sprintf("invalid fee estimation mode: %s", cfg.BtcNodeBackendConfig.Nodetype))
 	}
@@ -453,7 +445,7 @@ func ValidateConfig(cfg Config) (*Config, error) {
 		)
 	}
 
-	_, err := logrus.ParseLevel(cfg.DebugLevel)
+	_, err = logrus.ParseLevel(cfg.DebugLevel)
 
 	if err != nil {
 		return nil, mkErr("error parsing debuglevel: %v", err)

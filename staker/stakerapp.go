@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/babylonchain/btc-staker/types"
 	"sync"
 	"time"
 
@@ -45,7 +46,7 @@ type confirmationEvent struct {
 	txHash        chainhash.Hash
 	txIndex       uint32
 	blckHash      chainhash.Hash
-	blockHeight    uint32
+	blockHeight   uint32
 	tx            *wire.MsgTx
 	inlusionBlock *wire.MsgBlock
 }
@@ -156,9 +157,9 @@ func NewStakerAppFromConfig(
 
 	var feeEstimator FeeEstimator
 	switch config.BtcNodeBackendConfig.EstimationMode {
-	case scfg.StaticFeeEstimation:
+	case types.StaticFeeEstimation:
 		feeEstimator = NewStaticBtcFeeEstimator()
-	case scfg.DynamicFeeEstimation:
+	case types.DynamicFeeEstimation:
 		feeEstimator, err = NewDynamicBtcFeeEstimator(config.BtcNodeBackendConfig, &config.ActiveNetParams, logger)
 		if err != nil {
 			return nil, err
@@ -272,7 +273,7 @@ func (app *StakerApp) waitForConfirmation(txHash chainhash.Hash, ev *notifier.Co
 				txHash:        conf.Tx.TxHash(),
 				txIndex:       conf.TxIndex,
 				blckHash:      *conf.BlockHash,
-				blockHeight:    conf.BlockHeight,
+				blockHeight:   conf.BlockHeight,
 				tx:            conf.Tx,
 				inlusionBlock: conf.Block,
 			}
@@ -579,8 +580,8 @@ func (app *StakerApp) handleStaking() {
 			}
 
 			app.logger.WithFields(logrus.Fields{
-				"btcTxHash":  confEvent.txHash,
-				"blockHash":  confEvent.blckHash,
+				"btcTxHash":   confEvent.txHash,
+				"blockHash":   confEvent.blckHash,
 				"blockHeight": confEvent.blockHeight,
 			}).Infof("BTC transaction has been confirmed")
 

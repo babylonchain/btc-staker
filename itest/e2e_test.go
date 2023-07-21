@@ -17,6 +17,7 @@ import (
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
+	"github.com/babylonchain/btc-staker/types"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
@@ -78,9 +79,10 @@ func defaultStakerConfig(btcdCert []byte, btcdHost string) *stakercfg.Config {
 	defaultConfig.BtcNodeBackendConfig.Btcd.RawRPCCert = hex.EncodeToString(btcdCert)
 	defaultConfig.BtcNodeBackendConfig.Btcd.RPCUser = "user"
 	defaultConfig.BtcNodeBackendConfig.Btcd.RPCPass = "pass"
-	defaultConfig.BtcNodeBackendConfig.ActiveNodeBackend = stakercfg.BtcdNodeBackend
+	defaultConfig.BtcNodeBackendConfig.ActiveNodeBackend = types.BtcdNodeBackend
+	defaultConfig.BtcNodeBackendConfig.ActiveWalletBackend = types.BtcwalletWalletBackend
 
-	// configre wallet rpc
+	// configure wallet rpc
 	defaultConfig.ChainConfig.Network = "simnet"
 	defaultConfig.ActiveNetParams = *simnetParams
 	// Config setting necessary to connect btcwallet daemon

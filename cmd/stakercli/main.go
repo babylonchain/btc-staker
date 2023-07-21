@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/babylonchain/btc-staker/types"
 	"os"
 
 	"github.com/babylonchain/btc-staker/babylonclient"
@@ -32,6 +33,7 @@ const (
 	btcWalletRpcUserFlag    = "btc-wallet-rpc-user"
 	btcWalletRpcPassFlag    = "btc-wallet-rpc-pass"
 	btcWalletPassphraseFlag = "btc-wallet-passphrase"
+	btcWalletBackendFlag    = "btc-wallet-backend"
 )
 
 func getStakerControllerFromCtx(ctx *cli.Context) (*staker.StakerController, error) {
@@ -39,12 +41,17 @@ func getStakerControllerFromCtx(ctx *cli.Context) (*staker.StakerController, err
 	walletUser := ctx.String(btcWalletRpcUserFlag)
 	walletPass := ctx.String(btcWalletRpcPassFlag)
 	network := ctx.String(btcNetworkFlag)
+	backendStr := ctx.String(btcWalletBackendFlag)
 
 	if !ctx.IsSet(btcWalletPassphraseFlag) {
 		return nil, fmt.Errorf("to interact with wallet it is necesary to provide wallet passphrase")
 	}
 
 	passphrase := ctx.String(btcWalletPassphraseFlag)
+	backend, err := types.NewWalletBackend(backendStr)
+	if err != nil {
+		return nil, err
+	}
 
 	wc, err := walletcontroller.NewRpcWalletControllerFromArgs(
 		walletHost,
@@ -52,6 +59,7 @@ func getStakerControllerFromCtx(ctx *cli.Context) (*staker.StakerController, err
 		walletPass,
 		network,
 		passphrase,
+		backend,
 		true)
 
 	if err != nil {
@@ -92,6 +100,11 @@ func main() {
 		cli.StringFlag{
 			Name:  btcWalletPassphraseFlag,
 			Usage: "Bitcoin wallet passphrase",
+		},
+		cli.StringFlag{
+			Name:  btcWalletBackendFlag,
+			Usage: "Bitcoin backend (btcwallet|bitcoind)",
+			Value: "btcd",
 		},
 	}
 

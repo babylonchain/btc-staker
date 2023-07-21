@@ -2,6 +2,7 @@ package walletcontroller
 
 import (
 	"fmt"
+	"github.com/babylonchain/btc-staker/types"
 	"sort"
 
 	"github.com/babylonchain/btc-staker/stakercfg"
@@ -18,6 +19,7 @@ type RpcWalletController struct {
 	*rpcclient.Client
 	walletPassphrase string
 	network          string
+	backend          types.SupportedWalletBackend
 }
 
 var _ WalletController = (*RpcWalletController)(nil)
@@ -29,6 +31,7 @@ func NewRpcWalletController(scfg *stakercfg.Config) (*RpcWalletController, error
 		scfg.WalletRpcConfig.Pass,
 		scfg.ActiveNetParams.Name,
 		scfg.WalletConfig.WalletPass,
+		scfg.BtcNodeBackendConfig.ActiveWalletBackend,
 		// TODO for now just disable tls
 		true,
 	)
@@ -40,6 +43,7 @@ func NewRpcWalletControllerFromArgs(
 	pass string,
 	network string,
 	walletPassphrase string,
+	nodeBackend types.SupportedWalletBackend,
 	disableTls bool,
 ) (*RpcWalletController, error) {
 
@@ -73,6 +77,7 @@ func NewRpcWalletControllerFromArgs(
 		Client:           rpcclient,
 		walletPassphrase: walletPassphrase,
 		network:          params.Name,
+		backend:          nodeBackend,
 	}, nil
 }
 
@@ -167,7 +172,14 @@ func (w *RpcWalletController) CreateAndSignTx(
 }
 
 func (w *RpcWalletController) SignRawTransaction(tx *wire.MsgTx) (*wire.MsgTx, bool, error) {
-	return w.Client.SignRawTransaction(tx)
+	switch w.backend {
+	case types.BitcoindWalletBackend:
+		return w.Client.SignRawTransactionWithWallet(tx)
+	case types.BtcwalletWalletBackend:
+		return w.Client.SignRawTransaction(tx)
+	default:
+		return nil, false, fmt.Errorf("invalid bitcoin backend")
+	}
 }
 
 func (w *RpcWalletController) SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) (*chainhash.Hash, error) {

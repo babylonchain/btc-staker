@@ -2,6 +2,7 @@ package staker
 
 import (
 	"fmt"
+	"github.com/babylonchain/btc-staker/types"
 	"net"
 	"sync"
 
@@ -125,7 +126,7 @@ func NewNodeBackend(
 ) (*NodeBackend, error) {
 	mockHintCache := newMockHintCache()
 	switch cfg.ActiveNodeBackend {
-	case scfg.BitcoindNodeBackend:
+	case types.BitcoindNodeBackend:
 		bitcoindCfg := &chain.BitcoindConfig{
 			ChainParams:        params,
 			Host:               cfg.Bitcoind.RPCHost,
@@ -170,7 +171,7 @@ func NewNodeBackend(
 			ChainNotifier: chainNotifier,
 		}, nil
 
-	case scfg.BtcdNodeBackend:
+	case types.BtcdNodeBackend:
 		btcdUser := cfg.Btcd.RPCUser
 		btcdPass := cfg.Btcd.RPCPass
 		btcdHost := cfg.Btcd.RPCHost
