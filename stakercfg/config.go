@@ -107,10 +107,11 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 	btcdConfig := DefaultBtcdConfig()
 	bitcoindConfig := DefaultBitcoindConfig()
 	return BtcNodeBackendConfig{
-		Nodetype: "btcd",
-		FeeMode:  defaultFeeMode,
-		Btcd:     &btcdConfig,
-		Bitcoind: &bitcoindConfig,
+		Nodetype:   "btcd",
+		WalletType: "btcwallet",
+		FeeMode:    defaultFeeMode,
+		Btcd:       &btcdConfig,
+		Bitcoind:   &bitcoindConfig,
 	}
 }
 
