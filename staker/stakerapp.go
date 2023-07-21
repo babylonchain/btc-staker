@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/babylonchain/btc-staker/types"
 	"sync"
 	"time"
+
+	"github.com/babylonchain/btc-staker/types"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
@@ -333,16 +334,19 @@ func (app *StakerApp) buildDelegationData(
 		return nil, fmt.Errorf("genereting inclusiong proof failed: %w", err)
 	}
 
+	inclusionBlockHash := inclusionBlock.BlockHash()
+
 	dg := cl.DelegationData{
-		StakingTransaction:               stakingTx,
-		StakingTransactionIdx:            stakingTxIdx,
-		StakingTransactionScript:         stakingTxScript,
-		StakingTransactionInclusionProof: proof,
-		SlashingTransaction:              slashingTx,
-		SlashingTransactionSig:           signature,
-		BabylonPk:                        delegationData.babylonPubKey,
-		BabylonEcdsaSigOverBtcPk:         proofOfPossession.BabylonSigOverBtcPk,
-		BtcSchnorrSigOverBabylonSig:      proofOfPossession.BtcSchnorrSigOverBabylonSig,
+		StakingTransaction:                   stakingTx,
+		StakingTransactionIdx:                stakingTxIdx,
+		StakingTransactionScript:             stakingTxScript,
+		StakingTransactionInclusionProof:     proof,
+		StakingTransactionInclusionBlockHash: &inclusionBlockHash,
+		SlashingTransaction:                  slashingTx,
+		SlashingTransactionSig:               signature,
+		BabylonPk:                            delegationData.babylonPubKey,
+		BabylonEcdsaSigOverBtcPk:             proofOfPossession.BabylonSigOverBtcPk,
+		BtcSchnorrSigOverBabylonSig:          proofOfPossession.BtcSchnorrSigOverBabylonSig,
 	}
 
 	return &dg, nil

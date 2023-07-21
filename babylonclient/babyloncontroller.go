@@ -18,6 +18,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
@@ -254,15 +255,16 @@ func (bc *BabylonController) Sign(msg []byte) ([]byte, error) {
 }
 
 type DelegationData struct {
-	StakingTransaction               *wire.MsgTx
-	StakingTransactionIdx            uint32
-	StakingTransactionScript         []byte
-	StakingTransactionInclusionProof []byte
-	SlashingTransaction              *wire.MsgTx
-	SlashingTransactionSig           *schnorr.Signature
-	BabylonPk                        *secp256k1.PubKey
-	BabylonEcdsaSigOverBtcPk         []byte
-	BtcSchnorrSigOverBabylonSig      []byte
+	StakingTransaction                   *wire.MsgTx
+	StakingTransactionIdx                uint32
+	StakingTransactionScript             []byte
+	StakingTransactionInclusionProof     []byte
+	StakingTransactionInclusionBlockHash *chainhash.Hash
+	SlashingTransaction                  *wire.MsgTx
+	SlashingTransactionSig               *schnorr.Signature
+	BabylonPk                            *secp256k1.PubKey
+	BabylonEcdsaSigOverBtcPk             []byte
+	BtcSchnorrSigOverBabylonSig          []byte
 }
 
 func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
@@ -279,9 +281,7 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 		return nil, err
 	}
 
-	hash := dg.StakingTransaction.TxHash()
-	// TODO: why do we need to convert it to header hash ?
-	bcctypesHash := bbntypes.NewBTCHeaderHashBytesFromChainhash(&hash)
+	inclusionBlockHash := bbntypes.NewBTCHeaderHashBytesFromChainhash(dg.StakingTransactionInclusionBlockHash)
 
 	slashingTx, err := btcstypes.NewBTCSlashingTxFromMsgTx(dg.SlashingTransaction)
 
@@ -307,7 +307,7 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 		StakingTxInfo: &bcctypes.TransactionInfo{
 			Key: &bcctypes.TransactionKey{
 				Index: dg.StakingTransactionIdx,
-				Hash:  &bcctypesHash,
+				Hash:  &inclusionBlockHash,
 			},
 			// TODO: tranasction second time ? why ?
 			Transaction: serizalizedStakingTransaction,
