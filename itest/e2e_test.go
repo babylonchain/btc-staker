@@ -465,10 +465,11 @@ func TestSendingStakingTransaction(t *testing.T) {
 	// ultimately message will be sent to babylon node
 	msgSent := <-tm.MockBabylonClient.SentMessages
 
-	stakingtxHash := msgSent.StakingTxInfo.Key.Hash.ToChainhash()
+	stakingTxInclusionBlockHash := msgSent.StakingTxInfo.Key.Hash.ToChainhash()
 
+	expectedBlockHash := mBlock.BlockHash()
 	// TODO: check more fields
-	require.Equal(t, stakingtxHash, submittedTransactions[0])
+	require.True(t, stakingTxInclusionBlockHash.IsEqual(&expectedBlockHash))
 
 	// we need to use eventually here, as state is changes in db after message sending, so
 	// there could be an delay between message sending and state change
@@ -483,12 +484,12 @@ func TestSendingStakingTransaction(t *testing.T) {
 	// Need to mine two blocks, so that staking tx time lock is expired.
 	mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
 
-	_, _, err = tm.Sa.SpendStakingOutput(stakingtxHash)
+	_, _, err = tm.Sa.SpendStakingOutput(txHash)
 	// Here we expect error as staking tx time lock is not yet expired.
 	require.Error(t, err)
 
 	mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
-	spendTxHash, spendTxValue, err := tm.Sa.SpendStakingOutput(stakingtxHash)
+	spendTxHash, spendTxValue, err := tm.Sa.SpendStakingOutput(txHash)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
