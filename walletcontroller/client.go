@@ -167,7 +167,7 @@ func (w *RpcWalletController) CreateAndSignTx(
 }
 
 func (w *RpcWalletController) SignRawTransaction(tx *wire.MsgTx) (*wire.MsgTx, bool, error) {
-	return w.Client.SignRawTransaction(tx)
+	return w.Client.SignRawTransactionWithWallet(tx)
 }
 
 func (w *RpcWalletController) SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) (*chainhash.Hash, error) {

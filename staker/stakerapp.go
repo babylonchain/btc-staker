@@ -45,7 +45,7 @@ type confirmationEvent struct {
 	txHash        chainhash.Hash
 	txIndex       uint32
 	blckHash      chainhash.Hash
-	blockHeight    uint32
+	blockHeight   uint32
 	tx            *wire.MsgTx
 	inlusionBlock *wire.MsgBlock
 }
@@ -272,7 +272,7 @@ func (app *StakerApp) waitForConfirmation(txHash chainhash.Hash, ev *notifier.Co
 				txHash:        conf.Tx.TxHash(),
 				txIndex:       conf.TxIndex,
 				blckHash:      *conf.BlockHash,
-				blockHeight:    conf.BlockHeight,
+				blockHeight:   conf.BlockHeight,
 				tx:            conf.Tx,
 				inlusionBlock: conf.Block,
 			}
@@ -579,8 +579,8 @@ func (app *StakerApp) handleStaking() {
 			}
 
 			app.logger.WithFields(logrus.Fields{
-				"btcTxHash":  confEvent.txHash,
-				"blockHash":  confEvent.blckHash,
+				"btcTxHash":   confEvent.txHash,
+				"blockHash":   confEvent.blckHash,
 				"blockHeight": confEvent.blockHeight,
 			}).Infof("BTC transaction has been confirmed")
 

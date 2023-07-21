@@ -10,7 +10,7 @@ import (
 	"github.com/avast/retry-go/v4"
 	bbntypes "github.com/babylonchain/babylon/types"
 	bcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
-	"github.com/babylonchain/babylon/x/btcstaking/types"
+	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/babylonchain/rpc-client/query"
@@ -138,7 +138,7 @@ func (bc *BabylonController) Stop() {
 }
 
 func (bc *BabylonController) Params() (*StakingParams, error) {
-	// TODO: uint64 are quite silly types for these params, pobably uint8 or uint16 would be enough
+	// TODO: uint64 are quite silly types for these params, probably uint8 or uint16 would be enough
 	// as we do not expect finalization to be more than 255 or in super extreme 65535
 	// TODO: it would probably be good to have separate methods for those
 	var bccParams *bcctypes.Params
@@ -189,7 +189,7 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 
 func (bc *BabylonController) GetKeyAddress() sdk.AccAddress {
 	// get key address, retrieves address based on key name which is configured in
-	// cfg *stakercfg.BBNConfig. If this fails, it mean we have misconfiguration problem
+	// cfg *stakercfg.BBNConfig. If this fails, it means we have misconfiguration problem
 	// and we should panic.
 	// This is checked at the start of BabylonController, so if it fails something is really wrong
 	addr, err := bc.ChainClient.GetKeyAddress()
@@ -265,7 +265,7 @@ type DelegationData struct {
 	BtcSchnorrSigOverBabylonSig      []byte
 }
 
-func delegationDataToMsg(signer string, dg *DelegationData) (*types.MsgCreateBTCDelegation, error) {
+func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
 
 	schnorSig, err := bbntypes.NewBIP340Signature(dg.BtcSchnorrSigOverBabylonSig)
 
@@ -283,7 +283,7 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*types.MsgCreateBTC
 	// TODO: why do we need to convert it to header hash ?
 	bcctypesHash := bbntypes.NewBTCHeaderHashBytesFromChainhash(&hash)
 
-	slashingTx, err := types.NewBTCSlashingTxFromMsgTx(dg.SlashingTransaction)
+	slashingTx, err := btcstypes.NewBTCSlashingTxFromMsgTx(dg.SlashingTransaction)
 
 	if err != nil {
 		return nil, err
@@ -291,14 +291,14 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*types.MsgCreateBTC
 
 	slashingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(dg.SlashingTransactionSig)
 
-	return &types.MsgCreateBTCDelegation{
+	return &btcstypes.MsgCreateBTCDelegation{
 		Signer:    signer,
 		BabylonPk: dg.BabylonPk,
-		Pop: &types.ProofOfPossession{
+		Pop: &btcstypes.ProofOfPossession{
 			BabylonSig: dg.BabylonEcdsaSigOverBtcPk,
 			BtcSig:     schnorSig,
 		},
-		StakingTx: &types.StakingTx{
+		StakingTx: &btcstypes.StakingTx{
 			Tx:            serizalizedStakingTransaction,
 			StakingScript: dg.StakingTransactionScript,
 		},
@@ -379,9 +379,9 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 	defer cancel()
 
 	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
-	queryClient := types.NewQueryClient(clientCtx)
+	queryClient := btcstypes.NewQueryClient(clientCtx)
 
-	response, err := queryClient.Params(ctx, &types.QueryParamsRequest{})
+	response, err := queryClient.Params(ctx, &btcstypes.QueryParamsRequest{})
 
 	if err != nil {
 		return nil, err
@@ -412,13 +412,13 @@ func (bc *BabylonController) QueryValidators(
 	defer cancel()
 
 	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
-	queryClient := types.NewQueryClient(clientCtx)
+	queryClient := btcstypes.NewQueryClient(clientCtx)
 
-	var response *types.QueryBTCValidatorsResponse
+	var response *btcstypes.QueryBTCValidatorsResponse
 	if err := retry.Do(func() error {
 		resp, err := queryClient.BTCValidators(
 			ctx,
-			&types.QueryBTCValidatorsRequest{
+			&btcstypes.QueryBTCValidatorsRequest{
 				Pagination: &bq.PageRequest{
 					Offset:     offset,
 					Limit:      limit,
