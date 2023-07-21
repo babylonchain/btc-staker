@@ -28,7 +28,7 @@ const (
 	stakingDaemonAddressFlag = "daemon-address"
 	validatorsOffsetFlag     = "offset"
 	validatorsLimitFlag      = "limit"
-	validatorPkFlag          = "delegator-pk"
+	validatorPkFlag          = "validator-pk"
 	stakingTimeBlocksFlag    = "staking-time"
 )
 
@@ -110,7 +110,7 @@ var stakeCmd = cli.Command{
 		},
 		cli.StringFlag{
 			Name:     validatorPkFlag,
-			Usage:    "BTC address of the validator in hex",
+			Usage:    "BTC public key of the validator in hex",
 			Required: true,
 		},
 		cli.Int64Flag{
