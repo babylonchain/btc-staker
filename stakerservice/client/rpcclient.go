@@ -60,3 +60,24 @@ func (c *StakerServiceJsonRpcClient) BabylonValidators(ctx context.Context, offs
 	}
 	return result, nil
 }
+
+func (c *StakerServiceJsonRpcClient) Stake(ctx context.Context,
+	stakerAddress string,
+	stakingAmount int64,
+	validatorPk string,
+	stakingTimeBlocks int64,
+) (*service.ResultStake, error) {
+	result := new(service.ResultStake)
+
+	params := make(map[string]interface{})
+	params["stakerAddress"] = stakerAddress
+	params["stakingAmount"] = stakingAmount
+	params["validatorPk"] = validatorPk
+	params["stakingTimeBlocks"] = stakingTimeBlocks
+
+	_, err := c.client.Call(ctx, "stake", params, result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
