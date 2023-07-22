@@ -37,6 +37,7 @@ func (c *mockHintCache) CommitSpendHint(heightHint uint32,
 	for _, spendRequest := range spendRequests {
 		c.spendHints[spendRequest] = heightHint
 	}
+	fmt.Println("CommitSpendHintUnlock", heightHint)
 
 	return nil
 }
@@ -77,6 +78,8 @@ func (c *mockHintCache) CommitConfirmHint(heightHint uint32,
 		c.confHints[confRequest] = heightHint
 	}
 
+	fmt.Println("CommitConfirmHintUnlock", heightHint)
+
 	return nil
 }
 
@@ -87,8 +90,10 @@ func (c *mockHintCache) QueryConfirmHint(confRequest chainntnfs.ConfRequest) (ui
 
 	hint, ok := c.confHints[confRequest]
 	if !ok {
+		fmt.Println("not found")
 		return 0, chainntnfs.ErrConfirmHintNotFound
 	}
+	fmt.Println("hint found")
 
 	return hint, nil
 }
@@ -120,9 +125,9 @@ type NodeBackend struct {
 // and be connected to validation of rpc host/port.
 // According to chain.BitcoindConfig docs it should also support tor if node backend
 // works over tor.
-func BuildDialer(rpcHost string) func(string) (net.Conn, error) {
+func BuildDialer(_ string) func(string) (net.Conn, error) {
 	return func(addr string) (net.Conn, error) {
-		return net.Dial("tcp", rpcHost)
+		return net.Dial("tcp", addr)
 	}
 }
 
@@ -130,7 +135,8 @@ func NewNodeBackend(
 	cfg *scfg.BtcNodeBackendConfig,
 	params *chaincfg.Params,
 ) (*NodeBackend, error) {
-	mockHintCache := newMockHintCache()
+	mockHintCache1 := newMockHintCache()
+	mockHintCache2 := newMockHintCache()
 	switch cfg.ActiveNodeBackend {
 	case types.BitcoindNodeBackend:
 		bitcoindCfg := &chain.BitcoindConfig{
@@ -169,8 +175,8 @@ func NewNodeBackend(
 		}
 
 		chainNotifier := bitcoindnotify.New(
-			bitcoindConn, params, mockHintCache,
-			mockHintCache, blockcache.NewBlockCache(cfg.Bitcoind.BlockCacheSize),
+			bitcoindConn, params, mockHintCache1,
+			mockHintCache2, blockcache.NewBlockCache(cfg.Bitcoind.BlockCacheSize),
 		)
 
 		return &NodeBackend{
@@ -200,8 +206,8 @@ func NewNodeBackend(
 		}
 
 		chainNotifier, err := btcdnotify.New(
-			rpcConfig, params, mockHintCache,
-			mockHintCache, blockcache.NewBlockCache(cfg.Btcd.BlockCacheSize),
+			rpcConfig, params, mockHintCache1,
+			mockHintCache2, blockcache.NewBlockCache(cfg.Btcd.BlockCacheSize),
 		)
 
 		if err != nil {
