@@ -264,12 +264,14 @@ func (app *StakerApp) waitForConfirmation(txHash chainhash.Hash, ev *notifier.Co
 
 	default:
 	}
+	app.logger.Infof("Start waiting for the transaction")
 
 	for {
 		// TODO add handling of more events like ev.NegativeConf which signals that
 		// transaction have beer reorged out of the chain
 		select {
 		case conf := <-ev.Confirmed:
+			app.logger.Infof("Transaction confirmed")
 			app.confirmationEventChan <- &confirmationEvent{
 				txHash:        conf.Tx.TxHash(),
 				txIndex:       conf.TxIndex,
@@ -287,6 +289,7 @@ func (app *StakerApp) waitForConfirmation(txHash chainhash.Hash, ev *notifier.Co
 			}).Debugf("Staking transaction received confirmation")
 		case <-app.quit:
 			// app is quitting, cancel the event
+			app.logger.Infof("app is quiting")
 			ev.Cancel()
 			return
 		}
@@ -532,6 +535,7 @@ func (app *StakerApp) handleStaking() {
 
 			hash, err := app.wc.SendRawTransaction(req.stakingTx, true)
 			if err != nil {
+				app.logger.Errorf("SendRawTransaction error %v", err)
 				req.errChan <- err
 				continue
 			}
@@ -562,6 +566,7 @@ func (app *StakerApp) handleStaking() {
 			)
 
 			if err != nil {
+				app.logger.Errorf("RegisterConfirmationsNtfn error %v", err)
 				req.errChan <- err
 				continue
 			}
