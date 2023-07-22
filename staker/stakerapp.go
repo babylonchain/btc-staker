@@ -533,6 +533,24 @@ func (app *StakerApp) handleStaking() {
 				"currentBestBlockHeight": bestBlockHeight,
 			}).Infof("Received new staking request")
 
+			confEvent, err := app.notifier.RegisterConfirmationsNtfn(
+				nil,
+				// TODO: staking script is necessary here, to support light clients. Maybe we could
+				// support neutrino backends, so stakers could use spv wallets.
+				req.stakingOutputPkScript,
+				req.numConfirmations,
+				uint32(bestBlockHeight),
+				// notification must include block that mined the tx, this is necessary to build
+				// inclusion proof
+				notifier.WithIncludeBlock(),
+			)
+
+			if err != nil {
+				app.logger.Errorf("RegisterConfirmationsNtfn error %v", err)
+				req.errChan <- err
+				continue
+			}
+
 			hash, err := app.wc.SendRawTransaction(req.stakingTx, true)
 			if err != nil {
 				app.logger.Errorf("SendRawTransaction error %v", err)
@@ -553,23 +571,6 @@ func (app *StakerApp) handleStaking() {
 				continue
 			}
 
-			confEvent, err := app.notifier.RegisterConfirmationsNtfn(
-				hash,
-				// TODO: staking script is necessary here, to support light clients. Maybe we could
-				// support neutrino backends, so stakers could use spv wallets.
-				req.stakingOutputPkScript,
-				req.numConfirmations,
-				uint32(bestBlockHeight),
-				// notification must include block that mined the tx, this is necessary to build
-				// inclusion proof
-				notifier.WithIncludeBlock(),
-			)
-
-			if err != nil {
-				app.logger.Errorf("RegisterConfirmationsNtfn error %v", err)
-				req.errChan <- err
-				continue
-			}
 			// TODO: add some wait group here, to wait for all go routines to finish
 			// before returning from this function
 			go app.waitForConfirmation(txHash, confEvent)
