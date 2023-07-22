@@ -13,7 +13,7 @@ const (
 	defaultBitcoindRpcHost        = "127.0.0.1:8334"
 	defaultBitcoindRPCUser        = "user"
 	defaultBitcoindRPCPass        = "pass"
-	defaultBitcoindBlockCacheSize = 1000
+	defaultBitcoindBlockCacheSize = 100000
 	defaultZMQPubRawBlock         = "tcp://127.0.0.1:29001"
 	defaultZMQPubRawTx            = "tcp://127.0.0.1:29002"
 	defaultZMQReadDeadline        = 30 * time.Second
