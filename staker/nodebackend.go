@@ -29,6 +29,7 @@ var _ chainntnfs.ConfirmHintCache = (*mockHintCache)(nil)
 
 func (c *mockHintCache) CommitSpendHint(heightHint uint32,
 	spendRequests ...chainntnfs.SpendRequest) error {
+	fmt.Println("CommitSpendHint", heightHint)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -41,6 +42,7 @@ func (c *mockHintCache) CommitSpendHint(heightHint uint32,
 }
 
 func (c *mockHintCache) QuerySpendHint(spendRequest chainntnfs.SpendRequest) (uint32, error) {
+	fmt.Println("QuerySpendHint")
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -53,6 +55,7 @@ func (c *mockHintCache) QuerySpendHint(spendRequest chainntnfs.SpendRequest) (ui
 }
 
 func (c *mockHintCache) PurgeSpendHint(spendRequests ...chainntnfs.SpendRequest) error {
+	fmt.Println("PurgeSpendHint")
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -65,6 +68,7 @@ func (c *mockHintCache) PurgeSpendHint(spendRequests ...chainntnfs.SpendRequest)
 
 func (c *mockHintCache) CommitConfirmHint(heightHint uint32,
 	confRequests ...chainntnfs.ConfRequest) error {
+	fmt.Println("CommitConfirmHint", heightHint)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -77,6 +81,7 @@ func (c *mockHintCache) CommitConfirmHint(heightHint uint32,
 }
 
 func (c *mockHintCache) QueryConfirmHint(confRequest chainntnfs.ConfRequest) (uint32, error) {
+	fmt.Println("queryconfirmhint")
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -89,6 +94,7 @@ func (c *mockHintCache) QueryConfirmHint(confRequest chainntnfs.ConfRequest) (ui
 }
 
 func (c *mockHintCache) PurgeConfirmHint(confRequests ...chainntnfs.ConfRequest) error {
+	fmt.Println("purgeconfirmhint")
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
