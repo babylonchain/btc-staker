@@ -10,7 +10,7 @@ const (
 	defaultBtcdRPCHost        = "127.0.0.1:18334"
 	defaultBtcdRPCUser        = "user"
 	defaultBtcdRPCPass        = "pass"
-	defaultBtcdBlockCacheSize = 100000
+	defaultBtcdBlockCacheSize = 20 * 1024 * 1024 // 20 MB
 )
 
 var (
