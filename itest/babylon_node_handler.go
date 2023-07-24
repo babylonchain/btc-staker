@@ -128,6 +128,8 @@ func NewBabylonNodeHandler() (*BabylonNodeHandler, error) {
 		"--starting-ip-address=192.168.10.2",
 		"--keyring-backend=test",
 		"--chain-id=chain-test",
+		"--btc-finalization-timeout=4",
+		"--btc-confirmation-depth=2",
 		"--additional-sender-account",
 	)
 
