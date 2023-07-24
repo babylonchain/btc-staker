@@ -319,16 +319,7 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 	}, nil
 }
 
-// TODO: for now return sdk.TxResponse, it will ease up debugging/testing
-// ultimately we should create our own type ate
-func (bc *BabylonController) Delegate(dg *DelegationData) (*sdk.TxResponse, error) {
-	delegateMsg, err := delegationDataToMsg(bc.getTxSigner(), dg)
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Internal context for now, this means delegate is non cancellable for external callers
+func (bc *BabylonController) reliablySendMsgs(msgs []sdk.Msg, errorMsg string) (*sdk.TxResponse, error) {
 	ctx := context.Background()
 
 	// TODO: Consider using differnt client (maybe CosmosProvider from releayer impl?) this one is not particularly
@@ -336,7 +327,7 @@ func (bc *BabylonController) Delegate(dg *DelegationData) (*sdk.TxResponse, erro
 	// therefore this operation can tak a lot of time i.e at most cfg.BlockTimeout
 	var response *sdk.TxResponse
 	if err := retry.Do(func() error {
-		resp, err := bc.ChainClient.SendMsg(ctx, delegateMsg, "")
+		resp, err := bc.ChainClient.SendMsgs(ctx, msgs, "")
 		if err != nil {
 			// Our transactions was correct, but it was not included in the block for cfg.BlockTimeout
 			// no point in retrying
@@ -352,8 +343,26 @@ func (bc *BabylonController) Delegate(dg *DelegationData) (*sdk.TxResponse, erro
 			"attempt":      n + 1,
 			"max_attempts": RtyAttNum,
 			"error":        err,
-		}).Error("Failed to send delegation transaction to babylon client")
+		}).Error(errorMsg)
 	})); err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+// TODO: for now return sdk.TxResponse, it will ease up debugging/testing
+// ultimately we should create our own type ate
+func (bc *BabylonController) Delegate(dg *DelegationData) (*sdk.TxResponse, error) {
+	delegateMsg, err := delegationDataToMsg(bc.getTxSigner(), dg)
+
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := bc.reliablySendMsgs([]sdk.Msg{delegateMsg}, "Failed to send delegation transaction to babylon node")
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -466,8 +475,6 @@ func (bc *BabylonController) QueryValidators(
 
 // Inserta block header using rpc client
 func (bc *BabylonController) InsertBlockHeaders(headers []*wire.BlockHeader) (*sdk.TxResponse, error) {
-	ctx := context.Background()
-
 	// convert to []sdk.Msg type
 	imsgs := []sdk.Msg{}
 	for _, h := range headers {
@@ -480,5 +487,5 @@ func (bc *BabylonController) InsertBlockHeaders(headers []*wire.BlockHeader) (*s
 		imsgs = append(imsgs, &msg)
 	}
 
-	return bc.ChainClient.SendMsgs(ctx, imsgs, "")
+	return bc.reliablySendMsgs(imsgs, "Failed to send block headers to babylon node")
 }
