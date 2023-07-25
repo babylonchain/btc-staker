@@ -473,8 +473,8 @@ func (bc *BabylonController) QueryValidators(
 	}, nil
 }
 
-// Inserta block header using rpc client
-func (bc *BabylonController) InsertBlockHeaders(headers []*wire.BlockHeader) (*sdk.TxResponse, error) {
+// Insert BTC block header using rpc client
+func (bc *BabylonController) InsertBtcBlockHeaders(headers []*wire.BlockHeader) (*sdk.TxResponse, error) {
 	// convert to []sdk.Msg type
 	imsgs := []sdk.Msg{}
 	for _, h := range headers {

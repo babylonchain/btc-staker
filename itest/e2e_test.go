@@ -271,7 +271,7 @@ func StartManager(
 	stakerApp, err := staker.NewStakerAppFromConfig(cfg, logger, dbbackend)
 	require.NoError(t, err)
 
-	// we require separate to send headers to babylon node (interface does not need this method?)
+	// we require separate client to send BTC headers to babylon node (interface does not need this method?)
 	bl, err := babylonclient.NewBabylonController(cfg.BabylonConfig, &cfg.ActiveNetParams, logger)
 	require.NoError(t, err)
 
@@ -375,7 +375,7 @@ func waitForNOutputs(t *testing.T, walletClient walletcontroller.WalletControlle
 	}, eventuallyWaitTimeOut, eventuallyPollTime)
 }
 
-func GetAllMinedHeadersSinceGenesis(t *testing.T, h *rpctest.Harness) []*wire.BlockHeader {
+func GetAllMinedBtcHeadersSinceGenesis(t *testing.T, h *rpctest.Harness) []*wire.BlockHeader {
 	_, height, err := h.Client.GetBestBlock()
 	require.NoError(t, err)
 
@@ -414,9 +414,9 @@ func TestSendingStakingTransaction(t *testing.T) {
 	params, err := cl.Params()
 	stakingTime := uint16(params.FinalizationTimeoutBlocks + 1)
 
-	// Insert all existing headers to babylon node
-	headers := GetAllMinedHeadersSinceGenesis(t, tm.MinerNode)
-	_, err = tm.BabylonClient.InsertBlockHeaders(headers)
+	// Insert all existing BTC headers to babylon node
+	headers := GetAllMinedBtcHeadersSinceGenesis(t, tm.MinerNode)
+	_, err = tm.BabylonClient.InsertBtcBlockHeaders(headers)
 	require.NoError(t, err)
 
 	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
@@ -444,7 +444,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 	mBlock := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
 	require.Equal(t, 2, len(mBlock.Transactions))
 
-	_, err = tm.BabylonClient.InsertBlockHeaders([]*wire.BlockHeader{&mBlock.Header})
+	_, err = tm.BabylonClient.InsertBtcBlockHeaders([]*wire.BlockHeader{&mBlock.Header})
 	require.NoError(t, err)
 
 	go func() {
@@ -455,7 +455,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 			// error only due to re-tries.
 			// Make use to babylon api to check header depth to to not send delegation until
 			// there is enough headers in babylon node
-			_, err = tm.BabylonClient.InsertBlockHeaders([]*wire.BlockHeader{&bl.Header})
+			_, err = tm.BabylonClient.InsertBtcBlockHeaders([]*wire.BlockHeader{&bl.Header})
 			require.NoError(t, err)
 		}
 	}()
