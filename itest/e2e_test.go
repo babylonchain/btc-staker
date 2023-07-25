@@ -16,7 +16,6 @@ import (
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
-	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/babylonchain/btc-staker/types"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -130,14 +129,15 @@ func GetSpendingKeyAndAddress(id uint32) (*btcec.PrivateKey, btcutil.Address, er
 }
 
 type TestManager struct {
-	MinerNode         *rpctest.Harness
-	BtcWalletHandler  *WalletHandler
-	Config            *stakercfg.Config
-	Db                kvdb.Backend
-	Sa                *staker.StakerApp
-	MockBabylonClient *babylonclient.MockBabylonClient
-	WalletPrivKey     *btcec.PrivateKey
-	MinerAddr         btcutil.Address
+	MinerNode        *rpctest.Harness
+	BtcWalletHandler *WalletHandler
+	BabylonHandler   *BabylonNodeHandler
+	Config           *stakercfg.Config
+	Db               kvdb.Backend
+	Sa               *staker.StakerApp
+	BabylonClient    *babylonclient.BabylonController
+	WalletPrivKey    *btcec.PrivateKey
+	MinerAddr        btcutil.Address
 }
 
 type testStakingData struct {
@@ -192,68 +192,6 @@ func initBtcWalletClient(
 	waitForNOutputs(t, client, outputsToWaitFor)
 }
 
-// TODO this is needed as we still do not have a way to test with real babylon node
-func newStakerAppWithMockBabylonClient(
-	t *testing.T,
-	config *stakercfg.Config,
-	logger *logrus.Logger,
-) (*staker.StakerApp, *babylonclient.MockBabylonClient, kvdb.Backend, error) {
-	walletClient, err := walletcontroller.NewRpcWalletController(config)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	cl := babylonclient.GetMockClient()
-
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	nodeNotifier, err := staker.NewNodeBackend(config.BtcNodeBackendConfig, &config.ActiveNetParams)
-
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// lets use dyamic estimator to see if btcd works
-	feeEstimator, err := staker.NewDynamicBtcFeeEstimator(
-		config.BtcNodeBackendConfig,
-		&config.ActiveNetParams,
-		logger,
-	)
-	require.NoError(t, err)
-
-	dirPath := filepath.Join(os.TempDir(), "stakerd", "e2etest")
-	err = os.MkdirAll(dirPath, 0755)
-	require.NoError(t, err)
-	dbTempDir, err := os.MkdirTemp(dirPath, "db")
-	require.NoError(t, err)
-
-	config.DBConfig.DBPath = dbTempDir
-
-	dbBackend, err := stakercfg.GetDbBackend(config.DBConfig)
-	require.NoError(t, err)
-
-	tracker, err := stakerdb.NewTrackedTransactionStore(dbBackend)
-	require.NoError(t, err)
-
-	staker, err := staker.NewStakerAppFromDeps(
-		config,
-		logger,
-		cl,
-		walletClient,
-		nodeNotifier,
-		feeEstimator,
-		tracker,
-	)
-
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	return staker, cl, dbBackend, nil
-}
-
 func StartManager(
 	t *testing.T,
 	numMatureOutputsInWallet uint32,
@@ -296,6 +234,12 @@ func StartManager(
 	err = wh.Start()
 	require.NoError(t, err)
 
+	bh, err := NewBabylonNodeHandler()
+	require.NoError(t, err)
+
+	err = bh.Start()
+	require.NoError(t, err)
+
 	// Wait for wallet to re-index the outputs
 	time.Sleep(5 * time.Second)
 
@@ -305,8 +249,30 @@ func StartManager(
 	logger.SetLevel(logrus.DebugLevel)
 	logger.Out = os.Stdout
 
-	stakerApp, mockBabylonClient, dbbackend, err := newStakerAppWithMockBabylonClient(t, cfg, logger)
+	// babylon configs for sending transactions
+	cfg.BabylonConfig.KeyDirectory = bh.GetNodeDataDir()
+	// need to use this one to send otherwise we will have account sequence mismatch
+	// errors
+	cfg.BabylonConfig.Key = "test-spending-key"
 
+	// Big adjustment to make sure we have enough gas in our transactions
+	cfg.BabylonConfig.GasAdjustment = 3.0
+
+	dirPath := filepath.Join(os.TempDir(), "stakerd", "e2etest")
+	err = os.MkdirAll(dirPath, 0755)
+	require.NoError(t, err)
+	dbTempDir, err := os.MkdirTemp(dirPath, "db")
+	require.NoError(t, err)
+	cfg.DBConfig.DBPath = dbTempDir
+
+	dbbackend, err := stakercfg.GetDbBackend(cfg.DBConfig)
+	require.NoError(t, err)
+
+	stakerApp, err := staker.NewStakerAppFromConfig(cfg, logger, dbbackend)
+	require.NoError(t, err)
+
+	// we require separate client to send BTC headers to babylon node (interface does not need this method?)
+	bl, err := babylonclient.NewBabylonController(cfg.BabylonConfig, &cfg.ActiveNetParams, logger)
 	require.NoError(t, err)
 
 	initBtcWalletClient(
@@ -322,14 +288,15 @@ func StartManager(
 	numTestInstances++
 
 	return &TestManager{
-		MinerNode:         miner,
-		BtcWalletHandler:  wh,
-		Config:            cfg,
-		Db:                dbbackend,
-		Sa:                stakerApp,
-		MockBabylonClient: mockBabylonClient,
-		WalletPrivKey:     privkey,
-		MinerAddr:         addr,
+		MinerNode:        miner,
+		BtcWalletHandler: wh,
+		BabylonHandler:   bh,
+		Config:           cfg,
+		Db:               dbbackend,
+		Sa:               stakerApp,
+		BabylonClient:    bl,
+		WalletPrivKey:    privkey,
+		MinerAddr:        addr,
 	}
 }
 
@@ -337,6 +304,8 @@ func (tm *TestManager) Stop(t *testing.T) {
 	err := tm.BtcWalletHandler.Stop()
 	require.NoError(t, err)
 	err = tm.Sa.Stop()
+	require.NoError(t, err)
+	err = tm.BabylonHandler.Stop()
 	require.NoError(t, err)
 	err = tm.Db.Close()
 	require.NoError(t, err)
@@ -406,6 +375,23 @@ func waitForNOutputs(t *testing.T, walletClient walletcontroller.WalletControlle
 	}, eventuallyWaitTimeOut, eventuallyPollTime)
 }
 
+func GetAllMinedBtcHeadersSinceGenesis(t *testing.T, h *rpctest.Harness) []*wire.BlockHeader {
+	_, height, err := h.Client.GetBestBlock()
+	require.NoError(t, err)
+
+	var headers []*wire.BlockHeader
+
+	for i := 1; i <= int(height); i++ {
+		hash, err := h.Client.GetBlockHash(int64(i))
+		require.NoError(t, err)
+		header, err := h.Client.GetBlockHeader(hash)
+		require.NoError(t, err)
+		headers = append(headers, header)
+	}
+
+	return headers
+}
+
 func TestSendingStakingTransaction(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated
 	numMatureOutputs := uint32(200)
@@ -424,7 +410,16 @@ func TestSendingStakingTransaction(t *testing.T) {
 	require.NoError(t, err)
 	defer tm.Stop(t)
 
-	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), 5, 10000)
+	cl := tm.Sa.BabylonController()
+	params, err := cl.Params()
+	stakingTime := uint16(params.FinalizationTimeoutBlocks + 1)
+
+	// Insert all existing BTC headers to babylon node
+	headers := GetAllMinedBtcHeadersSinceGenesis(t, tm.MinerNode)
+	_, err = tm.BabylonClient.InsertBtcBlockHeaders(headers)
+	require.NoError(t, err)
+
+	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
 	txHash, err := tm.Sa.StakeFunds(
 		tm.MinerAddr,
@@ -449,27 +444,21 @@ func TestSendingStakingTransaction(t *testing.T) {
 	mBlock := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, submittedTransactions))
 	require.Equal(t, 2, len(mBlock.Transactions))
 
-	cl := tm.Sa.BabylonController()
-
-	params, err := cl.Params()
+	_, err = tm.BabylonClient.InsertBtcBlockHeaders([]*wire.BlockHeader{&mBlock.Header})
 	require.NoError(t, err)
 
 	go func() {
 		// mine confirmation time blocks in background
 		for i := 0; i < int(params.ComfirmationTimeBlocks); i++ {
-			time.Sleep(1 * time.Second)
-			mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+			bl := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+			// TODO We insert headers concurrently with sending delagation, this does not fail due to incorrect account sequence
+			// error only due to re-tries.
+			// Make use to babylon api to check header depth to to not send delegation until
+			// there is enough headers in babylon node
+			_, err = tm.BabylonClient.InsertBtcBlockHeaders([]*wire.BlockHeader{&bl.Header})
+			require.NoError(t, err)
 		}
 	}()
-
-	// ultimately message will be sent to babylon node
-	msgSent := <-tm.MockBabylonClient.SentMessages
-
-	stakingTxInclusionBlockHash := msgSent.StakingTxInfo.Key.Hash.ToChainhash()
-
-	expectedBlockHash := mBlock.BlockHash()
-	// TODO: check more fields
-	require.True(t, stakingTxInclusionBlockHash.IsEqual(&expectedBlockHash))
 
 	// we need to use eventually here, as state is changes in db after message sending, so
 	// there could be an delay between message sending and state change
@@ -477,18 +466,23 @@ func TestSendingStakingTransaction(t *testing.T) {
 		allCurrentDelegations, err = tm.Sa.GetAllDelegations()
 		require.NoError(t, err)
 		return len(allCurrentDelegations) == 1 && allCurrentDelegations[0].State == proto.TransactionState_SENT_TO_BABYLON
-	}, eventuallyWaitTimeOut, eventuallyPollTime)
+	}, 1*time.Minute, eventuallyPollTime)
 
 	submittedTransactions = []*chainhash.Hash{}
 
-	// Need to mine two blocks, so that staking tx time lock is expired.
-	mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+	// Mine enough block so that we are one block from timelock expiration
+	// we already mined ComfirmationTimeBlocks, so we start iteration from there
+	for i := int(params.ComfirmationTimeBlocks); i < int(stakingTime)-2; i++ {
+		mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+	}
 
 	_, _, err = tm.Sa.SpendStakingOutput(txHash)
 	// Here we expect error as staking tx time lock is not yet expired.
 	require.Error(t, err)
 
+	// mine another block so that time lock expired
 	mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{}))
+
 	spendTxHash, spendTxValue, err := tm.Sa.SpendStakingOutput(txHash)
 	require.NoError(t, err)
 
