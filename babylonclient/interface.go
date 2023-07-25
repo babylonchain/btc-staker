@@ -5,6 +5,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
@@ -37,6 +38,7 @@ type BabylonClient interface {
 	Params() (*StakingParams, error)
 	Delegate(dg *DelegationData) (*sdk.TxResponse, error)
 	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
+	QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error)
 }
 
 type MockBabylonClient struct {
@@ -95,6 +97,11 @@ func (m *MockBabylonClient) QueryValidators(limit uint64, offset uint64) (*Valid
 		Validators: []ValidatorInfo{*m.ActiveValidator},
 		Total:      1,
 	}, nil
+}
+
+func (m *MockBabylonClient) QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error) {
+	// return always confimed  depth
+	return uint64(m.ClientParams.ComfirmationTimeBlocks) + 1, nil
 }
 
 func GetMockClient() *MockBabylonClient {

@@ -3,7 +3,6 @@ package stakercfg
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/babylonchain/btc-staker/types"
 	"io"
 	"net"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/babylonchain/btc-staker/types"
 
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -115,6 +116,16 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 	}
 }
 
+type StakerConfig struct {
+	BabylonStallingInterval time.Duration `long:"babylonstallinginterval" description:"The interval to for babylon node btc light client to catch up with real chain, before re-sending delegation request"`
+}
+
+func DefaultStakerConfig() StakerConfig {
+	return StakerConfig{
+		BabylonStallingInterval: 2 * time.Minute,
+	}
+}
+
 type Config struct {
 	DebugLevel string `long:"debuglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, fatal}"`
 	StakerdDir string `long:"stakerddir" description:"The base directory that contains staker's data, logs, configuration file, etc."`
@@ -137,6 +148,8 @@ type Config struct {
 
 	DBConfig *DBConfig `group:"dbconfig" namespace:"dbconfig"`
 
+	StakerConfig *StakerConfig `group:"stakerconfig" namespace:"stakerconfig"`
+
 	JsonRpcServerConfig *JsonRpcServerConfig
 
 	ActiveNetParams chaincfg.Params
@@ -151,6 +164,7 @@ func DefaultConfig() Config {
 	nodeBackendCfg := DefaultBtcNodeBackendConfig()
 	bbnConfig := DefaultBBNConfig()
 	dbConfig := DefaultDBConfig()
+	stakerConfig := DefaultStakerConfig()
 	return Config{
 		StakerdDir:           DefaultStakerdDir,
 		ConfigFile:           DefaultConfigFile,
@@ -163,6 +177,7 @@ func DefaultConfig() Config {
 		BtcNodeBackendConfig: &nodeBackendCfg,
 		BabylonConfig:        &bbnConfig,
 		DBConfig:             &dbConfig,
+		StakerConfig:         &stakerConfig,
 	}
 }
 

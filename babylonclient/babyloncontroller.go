@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/avast/retry-go/v4"
@@ -44,6 +45,9 @@ var (
 
 var (
 	ErrInvalidBabylonDelegation = errors.New("sent invalid babylon delegation")
+
+	ErrHeaderNotKnownToBabylon = errors.New("btc header not known to babylon")
+	ErrHeaderOnBabylonLCFork   = errors.New("btc header is on babylon btc light client fork")
 )
 
 func newLensClient(ccc *lensclient.ChainClientConfig, kro ...keyring.Option) (*lensclient.ChainClient, error) {
@@ -471,6 +475,46 @@ func (bc *BabylonController) QueryValidators(
 		Validators: validators,
 		Total:      response.Pagination.Total,
 	}, nil
+}
+
+func (bc *BabylonController) QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error) {
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
+	queryClient := btclctypes.NewQueryClient(clientCtx)
+
+	var response *btclctypes.QueryHeaderDepthResponse
+	if err := retry.Do(func() error {
+		depthResponse, err := queryClient.HeaderDepth(ctx, &btclctypes.QueryHeaderDepthRequest{Hash: headerHash.String()})
+		if err != nil {
+			return err
+		}
+		response = depthResponse
+		return nil
+	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
+		bc.logger.WithFields(logrus.Fields{
+			"attempt":      n + 1,
+			"max_attempts": RtyAttNum,
+			"error":        err,
+		}).Error("Failed to query babylon for the depth of the header")
+	})); err != nil {
+
+		// translate errors to locally handable ones
+		if strings.Contains(err.Error(), btclctypes.ErrHeaderDoesNotExist.Error()) {
+			return 0, fmt.Errorf("%s: %w", err.Error(), ErrHeaderNotKnownToBabylon)
+		}
+
+		if strings.Contains(err.Error(), btclctypes.ErrHeaderOnFork.Error()) {
+			return 0, fmt.Errorf("%s: %w", err.Error(), ErrHeaderOnBabylonLCFork)
+		}
+
+		// got unexpected error, return it
+		return 0, err
+	}
+
+	return response.Depth, nil
+
 }
 
 // Insert BTC block header using rpc client

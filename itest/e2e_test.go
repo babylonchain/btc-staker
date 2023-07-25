@@ -92,6 +92,9 @@ func defaultStakerConfig(btcdCert []byte, btcdHost string) *stakercfg.Config {
 	defaultConfig.WalletRpcConfig.Pass = "pass"
 	defaultConfig.WalletRpcConfig.DisableTls = true
 
+	// Set it to something low to not slow down tests
+	defaultConfig.StakerConfig.BabylonStallingInterval = 3 * time.Second
+
 	return &defaultConfig
 }
 
