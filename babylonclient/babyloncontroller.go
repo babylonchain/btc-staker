@@ -45,9 +45,8 @@ var (
 
 var (
 	ErrInvalidBabylonDelegation = errors.New("sent invalid babylon delegation")
-
-	ErrHeaderNotKnownToBabylon = errors.New("btc header not known to babylon")
-	ErrHeaderOnBabylonLCFork   = errors.New("btc header is on babylon btc light client fork")
+	ErrHeaderNotKnownToBabylon  = errors.New("btc header not known to babylon")
+	ErrHeaderOnBabylonLCFork    = errors.New("btc header is on babylon btc light client fork")
 )
 
 func newLensClient(ccc *lensclient.ChainClientConfig, kro ...keyring.Option) (*lensclient.ChainClient, error) {
@@ -230,7 +229,7 @@ func (bc *BabylonController) getPubKeyInternal() (*secp256k1.PubKey, error) {
 	case *secp256k1.PubKey:
 		return v, nil
 	default:
-		return nil, fmt.Errorf("Unsupported key type in keyring")
+		return nil, fmt.Errorf("unsupported key type in keyring")
 	}
 }
 

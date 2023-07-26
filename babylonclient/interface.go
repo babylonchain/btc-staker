@@ -100,7 +100,7 @@ func (m *MockBabylonClient) QueryValidators(limit uint64, offset uint64) (*Valid
 }
 
 func (m *MockBabylonClient) QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error) {
-	// return always confimed  depth
+	// return always confirmed depth
 	return uint64(m.ClientParams.ComfirmationTimeBlocks) + 1, nil
 }
 

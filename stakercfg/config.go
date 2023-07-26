@@ -117,7 +117,7 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 }
 
 type StakerConfig struct {
-	BabylonStallingInterval time.Duration `long:"babylonstallinginterval" description:"The interval to for babylon node btc light client to catch up with real chain, before re-sending delegation request"`
+	BabylonStallingInterval time.Duration `long:"babylonstallinginterval" description:"The interval for babylon node btc light client to catch up with real chain, before re-sending delegation request"`
 }
 
 func DefaultStakerConfig() StakerConfig {

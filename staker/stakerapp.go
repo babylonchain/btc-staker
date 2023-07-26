@@ -53,14 +53,14 @@ type confirmationEvent struct {
 	inlusionBlock *wire.MsgBlock
 }
 
-type sendToBabylonRequest struct {
+type sendDelegationRequest struct {
 	txHash                      chainhash.Hash
 	txIndex                     uint32
 	inlusionBlock               *wire.MsgBlock
 	requiredInclusionBlockDepth uint64
 }
 
-type sendToBabylonResponse struct {
+type sendDelegationResponse struct {
 	txHash *chainhash.Hash
 	err    error
 }
@@ -113,19 +113,19 @@ type StakerApp struct {
 	wg        sync.WaitGroup
 	quit      chan struct{}
 
-	babylonClient             cl.BabylonClient
-	wc                        walletcontroller.WalletController
-	notifier                  notifier.ChainNotifier
-	feeEstimator              FeeEstimator
-	network                   *chaincfg.Params
-	config                    *scfg.Config
-	logger                    *logrus.Logger
-	txTracker                 *stakerdb.TrackedTransactionStore
-	stakingRequestChan        chan *stakingRequest
-	confirmationEventChan     chan *confirmationEvent
-	sendToBabylonRequestChan  chan *sendToBabylonRequest
-	sendToBabylonResponseChan chan *sendToBabylonResponse
-	spendTxConfirmationChan   chan *spendTxConfirmationEvent
+	babylonClient              cl.BabylonClient
+	wc                         walletcontroller.WalletController
+	notifier                   notifier.ChainNotifier
+	feeEstimator               FeeEstimator
+	network                    *chaincfg.Params
+	config                     *scfg.Config
+	logger                     *logrus.Logger
+	txTracker                  *stakerdb.TrackedTransactionStore
+	stakingRequestChan         chan *stakingRequest
+	confirmationEventChan      chan *confirmationEvent
+	sendDelegationRequestChan  chan *sendDelegationRequest
+	sendDelegationResponseChan chan *sendDelegationResponse
+	spendTxConfirmationChan    chan *spendTxConfirmationEvent
 }
 
 func NewStakerAppFromConfig(
@@ -206,10 +206,10 @@ func NewStakerAppFromDeps(
 		confirmationEventChan: make(chan *confirmationEvent),
 		// Buffered channels so we do not block receiving confirmations if there is backlog of
 		// requests to send to babylon
-		sendToBabylonRequestChan: make(chan *sendToBabylonRequest, maxNumPendingDelegations),
+		sendDelegationRequestChan: make(chan *sendDelegationRequest, maxNumPendingDelegations),
 
 		// event for when delegation is sent to babylon and included in babylon
-		sendToBabylonResponseChan: make(chan *sendToBabylonResponse),
+		sendDelegationResponseChan: make(chan *sendDelegationResponse),
 
 		// event emitted upon transaction which spends staking transaction is confirmed on BTC
 		spendTxConfirmationChan: make(chan *spendTxConfirmationEvent),
@@ -402,7 +402,7 @@ func (app *StakerApp) getDelegationData(stakerAddress btcutil.Address) (*externa
 	}, nil
 }
 
-func (app *StakerApp) scheduleSendDelegationToBabylonAfter(timeout time.Duration, req *sendToBabylonRequest) {
+func (app *StakerApp) scheduleSendDelegationToBabylonAfter(timeout time.Duration, req *sendDelegationRequest) {
 	select {
 	case <-app.quit:
 		return
@@ -413,7 +413,7 @@ func (app *StakerApp) scheduleSendDelegationToBabylonAfter(timeout time.Duration
 }
 
 // isBabylonBtcLcReady checks if Babylon BTC light client is ready to receive delegation
-func (app *StakerApp) isBabylonBtcLcReady(req *sendToBabylonRequest) (bool, error) {
+func (app *StakerApp) isBabylonBtcLcReady(req *sendDelegationRequest) (bool, error) {
 	blockHash := req.inlusionBlock.BlockHash()
 
 	depth, err := app.babylonClient.QueryHeaderDepth(&blockHash)
@@ -468,11 +468,11 @@ func (app *StakerApp) handleSentToBabylon() {
 	defer app.wg.Done()
 	for {
 		select {
-		case req := <-app.sendToBabylonRequestChan:
+		case req := <-app.sendDelegationRequestChan:
 			babylonReady, err := app.isBabylonBtcLcReady(req)
 
 			if err != nil {
-				app.sendToBabylonResponseChan <- &sendToBabylonResponse{
+				app.sendDelegationResponseChan <- &sendDelegationResponse{
 					txHash: nil,
 					err:    err,
 				}
@@ -500,7 +500,7 @@ func (app *StakerApp) handleSentToBabylon() {
 					"err":           err,
 				}).Error("Error getting delegation data before sending delegation to babylon")
 
-				app.sendToBabylonResponseChan <- &sendToBabylonResponse{
+				app.sendDelegationResponseChan <- &sendDelegationResponse{
 					txHash: nil,
 					err:    fmt.Errorf("error while getting delegation data for tx with hash %s: %w", req.txHash.String(), err),
 				}
@@ -550,7 +550,7 @@ func (app *StakerApp) handleSentToBabylon() {
 					"err":           err,
 				}).Error("Error while sending delegation data to babylon")
 
-				app.sendToBabylonResponseChan <- &sendToBabylonResponse{
+				app.sendDelegationResponseChan <- &sendDelegationResponse{
 					txHash: nil,
 					err:    fmt.Errorf("error while sending delegation to babylon for btc tx with hash %s: %w", req.txHash.String(), err),
 				}
@@ -558,7 +558,7 @@ func (app *StakerApp) handleSentToBabylon() {
 			}
 
 			// All good we have successful delegation
-			app.sendToBabylonResponseChan <- &sendToBabylonResponse{
+			app.sendDelegationResponseChan <- &sendDelegationResponse{
 				txHash: &req.txHash,
 			}
 
@@ -569,9 +569,9 @@ func (app *StakerApp) handleSentToBabylon() {
 }
 
 func (app *StakerApp) sendDelegationWithTxToBabylon(
-	req *sendToBabylonRequest,
+	req *sendDelegationRequest,
 ) {
-	numOfQueuedDelegations := len(app.sendToBabylonRequestChan)
+	numOfQueuedDelegations := len(app.sendDelegationRequestChan)
 
 	app.logger.WithFields(logrus.Fields{
 		"btcTxHash": req.txHash,
@@ -580,7 +580,7 @@ func (app *StakerApp) sendDelegationWithTxToBabylon(
 		"lenQueue":  numOfQueuedDelegations,
 	}).Debug("Queuing delegation to be send to babylon")
 
-	app.sendToBabylonRequestChan <- req
+	app.sendDelegationRequestChan <- req
 }
 
 // main event loop for the staker app
@@ -663,7 +663,7 @@ func (app *StakerApp) handleStaking() {
 				"blockHeight": confEvent.blockHeight,
 			}).Infof("BTC transaction has been confirmed")
 
-			req := &sendToBabylonRequest{
+			req := &sendDelegationRequest{
 				txHash:                      confEvent.txHash,
 				txIndex:                     confEvent.txIndex,
 				inlusionBlock:               confEvent.inlusionBlock,
@@ -672,7 +672,7 @@ func (app *StakerApp) handleStaking() {
 
 			app.sendDelegationWithTxToBabylon(req)
 
-		case sendToBabylonConf := <-app.sendToBabylonResponseChan:
+		case sendToBabylonConf := <-app.sendDelegationResponseChan:
 			if sendToBabylonConf.err != nil {
 				// TODO: For now we just kill the app, in case comms with babylon failed.
 				// Ultimately we probably should:
