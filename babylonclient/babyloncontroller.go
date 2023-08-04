@@ -456,6 +456,11 @@ func (bc *BabylonController) QueryValidators(
 
 	var validators []ValidatorInfo
 	for _, validator := range response.BtcValidators {
+		// TODO: We actually need to use a query for ActiveBTCValidators
+		// instead of checking for the slashing condition
+		if validator.SlashedBabylonHeight > 0 {
+			continue
+		}
 		validatorBtcKey, err := validator.BtcPk.ToBTCPK()
 		if err != nil {
 			return nil, fmt.Errorf("query validators error: %w", err)
