@@ -88,9 +88,9 @@ type Delegation struct {
 
 const (
 	// Internal slashing fee to adjust to in case babylon provide too small fee
-	// Slashing tx is around 113 bytes (depending on output address which we need to chose), with pretty large fee of 25 sat/b
-	// this gives 2825 sats fee. Let round it up to 3000 sats just to be sure.
-	minSlashingFee = btcutil.Amount(3000)
+	// Slashing tx is around 113 bytes (depending on output address which we need to chose), with fee 18vb/b
+	// this gives us 2034 satoshi fee. Lets round it 2000
+	minSlashingFee = btcutil.Amount(2000)
 
 	// maximum number of delegations that can be pending (waiting to be sent to babylon)
 	// at the same time
