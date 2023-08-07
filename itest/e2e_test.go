@@ -11,6 +11,10 @@ import (
 	"testing"
 	"time"
 
+	bbntypes "github.com/babylonchain/babylon/types"
+	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
+	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+
 	staking "github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
@@ -144,14 +148,16 @@ type TestManager struct {
 }
 
 type testStakingData struct {
-	StakerKey        *btcec.PublicKey
-	DelegatarPrivKey *btcec.PrivateKey
-	DelegatorKey     *btcec.PublicKey
-	JuryPrivKey      *btcec.PrivateKey
-	JuryKey          *btcec.PublicKey
-	StakingTime      uint16
-	StakingAmount    int64
-	Script           []byte
+	StakerKey                  *btcec.PublicKey
+	ValidatorBabaylonPrivKey   *secp256k1.PrivKey
+	ValidatorBabaylonPublicKey *secp256k1.PubKey
+	ValidatorBtcPrivKey        *btcec.PrivateKey
+	ValidatorBtcKey            *btcec.PublicKey
+	JuryPrivKey                *btcec.PrivateKey
+	JuryKey                    *btcec.PublicKey
+	StakingTime                uint16
+	StakingAmount              int64
+	Script                     []byte
 }
 
 func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime uint16, stakingAmount int64) *testStakingData {
@@ -171,15 +177,20 @@ func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime ui
 	script, err := stakingData.BuildStakingScript()
 	require.NoError(t, err)
 
+	validatorBabaylonPrivKey := secp256k1.GenPrivKey()
+	validatorBabaylonPubKey := validatorBabaylonPrivKey.PubKey().(*secp256k1.PubKey)
+
 	return &testStakingData{
-		StakerKey:        stakerKey,
-		DelegatarPrivKey: delegatarPrivKey,
-		DelegatorKey:     delegatarPrivKey.PubKey(),
-		JuryPrivKey:      juryPrivKey,
-		JuryKey:          juryPrivKey.PubKey(),
-		StakingTime:      stakingTime,
-		StakingAmount:    stakingAmount,
-		Script:           script,
+		StakerKey:                  stakerKey,
+		ValidatorBabaylonPrivKey:   validatorBabaylonPrivKey,
+		ValidatorBabaylonPublicKey: validatorBabaylonPubKey,
+		ValidatorBtcPrivKey:        delegatarPrivKey,
+		ValidatorBtcKey:            delegatarPrivKey.PubKey(),
+		JuryPrivKey:                juryPrivKey,
+		JuryKey:                    juryPrivKey.PubKey(),
+		StakingTime:                stakingTime,
+		StakingAmount:              stakingAmount,
+		Script:                     script,
 	}
 }
 
@@ -424,12 +435,34 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
+	resp, err := tm.BabylonClient.QueryValidators(100, 0)
+	require.NoError(t, err)
+	// No validators yet
+	require.Len(t, resp.Validators, 0)
+
+	pop, err := btcstypes.NewPoP(testStakingData.ValidatorBabaylonPrivKey, testStakingData.ValidatorBtcPrivKey)
+	require.NoError(t, err)
+
+	btcValKey := bbntypes.NewBIP340PubKeyFromBTCPK(testStakingData.ValidatorBtcKey)
+
+	_, err = tm.BabylonClient.RegisterValidator(
+		testStakingData.ValidatorBabaylonPublicKey,
+		btcValKey,
+		pop,
+	)
+
+	resp, err = tm.BabylonClient.QueryValidators(100, 0)
+	require.NoError(t, err)
+	// No validators yet
+	require.Len(t, resp.Validators, 1)
+
 	txHash, err := tm.Sa.StakeFunds(
 		tm.MinerAddr,
 		btcutil.Amount(testStakingData.StakingAmount),
-		testStakingData.DelegatorKey,
+		testStakingData.ValidatorBtcKey,
 		testStakingData.StakingTime,
 	)
+
 	require.NoError(t, err)
 	allCurrentDelegations, err := tm.Sa.GetAllDelegations()
 	require.NoError(t, err)

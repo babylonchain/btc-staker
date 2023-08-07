@@ -38,6 +38,7 @@ type BabylonClient interface {
 	Params() (*StakingParams, error)
 	Delegate(dg *DelegationData) (*sdk.TxResponse, error)
 	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
+	QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error)
 	QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error)
 }
 
@@ -97,6 +98,16 @@ func (m *MockBabylonClient) QueryValidators(limit uint64, offset uint64) (*Valid
 		Validators: []ValidatorInfo{*m.ActiveValidator},
 		Total:      1,
 	}, nil
+}
+
+func (m *MockBabylonClient) QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error) {
+	if m.ActiveValidator.BtcPk.IsEqual(btcPubKey) {
+		return &ValidatorClientResponse{
+			Validator: *m.ActiveValidator,
+		}, nil
+	} else {
+		return nil, ErrValidatorDoesNotExist
+	}
 }
 
 func (m *MockBabylonClient) QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error) {

@@ -783,6 +783,12 @@ func (app *StakerApp) StakeFunds(
 	default:
 	}
 
+	_, err := app.babylonClient.QueryValidator(validatorPk)
+
+	if err != nil {
+		return nil, fmt.Errorf("error querying validator to stake funds to: %w", err)
+	}
+
 	params, err := app.babylonClient.Params()
 
 	if err != nil {
