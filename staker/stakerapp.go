@@ -87,10 +87,10 @@ type Delegation struct {
 }
 
 const (
-	// Temporary hack to get around the fees and the fact that babylon slashing fee is 1 satoshi
+	// Internal slashing fee to adjust to in case babylon provide too small fee
 	// Slashing tx is around 113 bytes (depending on output address which we need to chose), with pretty large fee of 25 sat/b
 	// this gives 2825 sats fee. Let round it up to 3000 sats just to be sure.
-	minSlashingFeeAdjustment = 3000
+	minSlashingFee = btcutil.Amount(3000)
 
 	// maximum number of delegations that can be pending (waiting to be sent to babylon)
 	// at the same time
@@ -299,6 +299,20 @@ func (app *StakerApp) waitForConfirmation(
 	}
 }
 
+func (app *StakerApp) getSlashingFee(p *cl.StakingParams) btcutil.Amount {
+	feeFromBabylon := p.MinSlashingTxFeeSat
+
+	if feeFromBabylon < minSlashingFee {
+		app.logger.WithFields(logrus.Fields{
+			"babylonSlashingFee":  feeFromBabylon,
+			"internalSlashingFee": minSlashingFee,
+		}).Debug("Slashing fee received from Babylon is too small. Using internal minimum fee")
+		return minSlashingFee
+	}
+
+	return feeFromBabylon
+}
+
 func (app *StakerApp) buildDelegationData(
 	delegationData *externalDelegationData,
 	inclusionBlock *wire.MsgBlock,
@@ -306,17 +320,13 @@ func (app *StakerApp) buildDelegationData(
 	stakingTx *wire.MsgTx,
 	stakingTxScript []byte,
 	stakingOutputIdx uint32,
-	proofOfPossession *stakerdb.ProofOfPossession,
-	minSlashingFee int64) (*cl.DelegationData, error) {
+	proofOfPossession *stakerdb.ProofOfPossession) (*cl.DelegationData, error) {
 
 	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
 		stakingTx,
 		stakingOutputIdx,
 		delegationData.slashingAddress,
-		// use minimum slashing fee
-		// TODO: consider dust rules and the fact that staking amount must cover two fees i.e
-		// staking tx fee and slashing tx fee
-		minSlashingFee,
+		int64(delegationData.slashingFee),
 	)
 
 	if err != nil {
@@ -394,11 +404,13 @@ func (app *StakerApp) getDelegationData(stakerAddress btcutil.Address) (*externa
 		return nil, err
 	}
 
+	slashingFee := app.getSlashingFee(params)
+
 	return &externalDelegationData{
 		stakerPrivKey:   privkey,
 		slashingAddress: params.SlashingAddress,
 		babylonPubKey:   app.babylonClient.GetPubKey(),
-		slashingFee:     params.MinSlashingTxFeeSat,
+		slashingFee:     slashingFee,
 	}, nil
 }
 
@@ -515,7 +527,6 @@ func (app *StakerApp) handleSentToBabylon() {
 				storedTx.TxScript,
 				storedTx.StakingOutputIndex,
 				storedTx.Pop,
-				int64(delegationData.slashingFee)+minSlashingFeeAdjustment,
 			)
 
 			if err != nil {
@@ -778,13 +789,11 @@ func (app *StakerApp) StakeFunds(
 		return nil, err
 	}
 
-	// TODO: consider dust rules and the fact that staking amount must cover two fees.
-	// TODO: Adding 1000 satoshis to cover fees for now as babylon return 1sat currently
-	var minSlashingFee = params.MinSlashingTxFeeSat + minSlashingFeeAdjustment
+	slashingFee := app.getSlashingFee(params)
 
-	if stakingAmount <= minSlashingFee {
+	if stakingAmount <= slashingFee {
 		return nil, fmt.Errorf("staking amount %d is less than minimum slashing fee %d",
-			stakingAmount, params.MinSlashingTxFeeSat)
+			stakingAmount, slashingFee)
 	}
 
 	if uint32(stakingTimeBlocks) < params.FinalizationTimeoutBlocks {
