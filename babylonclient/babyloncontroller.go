@@ -123,6 +123,7 @@ func NewBabylonController(
 type StakingTrackerResponse struct {
 	SlashingAddress btcutil.Address
 	JuryPk          btcec.PublicKey
+	MinSlashinFee   btcutil.Amount
 }
 
 type ValidatorInfo struct {
@@ -187,8 +188,7 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 		FinalizationTimeoutBlocks: uint32(bccParams.CheckpointFinalizationTimeout),
 		SlashingAddress:           stakingTrackerParams.SlashingAddress,
 		JuryPk:                    stakingTrackerParams.JuryPk,
-		// TODO: Currently hardcoded on babylon level.
-		MinSlashingTxFeeSat: 1,
+		MinSlashingTxFeeSat:       stakingTrackerParams.MinSlashinFee,
 	}, nil
 }
 
@@ -415,6 +415,7 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 	return &StakingTrackerResponse{
 		SlashingAddress: slashingAddress,
 		JuryPk:          *juryPk,
+		MinSlashinFee:   btcutil.Amount(response.Params.MinSlashingTxFeeSat),
 	}, nil
 }
 
