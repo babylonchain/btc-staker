@@ -540,7 +540,7 @@ func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*Valida
 	btcPk, err := response.BtcValidator.BtcPk.ToBTCPK()
 
 	if err != nil {
-		return nil, fmt.Errorf("received malfored btc pk in babylon response: %w", err)
+		return nil, fmt.Errorf("received malformed btc pk in babylon response: %w", err)
 	}
 
 	return &ValidatorClientResponse{

@@ -6,6 +6,7 @@ package e2etest
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -439,6 +440,10 @@ func TestSendingStakingTransaction(t *testing.T) {
 	require.NoError(t, err)
 	// No validators yet
 	require.Len(t, resp.Validators, 0)
+	valResp, err := tm.BabylonClient.QueryValidator(testStakingData.ValidatorBtcKey)
+	require.Nil(t, valResp)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, babylonclient.ErrValidatorDoesNotExist))
 
 	pop, err := btcstypes.NewPoP(testStakingData.ValidatorBabaylonPrivKey, testStakingData.ValidatorBtcPrivKey)
 	require.NoError(t, err)
@@ -453,7 +458,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	resp, err = tm.BabylonClient.QueryValidators(100, 0)
 	require.NoError(t, err)
-	// No validators yet
+	// After registration we should have one validator
 	require.Len(t, resp.Validators, 1)
 
 	txHash, err := tm.Sa.StakeFunds(
