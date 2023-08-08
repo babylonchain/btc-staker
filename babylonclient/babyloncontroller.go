@@ -2,6 +2,7 @@ package babylonclient
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v4"
+	"github.com/babylonchain/babylon/types"
 	bbntypes "github.com/babylonchain/babylon/types"
 	bcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
 	btclctypes "github.com/babylonchain/babylon/x/btclightclient/types"
@@ -47,6 +49,8 @@ var (
 	ErrInvalidBabylonDelegation = errors.New("sent invalid babylon delegation")
 	ErrHeaderNotKnownToBabylon  = errors.New("btc header not known to babylon")
 	ErrHeaderOnBabylonLCFork    = errors.New("btc header is on babylon btc light client fork")
+	ErrValidatorDoesNotExist    = errors.New("validator does not exist")
+	ErrValidatorIsSlashed       = errors.New("validator is slashed")
 )
 
 func newLensClient(ccc *lensclient.ChainClientConfig, kro ...keyring.Option) (*lensclient.ChainClient, error) {
@@ -134,6 +138,10 @@ type ValidatorInfo struct {
 type ValidatorsClientResponse struct {
 	Validators []ValidatorInfo
 	Total      uint64
+}
+
+type ValidatorClientResponse struct {
+	Validator ValidatorInfo
 }
 
 // Copied from vigilante. Weirdly, there is only Stop function (no Start function ?)
@@ -482,6 +490,67 @@ func (bc *BabylonController) QueryValidators(
 	}, nil
 }
 
+func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error) {
+	if btcPubKey == nil {
+		return nil, fmt.Errorf("cannot query validator with nil btc public key")
+	}
+
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
+	queryClient := btcstypes.NewQueryClient(clientCtx)
+
+	hexPubKey := hex.EncodeToString(schnorr.SerializePubKey(btcPubKey))
+
+	var response *btcstypes.QueryBTCValidatorResponse
+	if err := retry.Do(func() error {
+		resp, err := queryClient.BTCValidator(
+			ctx,
+			&btcstypes.QueryBTCValidatorRequest{
+				ValBtcPkHex: hexPubKey,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		response = resp
+		return nil
+	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
+		bc.logger.WithFields(logrus.Fields{
+			"attempt":      n + 1,
+			"max_attempts": RtyAttNum,
+			"validator":    hexPubKey,
+			"error":        err,
+		}).Error("Failed to query babylon for the validator")
+	})); err != nil {
+		// translate errors to locally handable ones
+		if strings.Contains(err.Error(), btcstypes.ErrBTCValNotFound.Error()) {
+			return nil, fmt.Errorf("failed to get validator with key: %s: %w", hexPubKey, ErrValidatorDoesNotExist)
+		}
+
+		// got unexpected error, return it as is
+		return nil, err
+	}
+
+	if response.BtcValidator.SlashedBabylonHeight > 0 {
+		return nil, fmt.Errorf("failed to get validator with key: %s: %w", hexPubKey, ErrValidatorIsSlashed)
+	}
+
+	btcPk, err := response.BtcValidator.BtcPk.ToBTCPK()
+
+	if err != nil {
+		return nil, fmt.Errorf("received malformed btc pk in babylon response: %w", err)
+	}
+
+	return &ValidatorClientResponse{
+		Validator: ValidatorInfo{
+			BabylonPk: *response.BtcValidator.BabylonPk,
+			BtcPk:     *btcPk,
+		},
+	}, nil
+}
+
 func (bc *BabylonController) QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error) {
 	ctx, cancel := getQueryContext(bc.cfg.Timeout)
 	defer cancel()
@@ -537,4 +606,23 @@ func (bc *BabylonController) InsertBtcBlockHeaders(headers []*wire.BlockHeader) 
 	}
 
 	return bc.reliablySendMsgs(imsgs, "Failed to send block headers to babylon node")
+}
+
+// RegisterValidator registers a BTC validator via a MsgCreateBTCValidator to Babylon
+// it returns tx hash and error
+func (bc *BabylonController) RegisterValidator(
+	bbnPubKey *secp256k1.PubKey, btcPubKey *types.BIP340PubKey, pop *btcstypes.ProofOfPossession) (*sdk.TxResponse, error) {
+	registerMsg := &btcstypes.MsgCreateBTCValidator{
+		Signer:    bc.getTxSigner(),
+		BabylonPk: bbnPubKey,
+		BtcPk:     btcPubKey,
+		Pop:       pop,
+	}
+
+	res, err := bc.reliablySendMsgs([]sdk.Msg{registerMsg}, "Failed to send validator registration transaction to babylon node")
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }

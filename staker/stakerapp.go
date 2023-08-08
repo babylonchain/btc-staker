@@ -768,6 +768,17 @@ func (app *StakerApp) generatePop(stakerPrivKey *btcec.PrivateKey) (*stakerdb.Pr
 	return pop, nil
 }
 
+func (app *StakerApp) validatorExists(validatorPk *btcec.PublicKey) error {
+	_, err := app.babylonClient.QueryValidator(validatorPk)
+
+	if err != nil {
+		return fmt.Errorf("error checking if validator exists on babylon chain: %w", err)
+	}
+
+	return nil
+
+}
+
 func (app *StakerApp) StakeFunds(
 	stakerAddress btcutil.Address,
 	stakingAmount btcutil.Amount,
@@ -781,6 +792,10 @@ func (app *StakerApp) StakeFunds(
 		return nil, nil
 
 	default:
+	}
+
+	if err := app.validatorExists(validatorPk); err != nil {
+		return nil, err
 	}
 
 	params, err := app.babylonClient.Params()
