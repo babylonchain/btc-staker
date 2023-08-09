@@ -108,6 +108,20 @@ func FuzzStoringTxs(f *testing.F) {
 			require.Equal(t, storedTx.Pop, tx.Pop)
 			require.Equal(t, storedTx.StakerAddress, tx.StakerAddress)
 		}
+
+		allStored, err := s.GetAllStoredTransactions()
+		require.NoError(t, err)
+
+		require.Equal(t, len(generatedStoredTxs), len(allStored))
+
+		// transactions are returned in order of insertion
+		for i, storedTx := range generatedStoredTxs {
+			require.Equal(t, storedTx.BtcTx, allStored[i].BtcTx)
+			require.Equal(t, storedTx.StakingOutputIndex, allStored[i].StakingOutputIndex)
+			require.Equal(t, storedTx.TxScript, allStored[i].TxScript)
+			require.Equal(t, storedTx.Pop, allStored[i].Pop)
+			require.Equal(t, storedTx.StakerAddress, allStored[i].StakerAddress)
+		}
 	})
 }
 
