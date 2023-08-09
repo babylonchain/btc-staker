@@ -2,19 +2,28 @@ package stakerdb
 
 import (
 	"bytes"
+	"encoding/binary"
 
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcwallet/walletdb"
 	pm "google.golang.org/protobuf/proto"
 
 	"github.com/lightningnetwork/lnd/kvdb"
 )
 
 var (
+	// mapping uint64 -> proto.TrackedTransaction
 	transactionBucketName = []byte("transactions")
+
+	// mapping txHash -> uint64
+	transactionIndexName = []byte("transactionIdx")
+
+	// key for next transaction
+	numTxKey = []byte("ntk")
 )
 
 type TrackedTransactionStore struct {
@@ -65,6 +74,11 @@ func (c *TrackedTransactionStore) initBuckets() error {
 		if err != nil {
 			return err
 		}
+
+		_, err = tx.CreateTopLevelBucket(transactionIndexName)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 }
@@ -90,6 +104,78 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 	}, nil
 }
 
+func uint64KeyToBytes(key uint64) []byte {
+	var keyBytes = make([]byte, 8)
+	binary.BigEndian.PutUint64(keyBytes, key)
+	return keyBytes
+}
+
+func nextTxKey(transactionBucket walletdb.ReadBucket) uint64 {
+	numTxBytes := transactionBucket.Get(numTxKey)
+	var currKey uint64
+	if numTxBytes == nil {
+		currKey = 0
+	} else {
+		currKey = binary.BigEndian.Uint64(numTxBytes)
+	}
+
+	return currKey
+}
+
+// getTxByHash retruns transaction and transaction key if transaction with given hash exsits
+func getTxByHash(
+	txHashBytes []byte,
+	txIndexBucket walletdb.ReadBucket,
+	txBucket walletdb.ReadBucket) ([]byte, []byte, error) {
+	txKey := txIndexBucket.Get(txHashBytes)
+
+	if txKey == nil {
+		return nil, nil, ErrTransactionNotFound
+	}
+
+	maybeTx := txBucket.Get(txKey)
+
+	if maybeTx == nil {
+		// if we have index, but do not have transaction, it means something weird happened
+		// and we have corrupted db
+		return nil, nil, ErrCorruptedTransactionsDb
+	}
+
+	return maybeTx, txKey, nil
+}
+
+func saveTrackedTransaction(
+	txIdxBucket walletdb.ReadWriteBucket,
+	txBucket walletdb.ReadWriteBucket,
+	txHashBytes []byte,
+	tx *proto.TrackedTransaction) error {
+
+	marshalled, err := pm.Marshal(tx)
+
+	if err != nil {
+		return err
+	}
+
+	nextTxKey := nextTxKey(txBucket)
+
+	nextTxKeyBytes := uint64KeyToBytes(nextTxKey)
+
+	err = txBucket.Put(nextTxKeyBytes, marshalled)
+
+	if err != nil {
+		return err
+	}
+
+	err = txIdxBucket.Put(txHashBytes, nextTxKeyBytes)
+
+	if err != nil {
+		return err
+	}
+
+	// increment counter for the next transaction
+	return txBucket.Put(numTxKey, uint64KeyToBytes(nextTxKey+1))
+}
+
 func (c *TrackedTransactionStore) AddTransaction(
 	btcTx *wire.MsgTx,
 	stakingOutputIndex uint32,
@@ -99,22 +185,28 @@ func (c *TrackedTransactionStore) AddTransaction(
 ) error {
 	txHash := btcTx.TxHash()
 	txHashBytes := txHash[:]
+	serializedTx, err := utils.SerializeBtcTransaction(btcTx)
+
+	if err != nil {
+		return err
+	}
 
 	return kvdb.Batch(c.db, func(tx kvdb.RwTx) error {
-		transactionsBucket := tx.ReadWriteBucket(transactionBucketName)
-		if transactionsBucket == nil {
+		transactionsBucketIdxBucket := tx.ReadWriteBucket(transactionIndexName)
+
+		if transactionsBucketIdxBucket == nil {
 			return ErrCorruptedTransactionsDb
 		}
 
-		maybeTx := transactionsBucket.Get(txHashBytes)
+		// check index first to avoid duplicates
+		maybeTx := transactionsBucketIdxBucket.Get(txHashBytes)
 		if maybeTx != nil {
 			return ErrDuplicateTransaction
 		}
 
-		serializedTx, err := utils.SerializeBtcTransaction(btcTx)
-
-		if err != nil {
-			return err
+		transactionsBucket := tx.ReadWriteBucket(transactionBucketName)
+		if transactionsBucket == nil {
+			return ErrCorruptedTransactionsDb
 		}
 
 		msg := proto.TrackedTransaction{
@@ -127,13 +219,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 			State:               proto.TransactionState_SENT_TO_BTC,
 		}
 
-		marshalled, err := pm.Marshal(&msg)
-
-		if err != nil {
-			return err
-		}
-
-		return transactionsBucket.Put(txHashBytes, marshalled)
+		return saveTrackedTransaction(transactionsBucketIdxBucket, transactionsBucket, txHashBytes, &msg)
 	})
 }
 
@@ -141,18 +227,25 @@ func (c *TrackedTransactionStore) setTxState(txHash *chainhash.Hash, state proto
 	txHashBytes := txHash.CloneBytes()
 
 	return kvdb.Batch(c.db, func(tx kvdb.RwTx) error {
+		transactionIdxBucket := tx.ReadWriteBucket(transactionIndexName)
+
+		if transactionIdxBucket == nil {
+			return ErrCorruptedTransactionsDb
+		}
+
 		transactionsBucket := tx.ReadWriteBucket(transactionBucketName)
 		if transactionsBucket == nil {
 			return ErrCorruptedTransactionsDb
 		}
 
-		maybeTx := transactionsBucket.Get(txHashBytes)
-		if maybeTx == nil {
-			return ErrTransactionNotFound
+		maybeTx, txKey, err := getTxByHash(txHashBytes, transactionIdxBucket, transactionsBucket)
+
+		if err != nil {
+			return err
 		}
 
 		var storedTx proto.TrackedTransaction
-		err := pm.Unmarshal(maybeTx, &storedTx)
+		err = pm.Unmarshal(maybeTx, &storedTx)
 		if err != nil {
 			return ErrCorruptedTransactionsDb
 		}
@@ -165,7 +258,7 @@ func (c *TrackedTransactionStore) setTxState(txHash *chainhash.Hash, state proto
 			return err
 		}
 
-		return transactionsBucket.Put(txHashBytes, marshalled)
+		return transactionsBucket.Put(txKey, marshalled)
 	})
 }
 
@@ -183,20 +276,28 @@ func (c *TrackedTransactionStore) SetTxSpentOnBtc(txHash *chainhash.Hash) error 
 
 func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*StoredTransaction, error) {
 	var storedTx *StoredTransaction
+	txHashBytes := txHash.CloneBytes()
+
 	err := c.db.View(func(tx kvdb.RTx) error {
+		transactionIdxBucket := tx.ReadBucket(transactionIndexName)
+
+		if transactionIdxBucket == nil {
+			return ErrCorruptedTransactionsDb
+		}
+
 		transactionsBucket := tx.ReadBucket(transactionBucketName)
 		if transactionsBucket == nil {
 			return ErrCorruptedTransactionsDb
 		}
 
-		maybeTx := transactionsBucket.Get(txHash.CloneBytes())
+		maybeTx, _, err := getTxByHash(txHashBytes, transactionIdxBucket, transactionsBucket)
 
-		if maybeTx == nil {
-			return ErrTransactionNotFound
+		if err != nil {
+			return err
 		}
 
 		var storedTxProto proto.TrackedTransaction
-		err := pm.Unmarshal(maybeTx, &storedTxProto)
+		err = pm.Unmarshal(maybeTx, &storedTxProto)
 
 		if err != nil {
 			return ErrCorruptedTransactionsDb
@@ -228,6 +329,11 @@ func (c *TrackedTransactionStore) GetAllStoredTransactions() ([]*StoredTransacti
 		}
 
 		return transactionsBucket.ForEach(func(k, v []byte) error {
+			if bytes.Equal(k, numTxKey) {
+				// skip numTxKey as this is not valid transaction
+				return nil
+			}
+
 			protoTx := proto.TrackedTransaction{}
 
 			err := pm.Unmarshal(v, &protoTx)
