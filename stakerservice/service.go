@@ -141,14 +141,17 @@ func (s *StakerService) spendStakingTx(_ *rpctypes.Context,
 		return nil, err
 	}
 
-	spendTxHash, _, err := s.staker.SpendStakingOutput(txHash)
+	spendTxHash, value, err := s.staker.SpendStakingOutput(txHash)
 
 	if err != nil {
 		return nil, err
 	}
 
+	txValue := strconv.FormatInt(int64(*value), 10)
+
 	return &SpendTxDetails{
-		TxHash: spendTxHash.String(),
+		TxHash:  spendTxHash.String(),
+		TxValue: txValue,
 	}, nil
 }
 

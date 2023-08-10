@@ -101,3 +101,29 @@ func (c *StakerServiceJsonRpcClient) ListStakingTransactions(ctx context.Context
 	}
 	return result, nil
 }
+
+func (c *StakerServiceJsonRpcClient) StakingDetails(ctx context.Context, txHash string) (*service.StakingDetails, error) {
+	result := new(service.StakingDetails)
+
+	params := make(map[string]interface{})
+	params["stakingTxHash"] = txHash
+
+	_, err := c.client.Call(ctx, "staking_details", params, result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (c *StakerServiceJsonRpcClient) SpendStakingTransaction(ctx context.Context, txHash string) (*service.SpendTxDetails, error) {
+	result := new(service.SpendTxDetails)
+
+	params := make(map[string]interface{})
+	params["stakingTxHash"] = txHash
+
+	_, err := c.client.Call(ctx, "spend_staking_tx", params, result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}

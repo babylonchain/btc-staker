@@ -22,7 +22,8 @@ type OutputsResponse struct {
 	Outputs []OutputDetail `json:"outputs"`
 }
 type SpendTxDetails struct {
-	TxHash string `json:"txHash"`
+	TxHash  string `json:"txHash"`
+	TxValue string `json:"txValue"`
 }
 
 type ValidatorInfoResponse struct {
