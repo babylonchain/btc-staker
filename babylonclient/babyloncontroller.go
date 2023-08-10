@@ -192,7 +192,7 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 	}
 
 	return &StakingParams{
-		ComfirmationTimeBlocks:    uint32(bccParams.BtcConfirmationDepth),
+		ConfirmationTimeBlocks:    uint32(bccParams.BtcConfirmationDepth),
 		FinalizationTimeoutBlocks: uint32(bccParams.CheckpointFinalizationTimeout),
 		SlashingAddress:           stakingTrackerParams.SlashingAddress,
 		JuryPk:                    stakingTrackerParams.JuryPk,
