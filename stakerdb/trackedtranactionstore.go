@@ -404,6 +404,8 @@ func (c *TrackedTransactionStore) QueryStoredTransactions(q StoredTransactionQue
 				return false, err
 			}
 
+			// TODO: Add filtering by state ? (e.g. only confirmed transactions)
+
 			resp.Transactions = append(resp.Transactions, *txFromDb)
 			return true, nil
 		}

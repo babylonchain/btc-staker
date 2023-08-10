@@ -914,6 +914,20 @@ func (app *StakerApp) GetAllDelegations() ([]*Delegation, error) {
 	return delegations, nil
 }
 
+func (app *StakerApp) StoredTransactions(limit, offset uint64) (*stakerdb.StoredTransactionQueryResult, error) {
+	query := stakerdb.StoredTransactionQuery{
+		IndexOffset:        offset,
+		NumMaxTransactions: offset,
+		Reversed:           false,
+	}
+	resp, err := app.txTracker.QueryStoredTransactions(query)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 func (app *StakerApp) GetStoredTransaction(txHash *chainhash.Hash) (*stakerdb.StoredTransaction, error) {
 	return app.txTracker.GetTransaction(txHash)
 }

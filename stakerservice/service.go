@@ -126,6 +126,7 @@ func (s *StakerService) stakingDetails(_ *rpctypes.Context,
 	}
 
 	return &StakingDetails{
+		StakingTxHash: storedTx.BtcTx.TxHash().String(),
 		StakerAddress: storedTx.StakerAddress,
 		StakingScript: hex.EncodeToString(storedTx.TxScript),
 		StakingState:  storedTx.State.String(),
@@ -234,14 +235,43 @@ func (s *StakerService) validators(_ *rpctypes.Context, offset, limit *int) (*Va
 	}, nil
 }
 
+func (s *StakerService) listStakingTransactions(_ *rpctypes.Context, offset, limit *int) (*ListStakingTransactionsResponse, error) {
+	pageParams := getPageParams(offset, limit)
+
+	txResult, err := s.staker.StoredTransactions(pageParams.Limit, pageParams.Offset)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var stakingDetails []StakingDetails
+
+	for _, tx := range txResult.Transactions {
+		stakingDetails = append(stakingDetails, StakingDetails{
+			StakingTxHash: tx.BtcTx.TxHash().String(),
+			StakerAddress: tx.StakerAddress,
+			StakingScript: hex.EncodeToString(tx.TxScript),
+			StakingState:  tx.State.String(),
+		})
+	}
+
+	totalCount := strconv.FormatUint(txResult.Total, 10)
+
+	return &ListStakingTransactionsResponse{
+		Transactions:          stakingDetails,
+		TotalTransactionCount: totalCount,
+	}, nil
+}
+
 func (s *StakerService) GetRoutes() RoutesMap {
 	return RoutesMap{
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
 		// staking API
-		"stake":            rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
-		"staking_details":  rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
-		"spend_staking_tx": rpc.NewRPCFunc(s.spendStakingTx, "stakingTxHash"),
+		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
+		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
+		"spend_staking_tx":          rpc.NewRPCFunc(s.spendStakingTx, "stakingTxHash"),
+		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),

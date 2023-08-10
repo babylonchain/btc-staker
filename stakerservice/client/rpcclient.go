@@ -81,3 +81,23 @@ func (c *StakerServiceJsonRpcClient) Stake(ctx context.Context,
 	}
 	return result, nil
 }
+
+func (c *StakerServiceJsonRpcClient) ListStakingTransactions(ctx context.Context, offset *int, limit *int) (*service.ListStakingTransactionsResponse, error) {
+	result := new(service.ListStakingTransactionsResponse)
+
+	params := make(map[string]interface{})
+
+	if limit != nil {
+		params["limit"] = limit
+	}
+
+	if offset != nil {
+		params["offset"] = offset
+	}
+
+	_, err := c.client.Call(ctx, "list_staking_transactions", params, result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
