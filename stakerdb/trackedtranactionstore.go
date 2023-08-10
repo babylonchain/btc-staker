@@ -3,6 +3,7 @@ package stakerdb
 import (
 	"bytes"
 	"encoding/binary"
+	"math"
 
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/utils"
@@ -54,6 +55,27 @@ type StoredTransaction struct {
 	// which requires knowing the network we are on
 	StakerAddress string
 	State         proto.TransactionState
+}
+
+type StoredTransactionQuery struct {
+	IndexOffset uint64
+
+	NumMaxTransactions uint64
+
+	Reversed bool
+}
+
+func DefaultStoredTransactionQuery() StoredTransactionQuery {
+	return StoredTransactionQuery{
+		IndexOffset:        0,
+		NumMaxTransactions: 50,
+		Reversed:           false,
+	}
+}
+
+type StoredTransactionQueryResult struct {
+	Transactions []StoredTransaction
+	Total        uint64
 }
 
 // NewTrackedTransactionStore returns a new store backed by db
@@ -110,16 +132,23 @@ func uint64KeyToBytes(key uint64) []byte {
 	return keyBytes
 }
 
-func nextTxKey(transactionBucket walletdb.ReadBucket) uint64 {
-	numTxBytes := transactionBucket.Get(numTxKey)
+func nextTxKey(txIdxBucket walletdb.ReadBucket) uint64 {
+	numTxBytes := txIdxBucket.Get(numTxKey)
 	var currKey uint64
 	if numTxBytes == nil {
-		currKey = 0
+		currKey = 1
 	} else {
 		currKey = binary.BigEndian.Uint64(numTxBytes)
 	}
 
 	return currKey
+}
+
+func getNumTx(txIdxBucket walletdb.ReadBucket) uint64 {
+	// we are starting indexing transactions from 1, and nextTxKey always return next key
+	// which should be used when indexing transaction, so to get number of transactions
+	// we need to subtract 1
+	return nextTxKey(txIdxBucket) - 1
 }
 
 // getTxByHash retruns transaction and transaction key if transaction with given hash exsits
@@ -156,7 +185,7 @@ func saveTrackedTransaction(
 		return err
 	}
 
-	nextTxKey := nextTxKey(txBucket)
+	nextTxKey := nextTxKey(txIdxBucket)
 
 	nextTxKeyBytes := uint64KeyToBytes(nextTxKey)
 
@@ -173,7 +202,7 @@ func saveTrackedTransaction(
 	}
 
 	// increment counter for the next transaction
-	return txBucket.Put(numTxKey, uint64KeyToBytes(nextTxKey+1))
+	return txIdxBucket.Put(numTxKey, uint64KeyToBytes(nextTxKey+1))
 }
 
 func (c *TrackedTransactionStore) AddTransaction(
@@ -320,41 +349,86 @@ func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*Store
 	return storedTx, nil
 }
 
-func (c *TrackedTransactionStore) GetAllStoredTransactions() ([]*StoredTransaction, error) {
-	var storedTx []*StoredTransaction
+func (c *TrackedTransactionStore) GetAllStoredTransactions() ([]StoredTransaction, error) {
+	q := DefaultStoredTransactionQuery()
+	// MaxUint64 indicates we will scan over all transactions
+	q.NumMaxTransactions = math.MaxUint64
+
+	resp, err := c.QueryStoredTransactions(q)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Transactions, nil
+}
+
+func (c *TrackedTransactionStore) QueryStoredTransactions(q StoredTransactionQuery) (StoredTransactionQueryResult, error) {
+	var resp StoredTransactionQueryResult
+
 	err := c.db.View(func(tx kvdb.RTx) error {
 		transactionsBucket := tx.ReadBucket(transactionBucketName)
 		if transactionsBucket == nil {
 			return ErrCorruptedTransactionsDb
 		}
 
-		return transactionsBucket.ForEach(func(k, v []byte) error {
-			if bytes.Equal(k, numTxKey) {
-				// skip numTxKey as this is not valid transaction
-				return nil
-			}
+		transactionIdxBucket := tx.ReadBucket(transactionIndexName)
 
+		if transactionIdxBucket == nil {
+			return ErrCorruptedTransactionsDb
+		}
+
+		numTransactions := getNumTx(transactionIdxBucket)
+
+		if numTransactions == 0 {
+			return nil
+		}
+
+		resp.Total = numTransactions
+
+		paginator := newPaginator(
+			transactionsBucket.ReadCursor(), q.Reversed, q.IndexOffset,
+			q.NumMaxTransactions,
+		)
+
+		accumulateTransactions := func(key, transaction []byte) (bool, error) {
 			protoTx := proto.TrackedTransaction{}
 
-			err := pm.Unmarshal(v, &protoTx)
+			err := pm.Unmarshal(transaction, &protoTx)
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			txFromDb, err := protoTxToStoredTransaction(&protoTx)
 
 			if err != nil {
-				return err
+				return false, err
 			}
 
-			storedTx = append(storedTx, txFromDb)
-			return nil
-		})
-	}, func() {})
+			resp.Transactions = append(resp.Transactions, *txFromDb)
+			return true, nil
+		}
+
+		if err := paginator.query(accumulateTransactions); err != nil {
+			return err
+		}
+
+		if q.Reversed {
+			numTx := len(resp.Transactions)
+			for i := 0; i < numTx/2; i++ {
+				reverse := numTx - i - 1
+				resp.Transactions[i], resp.Transactions[reverse] =
+					resp.Transactions[reverse], resp.Transactions[i]
+			}
+		}
+
+		return nil
+	}, func() {
+		resp = StoredTransactionQueryResult{}
+	})
 
 	if err != nil {
-		return nil, err
+		return resp, err
 	}
 
-	return storedTx, nil
+	return resp, nil
 }

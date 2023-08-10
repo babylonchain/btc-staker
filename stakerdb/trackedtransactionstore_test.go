@@ -83,7 +83,8 @@ func FuzzStoringTxs(f *testing.F) {
 	f.Fuzz(func(t *testing.T, seed int64) {
 		r := rand.New(rand.NewSource(seed))
 		s := MakeTestStore(t)
-		numTx := r.Intn(30) + 1
+		maxCreatedTx := 30
+		numTx := r.Intn(maxCreatedTx) + 1
 		generatedStoredTxs := genNStoredTransactions(t, r, numTx)
 		for _, storedTx := range generatedStoredTxs {
 			address, err := btcutil.DecodeAddress(storedTx.StakerAddress, &chaincfg.MainNetParams)
@@ -109,18 +110,19 @@ func FuzzStoringTxs(f *testing.F) {
 			require.Equal(t, storedTx.StakerAddress, tx.StakerAddress)
 		}
 
-		allStored, err := s.GetAllStoredTransactions()
+		storedResult, err := s.QueryStoredTransactions(stakerdb.DefaultStoredTransactionQuery())
 		require.NoError(t, err)
 
-		require.Equal(t, len(generatedStoredTxs), len(allStored))
+		require.Equal(t, len(generatedStoredTxs), len(storedResult.Transactions))
+		require.Equal(t, len(generatedStoredTxs), int(storedResult.Total))
 
 		// transactions are returned in order of insertion
 		for i, storedTx := range generatedStoredTxs {
-			require.Equal(t, storedTx.BtcTx, allStored[i].BtcTx)
-			require.Equal(t, storedTx.StakingOutputIndex, allStored[i].StakingOutputIndex)
-			require.Equal(t, storedTx.TxScript, allStored[i].TxScript)
-			require.Equal(t, storedTx.Pop, allStored[i].Pop)
-			require.Equal(t, storedTx.StakerAddress, allStored[i].StakerAddress)
+			require.Equal(t, storedTx.BtcTx, storedResult.Transactions[i].BtcTx)
+			require.Equal(t, storedTx.StakingOutputIndex, storedResult.Transactions[i].StakingOutputIndex)
+			require.Equal(t, storedTx.TxScript, storedResult.Transactions[i].TxScript)
+			require.Equal(t, storedTx.Pop, storedResult.Transactions[i].Pop)
+			require.Equal(t, storedTx.StakerAddress, storedResult.Transactions[i].StakerAddress)
 		}
 	})
 }
@@ -167,4 +169,66 @@ func TestStateTransitions(t *testing.T) {
 	storedTx, err = s.GetTransaction(&txHash)
 	require.NoError(t, err)
 	require.Equal(t, proto.TransactionState_SPENT_ON_BTC, storedTx.State)
+}
+
+func TestPaginator(t *testing.T) {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	s := MakeTestStore(t)
+	numTx := 45
+	batchSize := 20
+
+	generatedStoredTxs := genNStoredTransactions(t, r, numTx)
+	for _, storedTx := range generatedStoredTxs {
+		address, err := btcutil.DecodeAddress(storedTx.StakerAddress, &chaincfg.MainNetParams)
+		require.NoError(t, err)
+		err = s.AddTransaction(
+			storedTx.BtcTx,
+			storedTx.StakingOutputIndex,
+			storedTx.TxScript,
+			storedTx.Pop,
+			address,
+		)
+		require.NoError(t, err)
+	}
+
+	query := stakerdb.DefaultStoredTransactionQuery()
+	query.IndexOffset = 0
+	query.NumMaxTransactions = uint64(batchSize)
+	storedResult1, err := s.QueryStoredTransactions(query)
+
+	require.NoError(t, err)
+	require.Equal(t, batchSize, len(storedResult1.Transactions))
+	require.Equal(t, numTx, int(storedResult1.Total))
+
+	query = stakerdb.DefaultStoredTransactionQuery()
+	query.IndexOffset = uint64(batchSize)
+	query.NumMaxTransactions = uint64(batchSize)
+	storedResult2, err := s.QueryStoredTransactions(query)
+
+	require.NoError(t, err)
+	require.Equal(t, batchSize, len(storedResult2.Transactions))
+	require.Equal(t, numTx, int(storedResult2.Total))
+
+	query = stakerdb.DefaultStoredTransactionQuery()
+	query.IndexOffset = 2 * uint64(batchSize)
+	query.NumMaxTransactions = uint64(batchSize)
+	storedResult3, err := s.QueryStoredTransactions(query)
+	require.NoError(t, err)
+	// 2 batches of 20, 1 batch of 5
+	require.Equal(t, 5, len(storedResult3.Transactions))
+	require.Equal(t, numTx, int(storedResult3.Total))
+
+	var allTransactionsFromDb []stakerdb.StoredTransaction
+	allTransactionsFromDb = append(allTransactionsFromDb, storedResult1.Transactions...)
+	allTransactionsFromDb = append(allTransactionsFromDb, storedResult2.Transactions...)
+	allTransactionsFromDb = append(allTransactionsFromDb, storedResult3.Transactions...)
+
+	require.Equal(t, len(generatedStoredTxs), len(allTransactionsFromDb))
+	for i, storedTx := range generatedStoredTxs {
+		require.Equal(t, storedTx.BtcTx, allTransactionsFromDb[i].BtcTx)
+		require.Equal(t, storedTx.StakingOutputIndex, allTransactionsFromDb[i].StakingOutputIndex)
+		require.Equal(t, storedTx.TxScript, allTransactionsFromDb[i].TxScript)
+		require.Equal(t, storedTx.Pop, allTransactionsFromDb[i].Pop)
+		require.Equal(t, storedTx.StakerAddress, allTransactionsFromDb[i].StakerAddress)
+	}
 }
