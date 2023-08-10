@@ -120,9 +120,9 @@ func (p paginator) cursorStart() ([]byte, []byte) {
 func (p paginator) query(fetchAndAppend func(k, v []byte) (bool, error)) error {
 	indexKey, indexValue := p.cursorStart()
 
-	var totalItems int
+	var totalItems uint64
 	for ; indexKey != nil; indexKey, indexValue = p.nextKey() {
-		if uint64(totalItems) >= p.totalItems {
+		if totalItems >= p.totalItems {
 			break
 		}
 
