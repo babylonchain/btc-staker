@@ -20,14 +20,15 @@ var daemonCommands = []cli.Command{
 			listOutputsCmd,
 			babylonValidatorsCmd,
 			stakeCmd,
+			listStakingTransactionsCmd,
 		},
 	},
 }
 
 const (
 	stakingDaemonAddressFlag = "daemon-address"
-	validatorsOffsetFlag     = "offset"
-	validatorsLimitFlag      = "limit"
+	offsetFlag               = "offset"
+	limitFlag                = "limit"
 	validatorPkFlag          = "validator-pk"
 	stakingTimeBlocksFlag    = "staking-time"
 )
@@ -75,12 +76,12 @@ var babylonValidatorsCmd = cli.Command{
 			Value: defaultStakingDaemonAddress,
 		},
 		cli.IntFlag{
-			Name:  validatorsOffsetFlag,
+			Name:  offsetFlag,
 			Usage: "offset of the first validator to return",
 			Value: 0,
 		},
 		cli.IntFlag{
-			Name:  validatorsLimitFlag,
+			Name:  limitFlag,
 			Usage: "maximum number of validators to return",
 			Value: 100,
 		},
@@ -120,6 +121,30 @@ var stakeCmd = cli.Command{
 		},
 	},
 	Action: stake,
+}
+
+var listStakingTransactionsCmd = cli.Command{
+	Name:      "list-staking-transactions",
+	ShortName: "lst",
+	Usage:     "List current staking transactions in db",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+		cli.IntFlag{
+			Name:  offsetFlag,
+			Usage: "offset of the first transactions to return",
+			Value: 0,
+		},
+		cli.IntFlag{
+			Name:  limitFlag,
+			Usage: "maximum number of transactions to return",
+			Value: 100,
+		},
+	},
+	Action: listStakingTransactions,
 }
 
 func checkHealth(ctx *cli.Context) error {
@@ -171,13 +196,13 @@ func babylonValidators(ctx *cli.Context) error {
 
 	sctx := context.Background()
 
-	offset := ctx.Int(validatorsOffsetFlag)
+	offset := ctx.Int(offsetFlag)
 
 	if offset < 0 {
 		return cli.NewExitError("Offset must be non-negative", 1)
 	}
 
-	limit := ctx.Int(validatorsLimitFlag)
+	limit := ctx.Int(limitFlag)
 
 	if limit < 0 {
 		return cli.NewExitError("Limit must be non-negative", 1)
@@ -214,6 +239,38 @@ func stake(ctx *cli.Context) error {
 	}
 
 	printRespJSON(results)
+
+	return nil
+}
+
+func listStakingTransactions(ctx *cli.Context) error {
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+
+	offset := ctx.Int(offsetFlag)
+
+	if offset < 0 {
+		return cli.NewExitError("Offset must be non-negative", 1)
+	}
+
+	limit := ctx.Int(limitFlag)
+
+	if limit < 0 {
+		return cli.NewExitError("Limit must be non-negative", 1)
+	}
+
+	transactions, err := client.ListStakingTransactions(sctx, &offset, &limit)
+
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(transactions)
 
 	return nil
 }
