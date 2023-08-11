@@ -12,7 +12,7 @@ import (
 
 type StakingParams struct {
 	// K-deep
-	ComfirmationTimeBlocks uint32
+	ConfirmationTimeBlocks uint32
 	// W-deep
 	FinalizationTimeoutBlocks uint32
 
@@ -112,7 +112,7 @@ func (m *MockBabylonClient) QueryValidator(btcPubKey *btcec.PublicKey) (*Validat
 
 func (m *MockBabylonClient) QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error) {
 	// return always confirmed depth
-	return uint64(m.ClientParams.ComfirmationTimeBlocks) + 1, nil
+	return uint64(m.ClientParams.ConfirmationTimeBlocks) + 1, nil
 }
 
 func GetMockClient() *MockBabylonClient {
@@ -142,7 +142,7 @@ func GetMockClient() *MockBabylonClient {
 
 	return &MockBabylonClient{
 		ClientParams: &StakingParams{
-			ComfirmationTimeBlocks:    2,
+			ConfirmationTimeBlocks:    2,
 			FinalizationTimeoutBlocks: 5,
 			MinSlashingTxFeeSat:       btcutil.Amount(1000),
 			JuryPk:                    *juryPk.PubKey(),

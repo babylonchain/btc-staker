@@ -872,7 +872,7 @@ func (app *StakerApp) StakeFunds(
 		stakingOutputIdx:        0,
 		stakingOutputPkScript:   output.PkScript,
 		stakingTxScript:         script,
-		requiredDepthOnBtcChain: params.ComfirmationTimeBlocks,
+		requiredDepthOnBtcChain: params.ConfirmationTimeBlocks,
 		pop:                     pop,
 		errChan:                 make(chan error),
 		successChan:             make(chan *chainhash.Hash),
