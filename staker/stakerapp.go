@@ -917,7 +917,7 @@ func (app *StakerApp) GetAllDelegations() ([]*Delegation, error) {
 func (app *StakerApp) StoredTransactions(limit, offset uint64) (*stakerdb.StoredTransactionQueryResult, error) {
 	query := stakerdb.StoredTransactionQuery{
 		IndexOffset:        offset,
-		NumMaxTransactions: offset,
+		NumMaxTransactions: limit,
 		Reversed:           false,
 	}
 	resp, err := app.txTracker.QueryStoredTransactions(query)

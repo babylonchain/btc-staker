@@ -609,4 +609,12 @@ func TestSendingStakingTransaction(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SPENT_ON_BTC)
 
 	require.True(t, tm.walletUnspentsOutputsContainsOutput(t, tm.MinerAddr, *spendTxValue))
+
+	offset := 0
+	limit := 10
+	transactionsResult, err := tm.StakerClient.ListStakingTransactions(context.Background(), &offset, &limit)
+	require.NoError(t, err)
+	require.Len(t, transactionsResult.Transactions, 1)
+	require.Equal(t, transactionsResult.TotalTransactionCount, "1")
+	require.Equal(t, transactionsResult.Transactions[0].StakingTxHash, txHash.String())
 }
