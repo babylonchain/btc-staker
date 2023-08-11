@@ -3,14 +3,14 @@ package stakerservice
 type ResultHealth struct{}
 
 type ResultStake struct {
-	TxHash string `json:"txHash"`
+	TxHash string `json:"tx_hash"`
 }
 
 type StakingDetails struct {
-	StakingTxHash string `json:"stakingTxHash"`
-	StakerAddress string `json:"stakerAddress"`
-	StakingScript string `json:"stakingScript"`
-	StakingState  string `json:"stakingState"`
+	StakingTxHash string `json:"staking_tx_hash"`
+	StakerAddress string `json:"staker_address"`
+	StakingScript string `json:"staking_script"`
+	StakingState  string `json:"staking_state"`
 }
 
 type OutputDetail struct {
@@ -22,23 +22,23 @@ type OutputsResponse struct {
 	Outputs []OutputDetail `json:"outputs"`
 }
 type SpendTxDetails struct {
-	TxHash  string `json:"txHash"`
-	TxValue string `json:"txValue"`
+	TxHash  string `json:"tx_hash"`
+	TxValue string `json:"tx_value"`
 }
 
 type ValidatorInfoResponse struct {
 	// Hex encoded Babylon public secp256k1 key in compressed format
-	BabylonPublicKey string `json:"babylonPublicKey"`
+	BabylonPublicKey string `json:"babylon_public_Key"`
 	// Hex encoded Bitcoin public secp256k1 key in BIP340 format
-	BtcPublicKey string `json:"btcPublicKey"`
+	BtcPublicKey string `json:"bitcoin_public_Key"`
 }
 
 type ValidatorsResponse struct {
 	Validators          []ValidatorInfoResponse `json:"validators"`
-	TotalValidatorCount string                  `json:"totalValidatorCount"`
+	TotalValidatorCount string                  `json:"total_validator_count"`
 }
 
 type ListStakingTransactionsResponse struct {
 	Transactions          []StakingDetails `json:"transactions"`
-	TotalTransactionCount string           `json:"totalTransactionCount"`
+	TotalTransactionCount string           `json:"total_transaction_count"`
 }
