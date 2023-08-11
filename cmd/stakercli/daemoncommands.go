@@ -20,17 +20,20 @@ var daemonCommands = []cli.Command{
 			listOutputsCmd,
 			babylonValidatorsCmd,
 			stakeCmd,
+			unstakeCmd,
+			stakingDetailsCmd,
 			listStakingTransactionsCmd,
 		},
 	},
 }
 
 const (
-	stakingDaemonAddressFlag = "daemon-address"
-	offsetFlag               = "offset"
-	limitFlag                = "limit"
-	validatorPkFlag          = "validator-pk"
-	stakingTimeBlocksFlag    = "staking-time"
+	stakingDaemonAddressFlag   = "daemon-address"
+	offsetFlag                 = "offset"
+	limitFlag                  = "limit"
+	validatorPkFlag            = "validator-pk"
+	stakingTimeBlocksFlag      = "staking-time"
+	stakingTransactionHashFlag = "staking-transaction-hash"
 )
 
 var (
@@ -121,6 +124,44 @@ var stakeCmd = cli.Command{
 		},
 	},
 	Action: stake,
+}
+
+var unstakeCmd = cli.Command{
+	Name:      "unstake",
+	ShortName: "ust",
+	Usage:     "Spends staking transaction and sends funds back to staker",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+		cli.StringFlag{
+			Name:     stakingTransactionHashFlag,
+			Usage:    "Hash of original staking transaction in bitcoin hex format",
+			Required: true,
+		},
+	},
+	Action: unstake,
+}
+
+var stakingDetailsCmd = cli.Command{
+	Name:      "staking-details",
+	ShortName: "sds",
+	Usage:     "Displays details of staking transaction with given hash",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+		cli.StringFlag{
+			Name:     stakingTransactionHashFlag,
+			Usage:    "Hash of original staking transaction in bitcoin hex format",
+			Required: true,
+		},
+	},
+	Action: stakingDetails,
 }
 
 var listStakingTransactionsCmd = cli.Command{
@@ -239,6 +280,48 @@ func stake(ctx *cli.Context) error {
 	}
 
 	printRespJSON(results)
+
+	return nil
+}
+
+func unstake(ctx *cli.Context) error {
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+
+	stakingTransactionHash := ctx.String(stakingTransactionHashFlag)
+
+	result, err := client.SpendStakingTransaction(sctx, stakingTransactionHash)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(result)
+
+	return nil
+}
+
+func stakingDetails(ctx *cli.Context) error {
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+
+	stakingTransactionHash := ctx.String(stakingTransactionHashFlag)
+
+	result, err := client.StakingDetails(sctx, stakingTransactionHash)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(result)
 
 	return nil
 }
