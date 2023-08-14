@@ -148,7 +148,7 @@ var unstakeCmd = cli.Command{
 var stakingDetailsCmd = cli.Command{
 	Name:      "staking-details",
 	ShortName: "sds",
-	Usage:     "Displays details of staking transaction with given hash",
+	Usage:     "Displays details of staking transaction with given hash. This can only be done after timelock of staking transaction expires.",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakingDaemonAddressFlag,
