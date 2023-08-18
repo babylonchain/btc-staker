@@ -5,6 +5,15 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	notifier "github.com/lightningnetwork/lnd/chainntnfs"
+)
+
+type TxStatus int
+
+const (
+	TxNotFound TxStatus = iota
+	TxInMemPool
+	TxInChain
 )
 
 type WalletController interface {
@@ -29,4 +38,5 @@ type WalletController interface {
 	) (*wire.MsgTx, error)
 	SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) (*chainhash.Hash, error)
 	ListOutputs(onlySpendable bool) ([]Utxo, error)
+	TxDetails(txHash *chainhash.Hash, pkScript []byte) (*notifier.TxConfirmation, TxStatus, error)
 }

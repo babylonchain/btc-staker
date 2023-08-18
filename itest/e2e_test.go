@@ -5,6 +5,7 @@ package e2etest
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -40,6 +41,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/integration/rpctest"
 	"github.com/btcsuite/btcd/rpcclient"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/signal"
@@ -540,9 +542,24 @@ func (tm *TestManager) spendStakingTxWithHash(t *testing.T, stakingTxHash *chain
 		return len(txFromMempool) == 1
 	}, eventuallyWaitTimeOut, eventuallyPollTime)
 
+	sendTx := retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{spendTxHash})[0]
+
+	// Tx is in mempool
+	txDetails, txState, err := tm.Sa.Wallet().TxDetails(spendTxHash, sendTx.MsgTx().TxOut[0].PkScript)
+	require.NoError(t, err)
+	require.Nil(t, txDetails)
+	require.Equal(t, txState, walletcontroller.TxInMemPool)
+
 	// Block with spend is mined
 	mBlock1 := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{spendTxHash}))
 	require.Equal(t, 2, len(mBlock1.Transactions))
+
+	//Tx is in chain
+	txDetails, txState, err = tm.Sa.Wallet().TxDetails(spendTxHash, sendTx.MsgTx().TxOut[0].PkScript)
+	require.NoError(t, err)
+	require.NotNil(t, txDetails)
+	require.Equal(t, txState, walletcontroller.TxInChain)
+
 	return spendTxHash, &spendTxValue
 }
 
@@ -590,6 +607,17 @@ func TestSendingStakingTransaction(t *testing.T) {
 	require.NoError(t, err)
 	stakingTime := uint16(params.FinalizationTimeoutBlocks + 1)
 	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+
+	// check chain for not exsitsing tx. This is to make sure that retrieving tx from chain works as expected
+	hash := sha256.Sum256([]byte("not exists tx"))
+	hashed, err := chainhash.NewHash(hash[:])
+	require.NoError(t, err)
+	scr, err := txscript.PayToTaprootScript(testStakingData.JuryKey)
+	require.NoError(t, err)
+	_, st, erro := tm.Sa.Wallet().TxDetails(hashed, scr)
+	// query for exsisting tx is not an error, proper state should be returned
+	require.NoError(t, erro)
+	require.Equal(t, st, walletcontroller.TxNotFound)
 
 	tm.createAndRegisterValidator(t, testStakingData)
 

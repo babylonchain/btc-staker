@@ -124,6 +124,15 @@ func FuzzStoringTxs(f *testing.F) {
 			require.Equal(t, storedTx.Pop, storedResult.Transactions[i].Pop)
 			require.Equal(t, storedTx.StakerAddress, storedResult.Transactions[i].StakerAddress)
 		}
+
+		// scan transactions
+		i := 0
+		err = s.ScanTrackedTransactions(func(tx *stakerdb.StoredTransaction) error {
+			require.Equal(t, generatedStoredTxs[i].BtcTx, tx.BtcTx)
+			i++
+			return nil
+		}, func() {})
+		require.NoError(t, err)
 	})
 }
 

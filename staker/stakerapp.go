@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/babylonchain/btc-staker/types"
+	"github.com/babylonchain/btc-staker/walletcontroller"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
-	"github.com/babylonchain/btc-staker/walletcontroller"
+
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
@@ -236,6 +237,13 @@ func (app *StakerApp) Start() error {
 		app.wg.Add(2)
 		go app.handleSentToBabylon()
 		go app.handleStaking()
+
+		err = app.checkTransactionsStatus()
+
+		if err != nil {
+			startErr = err
+			return
+		}
 	})
 
 	return startErr
@@ -255,6 +263,140 @@ func (app *StakerApp) Stop() error {
 		}
 	})
 	return stopErr
+}
+
+func (app *StakerApp) handleBtcTxInfo(
+	stakingTxHash *chainhash.Hash,
+	txInfo *stakerdb.StoredTransaction,
+	params *cl.StakingParams,
+	currentBestBlockHeight uint32,
+	txStatus walletcontroller.TxStatus,
+	btcTxInfo *notifier.TxConfirmation) error {
+
+	requiredConfirmations := params.ConfirmationTimeBlocks + 1
+
+	switch txStatus {
+	case walletcontroller.TxNotFound:
+		// Most probable reason this happened is transaction was included in btc chain (removed from mempool)
+		// and wallet also lost data and is not synced far enough to see transaction.
+		// Log it as error so that user can investigate.
+		// TODO: Set tx to some new state, like `Unknown` and periodically check if it is in mempool or chain ?
+		app.logger.WithFields(logrus.Fields{
+			"btcTxHash": stakingTxHash,
+		}).Error("Transaction from database not found in BTC mempool or chain")
+	case walletcontroller.TxInMemPool:
+		app.logger.WithFields(logrus.Fields{
+			"btcTxHash": stakingTxHash,
+		}).Error("Transaction found in mempool. Stat waiting for confirmation")
+
+		confEvent, err := app.notifier.RegisterConfirmationsNtfn(
+			stakingTxHash,
+			txInfo.BtcTx.TxOut[txInfo.StakingOutputIndex].PkScript,
+			requiredConfirmations,
+			currentBestBlockHeight,
+			notifier.WithIncludeBlock(),
+		)
+		if err != nil {
+			return err
+		}
+
+		go app.waitForConfirmation(*stakingTxHash, currentBestBlockHeight, confEvent)
+	case walletcontroller.TxInChain:
+		app.logger.WithFields(logrus.Fields{
+			"btcTxHash": stakingTxHash,
+		}).Info("Transaction found in chain")
+
+		blockDepth := currentBestBlockHeight - btcTxInfo.BlockHeight
+
+		if blockDepth >= params.ConfirmationTimeBlocks {
+			app.logger.WithFields(logrus.Fields{
+				"btcTxHash": stakingTxHash,
+			}).Info("Transaction deep enough in btc chain to be sent to Babylon")
+
+			// block is deep enough to init sent to babylon
+			app.confirmationEventChan <- &confirmationEvent{
+				txHash:        *stakingTxHash,
+				txIndex:       btcTxInfo.TxIndex,
+				blockDepth:    params.ConfirmationTimeBlocks,
+				blockHash:     *btcTxInfo.BlockHash,
+				blockHeight:   btcTxInfo.BlockHeight,
+				tx:            txInfo.BtcTx,
+				inlusionBlock: btcTxInfo.Block,
+			}
+		} else {
+			app.logger.WithFields(logrus.Fields{
+				"btcTxHash": stakingTxHash,
+			}).Info("Transaction not deep enough in btc chain to be sent to Babylon. Waiting for confirmation")
+
+			confEvent, err := app.notifier.RegisterConfirmationsNtfn(
+				stakingTxHash,
+				txInfo.BtcTx.TxOut[txInfo.StakingOutputIndex].PkScript,
+				requiredConfirmations,
+				currentBestBlockHeight,
+				notifier.WithIncludeBlock(),
+			)
+			if err != nil {
+				return err
+			}
+
+			go app.waitForConfirmation(*stakingTxHash, currentBestBlockHeight, confEvent)
+		}
+	}
+	return nil
+}
+
+func (app *StakerApp) checkTransactionsStatus() error {
+	stakingParams, err := app.babylonClient.Params()
+
+	if err != nil {
+		return err
+	}
+
+	currentBestBtcBlock, err := app.wc.BestBlockHeight()
+
+	if err != nil {
+		return err
+	}
+
+	app.txTracker.ScanTrackedTransactions(func(tx *stakerdb.StoredTransaction) error {
+		// TODO : We need to have another stare like UnstakeTransaction sent and store
+		// info about transaction sent (hash) to check wheter it was confirmed after staker
+		// restarts
+		switch tx.State {
+		case proto.TransactionState_SENT_TO_BTC:
+			stakingTxHash := tx.BtcTx.TxHash()
+			details, status, err := app.wc.TxDetails(&stakingTxHash, tx.BtcTx.TxOut[tx.StakingOutputIndex].PkScript)
+
+			if err != nil {
+				// we got some communication err, return error and kill app startup
+				return err
+			}
+
+			err = app.handleBtcTxInfo(&stakingTxHash, tx, stakingParams, uint32(currentBestBtcBlock), status, details)
+
+			if err != nil {
+				return err
+			}
+
+			return nil
+		case proto.TransactionState_CONFIRMED_ON_BTC:
+			// TODO: After having api to check if tx is on babylon, we should check wheter
+			// we already send delegation, and if not initiate process to do it
+			return nil
+		case proto.TransactionState_SENT_TO_BABYLON:
+			// nothing to do transaction is on babylon already.
+			// TODO: If we will have automatic unstaking, we should check wheter tx is expired
+			// and proceed with sending unstake transaction
+			return nil
+		case proto.TransactionState_SPENT_ON_BTC:
+			// nothing to do, staking transaction is already spent
+			return nil
+		default:
+			return fmt.Errorf("unknown transaction state: %d", tx.State)
+		}
+	}, func() {})
+
+	return nil
 }
 
 func (app *StakerApp) waitForConfirmation(
