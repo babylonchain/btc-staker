@@ -306,6 +306,19 @@ func (app *StakerApp) handleBtcTxInfo(
 			"btcTxHash": stakingTxHash,
 		}).Info("Transaction found in chain")
 
+		if currentBestBlockHeight < btcTxInfo.BlockHeight {
+			// This wierd case, we retrieved transaction from btc wallet, even though wallet best height
+			// is lower than block height of transaction.
+			// Log it as error so that user can investigate.
+			app.logger.WithFields(logrus.Fields{
+				"btcTxHash":              stakingTxHash,
+				"btcTxBlockHeight":       btcTxInfo.BlockHeight,
+				"currentBestBlockHeight": currentBestBlockHeight,
+			}).Error("Current best block height is lower than block height of transaction")
+
+			return nil
+		}
+
 		blockDepth := currentBestBlockHeight - btcTxInfo.BlockHeight
 
 		if blockDepth >= params.ConfirmationTimeBlocks {
@@ -339,7 +352,7 @@ func (app *StakerApp) handleBtcTxInfo(
 				return err
 			}
 
-			go app.waitForConfirmation(*stakingTxHash, currentBestBlockHeight, confEvent)
+			go app.waitForConfirmation(*stakingTxHash, params.ConfirmationTimeBlocks, confEvent)
 		}
 	}
 	return nil

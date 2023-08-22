@@ -512,6 +512,11 @@ func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*Valida
 			},
 		)
 		if err != nil {
+			if strings.Contains(err.Error(), btcstypes.ErrBTCValNotFound.Error()) {
+				// if there is not validator with such key, we return unrecoverable error, as we not need to retry any more
+				return retry.Unrecoverable(fmt.Errorf("failed to get validator with key: %s: %w", hexPubKey, ErrValidatorDoesNotExist))
+			}
+
 			return err
 		}
 		response = resp
@@ -524,12 +529,6 @@ func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*Valida
 			"error":        err,
 		}).Error("Failed to query babylon for the validator")
 	})); err != nil {
-		// translate errors to locally handable ones
-		if strings.Contains(err.Error(), btcstypes.ErrBTCValNotFound.Error()) {
-			return nil, fmt.Errorf("failed to get validator with key: %s: %w", hexPubKey, ErrValidatorDoesNotExist)
-		}
-
-		// got unexpected error, return it as is
 		return nil, err
 	}
 
