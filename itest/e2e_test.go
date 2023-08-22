@@ -528,7 +528,12 @@ func (tm *TestManager) createAndRegisterValidator(t *testing.T, testStakingData 
 	require.Len(t, resp.Validators, 1)
 }
 
-func (tm *TestManager) mineNEmptyBlocks(t *testing.T, numHeaders uint32, sendToBabylon bool) {
+func (tm *TestManager) sendHeadersToBabylon(t *testing.T, headers []*wire.BlockHeader) {
+	_, err := tm.BabylonClient.InsertBtcBlockHeaders(headers)
+	require.NoError(t, err)
+}
+
+func (tm *TestManager) mineNEmptyBlocks(t *testing.T, numHeaders uint32, sendToBabylon bool) []*wire.BlockHeader {
 
 	var minedHeaders []*wire.BlockHeader
 	for i := 0; i < int(numHeaders); i++ {
@@ -537,9 +542,10 @@ func (tm *TestManager) mineNEmptyBlocks(t *testing.T, numHeaders uint32, sendToB
 	}
 
 	if sendToBabylon {
-		_, err := tm.BabylonClient.InsertBtcBlockHeaders(minedHeaders)
-		require.NoError(t, err)
+		tm.sendHeadersToBabylon(t, minedHeaders)
 	}
+
+	return minedHeaders
 }
 
 func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingData) *chainhash.Hash {
@@ -715,5 +721,34 @@ func TestRestartingTxNotDeepEnough(t *testing.T) {
 	tm.RestartApp(t)
 
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
+}
+
+func TestRestartingTxNotOnBabylon(t *testing.T) {
+	// need to have at least 300 block on testnet as only then segwit is activated
+	numMatureOutputs := uint32(200)
+	tm := StartManager(t, numMatureOutputs, 2, nil)
+	defer tm.Stop(t)
+	tm.insertAllMinedBlocksToBabylon(t)
+
+	cl := tm.Sa.BabylonController()
+	params, err := cl.Params()
+	require.NoError(t, err)
+	stakingTime := uint16(params.FinalizationTimeoutBlocks + 1)
+	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+
+	tm.createAndRegisterValidator(t, testStakingData)
+	txHash := tm.sendStakingTx(t, testStakingData)
+
+	// Confirm tx on btc
+	minedBlocks := tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, false)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_CONFIRMED_ON_BTC)
+
+	// restart app, tx is confirmed but not delivered to babylon
+	tm.RestartApp(t)
+
+	// send headers to babylon, so that we can send delegation tx
+	go tm.sendHeadersToBabylon(t, minedBlocks)
+
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 }

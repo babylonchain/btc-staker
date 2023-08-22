@@ -625,3 +625,39 @@ func (bc *BabylonController) RegisterValidator(
 
 	return res, nil
 }
+
+func (bc *BabylonController) TxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error) {
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
+	queryClient := btcstypes.NewQueryClient(clientCtx)
+
+	var txAlreadyPartOfDelegation bool = false
+	if err := retry.Do(func() error {
+		_, err := queryClient.BTCDelegation(ctx, &btcstypes.QueryBTCDelegationRequest{
+			StakingTxHashHex: stakingTxHash.String(),
+		})
+		if err != nil {
+			if strings.Contains(err.Error(), btcstypes.ErrBTCDelNotFound.Error()) {
+				return nil
+			}
+
+			return err
+		}
+
+		// No error, delegation is already on babylon
+		txAlreadyPartOfDelegation = true
+		return nil
+	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
+		bc.logger.WithFields(logrus.Fields{
+			"attempt":      n + 1,
+			"max_attempts": RtyAttNum,
+			"error":        err,
+		}).Error("Failed to query babylon for the staking transaction")
+	})); err != nil {
+		return false, err
+	}
+
+	return txAlreadyPartOfDelegation, nil
+}
