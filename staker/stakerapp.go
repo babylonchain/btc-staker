@@ -27,6 +27,7 @@ import (
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	notifier "github.com/lightningnetwork/lnd/chainntnfs"
+	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/sirupsen/logrus"
 )
@@ -152,7 +153,18 @@ func NewStakerAppFromConfig(
 		return nil, err
 	}
 
-	nodeNotifier, err := NewNodeBackend(config.BtcNodeBackendConfig, &config.ActiveNetParams)
+	hintCache, err := channeldb.NewHeightHintCache(
+		channeldb.CacheConfig{
+			// TODO: Investigate this option. Lighting docs mention that this is necessary for some edge case
+			QueryDisable: false,
+		}, db,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to create height hint cache: %v", err)
+	}
+
+	nodeNotifier, err := NewNodeBackend(config.BtcNodeBackendConfig, &config.ActiveNetParams, hintCache)
 
 	if err != nil {
 		return nil, err

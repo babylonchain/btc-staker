@@ -2,9 +2,9 @@ package staker
 
 import (
 	"fmt"
-	"github.com/babylonchain/btc-staker/types"
 	"net"
-	"sync"
+
+	"github.com/babylonchain/btc-staker/types"
 
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -14,97 +14,8 @@ import (
 	"github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/chainntnfs/bitcoindnotify"
 	"github.com/lightningnetwork/lnd/chainntnfs/btcdnotify"
+	"github.com/lightningnetwork/lnd/channeldb"
 )
-
-// copied from: https://github.com/lightningnetwork/lnd
-// TODO: After introducing database, use real implementation of hint cache backed by database
-type mockHintCache struct {
-	mu         sync.Mutex
-	confHints  map[chainntnfs.ConfRequest]uint32
-	spendHints map[chainntnfs.SpendRequest]uint32
-}
-
-var _ chainntnfs.SpendHintCache = (*mockHintCache)(nil)
-var _ chainntnfs.ConfirmHintCache = (*mockHintCache)(nil)
-
-func (c *mockHintCache) CommitSpendHint(heightHint uint32,
-	spendRequests ...chainntnfs.SpendRequest) error {
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	for _, spendRequest := range spendRequests {
-		c.spendHints[spendRequest] = heightHint
-	}
-
-	return nil
-}
-
-func (c *mockHintCache) QuerySpendHint(spendRequest chainntnfs.SpendRequest) (uint32, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	hint, ok := c.spendHints[spendRequest]
-	if !ok {
-		return 0, chainntnfs.ErrSpendHintNotFound
-	}
-
-	return hint, nil
-}
-
-func (c *mockHintCache) PurgeSpendHint(spendRequests ...chainntnfs.SpendRequest) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	for _, spendRequest := range spendRequests {
-		delete(c.spendHints, spendRequest)
-	}
-
-	return nil
-}
-
-func (c *mockHintCache) CommitConfirmHint(heightHint uint32,
-	confRequests ...chainntnfs.ConfRequest) error {
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	for _, confRequest := range confRequests {
-		c.confHints[confRequest] = heightHint
-	}
-
-	return nil
-}
-
-func (c *mockHintCache) QueryConfirmHint(confRequest chainntnfs.ConfRequest) (uint32, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	hint, ok := c.confHints[confRequest]
-	if !ok {
-		return 0, chainntnfs.ErrConfirmHintNotFound
-	}
-
-	return hint, nil
-}
-
-func (c *mockHintCache) PurgeConfirmHint(confRequests ...chainntnfs.ConfRequest) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	for _, confRequest := range confRequests {
-		delete(c.confHints, confRequest)
-	}
-
-	return nil
-}
-
-func newMockHintCache() *mockHintCache {
-	return &mockHintCache{
-		confHints:  make(map[chainntnfs.ConfRequest]uint32),
-		spendHints: make(map[chainntnfs.SpendRequest]uint32),
-	}
-}
 
 type NodeBackend struct {
 	chainntnfs.ChainNotifier
@@ -123,8 +34,8 @@ func BuildDialer(rpcHost string) func(string) (net.Conn, error) {
 func NewNodeBackend(
 	cfg *scfg.BtcNodeBackendConfig,
 	params *chaincfg.Params,
+	hintCache *channeldb.HeightHintCache,
 ) (*NodeBackend, error) {
-	mockHintCache := newMockHintCache()
 	switch cfg.ActiveNodeBackend {
 	case types.BitcoindNodeBackend:
 		bitcoindCfg := &chain.BitcoindConfig{
@@ -163,8 +74,8 @@ func NewNodeBackend(
 		}
 
 		chainNotifier := bitcoindnotify.New(
-			bitcoindConn, params, mockHintCache,
-			mockHintCache, blockcache.NewBlockCache(cfg.Bitcoind.BlockCacheSize),
+			bitcoindConn, params, hintCache,
+			hintCache, blockcache.NewBlockCache(cfg.Bitcoind.BlockCacheSize),
 		)
 
 		return &NodeBackend{
@@ -194,8 +105,8 @@ func NewNodeBackend(
 		}
 
 		chainNotifier, err := btcdnotify.New(
-			rpcConfig, params, mockHintCache,
-			mockHintCache, blockcache.NewBlockCache(cfg.Btcd.BlockCacheSize),
+			rpcConfig, params, hintCache,
+			hintCache, blockcache.NewBlockCache(cfg.Btcd.BlockCacheSize),
 		)
 
 		if err != nil {
