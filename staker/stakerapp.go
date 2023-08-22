@@ -265,6 +265,27 @@ func (app *StakerApp) Stop() error {
 	return stopErr
 }
 
+func (app *StakerApp) initWaitForStakingTransactionConfirmation(
+	stakingTxHash *chainhash.Hash,
+	stakingTxPkScript []byte,
+	requiredBlockDepth uint32,
+	currentBestBlockHeight uint32,
+) error {
+	confEvent, err := app.notifier.RegisterConfirmationsNtfn(
+		stakingTxHash,
+		stakingTxPkScript,
+		requiredBlockDepth+1,
+		currentBestBlockHeight,
+		notifier.WithIncludeBlock(),
+	)
+	if err != nil {
+		return err
+	}
+
+	go app.waitForStakingTxConfirmation(*stakingTxHash, requiredBlockDepth, confEvent)
+	return nil
+}
+
 func (app *StakerApp) handleBtcTxInfo(
 	stakingTxHash *chainhash.Hash,
 	txInfo *stakerdb.StoredTransaction,
@@ -272,8 +293,6 @@ func (app *StakerApp) handleBtcTxInfo(
 	currentBestBlockHeight uint32,
 	txStatus walletcontroller.TxStatus,
 	btcTxInfo *notifier.TxConfirmation) error {
-
-	requiredConfirmations := params.ConfirmationTimeBlocks + 1
 
 	switch txStatus {
 	case walletcontroller.TxNotFound:
@@ -289,18 +308,15 @@ func (app *StakerApp) handleBtcTxInfo(
 			"btcTxHash": stakingTxHash,
 		}).Debug("Transaction found in mempool. Stat waiting for confirmation")
 
-		confEvent, err := app.notifier.RegisterConfirmationsNtfn(
+		if err := app.initWaitForStakingTransactionConfirmation(
 			stakingTxHash,
 			txInfo.BtcTx.TxOut[txInfo.StakingOutputIndex].PkScript,
-			requiredConfirmations,
+			params.ConfirmationTimeBlocks,
 			currentBestBlockHeight,
-			notifier.WithIncludeBlock(),
-		)
-		if err != nil {
+		); err != nil {
 			return err
 		}
 
-		go app.waitForConfirmation(*stakingTxHash, currentBestBlockHeight, confEvent)
 	case walletcontroller.TxInChain:
 		app.logger.WithFields(logrus.Fields{
 			"btcTxHash":              stakingTxHash,
@@ -309,7 +325,7 @@ func (app *StakerApp) handleBtcTxInfo(
 		}).Debug("Transaction found in chain")
 
 		if currentBestBlockHeight < btcTxInfo.BlockHeight {
-			// This wierd case, we retrieved transaction from btc wallet, even though wallet best height
+			// This is wierd case, we retrieved transaction from btc wallet, even though wallet best height
 			// is lower than block height of transaction.
 			// Log it as error so that user can investigate.
 			app.logger.WithFields(logrus.Fields{
@@ -347,18 +363,14 @@ func (app *StakerApp) handleBtcTxInfo(
 				"currentBestBlockHeight": currentBestBlockHeight,
 			}).Debug("Transaction not deep enough in btc chain to be sent to Babylon. Waiting for confirmation")
 
-			confEvent, err := app.notifier.RegisterConfirmationsNtfn(
+			if err := app.initWaitForStakingTransactionConfirmation(
 				stakingTxHash,
 				txInfo.BtcTx.TxOut[txInfo.StakingOutputIndex].PkScript,
-				requiredConfirmations,
+				params.ConfirmationTimeBlocks,
 				currentBestBlockHeight,
-				notifier.WithIncludeBlock(),
-			)
-			if err != nil {
+			); err != nil {
 				return err
 			}
-
-			go app.waitForConfirmation(*stakingTxHash, params.ConfirmationTimeBlocks, confEvent)
 		}
 	}
 	return nil
@@ -420,12 +432,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 
 	for _, txHash := range transactionsSentToBtc {
 		stakingTxHash := txHash
-		tx, err := app.txTracker.GetTransaction(stakingTxHash)
-		if err != nil {
-			// panicking as we checked transactions already exsits above
-			panic(err)
-		}
-
+		tx, _ := app.mustGetTransactionAndStakerAddress(stakingTxHash)
 		details, status, err := app.wc.TxDetails(stakingTxHash, tx.BtcTx.TxOut[tx.StakingOutputIndex].PkScript)
 
 		if err != nil {
@@ -461,11 +468,8 @@ func (app *StakerApp) checkTransactionsStatus() error {
 		} else {
 			// transaction which is not on babylon, is already confirmed on btc chain
 			// get all necessary info and send it to babylon
-			tx, err := app.txTracker.GetTransaction(stakingTxHash)
-			if err != nil {
-				// panicking as we checked transactions already exists above
-				panic(err)
-			}
+
+			tx, _ := app.mustGetTransactionAndStakerAddress(stakingTxHash)
 			details, status, err := app.wc.TxDetails(stakingTxHash, tx.BtcTx.TxOut[tx.StakingOutputIndex].PkScript)
 
 			if err != nil {
@@ -503,7 +507,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 	return nil
 }
 
-func (app *StakerApp) waitForConfirmation(
+func (app *StakerApp) waitForStakingTxConfirmation(
 	txHash chainhash.Hash,
 	depthOnBtcChain uint32,
 	ev *notifier.ConfirmationEvent) {
@@ -879,26 +883,15 @@ func (app *StakerApp) handleStaking() {
 				continue
 			}
 
-			confEvent, err := app.notifier.RegisterConfirmationsNtfn(
+			if err := app.initWaitForStakingTransactionConfirmation(
 				hash,
-				// TODO: staking script is necessary here, to support light clients. Maybe we could
-				// support neutrino backends, so stakers could use spv wallets.
 				req.stakingOutputPkScript,
-				// confirmations = depth + 1
-				req.requiredDepthOnBtcChain+1,
+				req.requiredDepthOnBtcChain,
 				uint32(bestBlockHeight),
-				// notification must include block that mined the tx, this is necessary to build
-				// inclusion proof
-				notifier.WithIncludeBlock(),
-			)
-
-			if err != nil {
+			); err != nil {
 				req.errChan <- err
 				continue
 			}
-			// TODO: add some wait group here, to wait for all go routines to finish
-			// before returning from this function
-			go app.waitForConfirmation(txHash, req.requiredDepthOnBtcChain, confEvent)
 
 			app.logger.WithFields(logrus.Fields{
 				"btcTxHash": hash,
