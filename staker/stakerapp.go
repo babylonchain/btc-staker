@@ -388,7 +388,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 	// In our scan we only record transactions which state need to be checked, as`ScanTrackedTransactions`
 	// is long running read transaction, it could dead lock with write transactions which we would need
 	// to use to update transaction state.
-	app.txTracker.ScanTrackedTransactions(func(tx *stakerdb.StoredTransaction) error {
+	err = app.txTracker.ScanTrackedTransactions(func(tx *stakerdb.StoredTransaction) error {
 		// TODO : We need to have another stare like UnstakeTransaction sent and store
 		// info about transaction sent (hash) to check wheter it was confirmed after staker
 		// restarts
@@ -413,6 +413,10 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			return fmt.Errorf("unknown transaction state: %d", tx.State)
 		}
 	}, func() {})
+
+	if err != nil {
+		return err
+	}
 
 	for _, txHash := range transactionsSentToBtc {
 		stakingTxHash := txHash
