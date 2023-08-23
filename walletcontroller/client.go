@@ -2,10 +2,10 @@ package walletcontroller
 
 import (
 	"fmt"
-	"github.com/babylonchain/btc-staker/types"
 	"sort"
 
 	"github.com/babylonchain/btc-staker/stakercfg"
+	"github.com/babylonchain/btc-staker/types"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
@@ -13,6 +13,7 @@ import (
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	notifier "github.com/lightningnetwork/lnd/chainntnfs"
 )
 
 type RpcWalletController struct {
@@ -23,6 +24,11 @@ type RpcWalletController struct {
 }
 
 var _ WalletController = (*RpcWalletController)(nil)
+
+const (
+	txNotFoundErrMsgBtcd     = "No information available about transaction"
+	txNotFoundErrMsgBitcoind = "No such mempool or blockchain transaction"
+)
 
 func NewRpcWalletController(scfg *stakercfg.Config) (*RpcWalletController, error) {
 	return NewRpcWalletControllerFromArgs(
@@ -204,4 +210,49 @@ func (w *RpcWalletController) ListOutputs(onlySpendable bool) ([]Utxo, error) {
 
 func (w *RpcWalletController) BestBlockHeight() (int64, error) {
 	return w.Client.GetBlockCount()
+}
+
+func nofitierStateToWalletState(state notifier.TxConfStatus) TxStatus {
+	switch state {
+	case notifier.TxNotFoundIndex:
+		return TxNotFound
+	case notifier.TxFoundMempool:
+		return TxInMemPool
+	case notifier.TxFoundIndex:
+		return TxInChain
+	case notifier.TxNotFoundManually:
+		return TxNotFound
+	case notifier.TxFoundManually:
+		return TxInChain
+	default:
+		panic(fmt.Sprintf("unknown notifier state: %s", state))
+	}
+}
+
+func (w *RpcWalletController) getTxDetails(req notifier.ConfRequest, msg string) (*notifier.TxConfirmation, TxStatus, error) {
+	res, state, err := notifier.ConfDetailsFromTxIndex(w.Client, req, msg)
+
+	if err != nil {
+		return nil, TxNotFound, err
+	}
+
+	return res, nofitierStateToWalletState(state), nil
+}
+
+// Fetch info about transaction from mempool or blockchain, requires node to have enabled  transaction index
+func (w *RpcWalletController) TxDetails(txHash *chainhash.Hash, pkScript []byte) (*notifier.TxConfirmation, TxStatus, error) {
+	req, err := notifier.NewConfRequest(txHash, pkScript)
+
+	if err != nil {
+		return nil, TxNotFound, err
+	}
+
+	switch w.backend {
+	case types.BitcoindWalletBackend:
+		return w.getTxDetails(req, txNotFoundErrMsgBitcoind)
+	case types.BtcwalletWalletBackend:
+		return w.getTxDetails(req, txNotFoundErrMsgBtcd)
+	default:
+		return nil, TxNotFound, fmt.Errorf("invalid bitcoin backend")
+	}
 }

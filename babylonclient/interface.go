@@ -40,6 +40,7 @@ type BabylonClient interface {
 	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
 	QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error)
 	QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error)
+	IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error)
 }
 
 type MockBabylonClient struct {
@@ -113,6 +114,10 @@ func (m *MockBabylonClient) QueryValidator(btcPubKey *btcec.PublicKey) (*Validat
 func (m *MockBabylonClient) QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error) {
 	// return always confirmed depth
 	return uint64(m.ClientParams.ConfirmationTimeBlocks) + 1, nil
+}
+
+func (m *MockBabylonClient) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error) {
+	return false, nil
 }
 
 func GetMockClient() *MockBabylonClient {

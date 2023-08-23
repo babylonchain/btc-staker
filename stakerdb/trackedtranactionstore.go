@@ -27,6 +27,8 @@ var (
 	numTxKey = []byte("ntk")
 )
 
+type StoredTransactionScanFn func(tx *StoredTransaction) error
+
 type TrackedTransactionStore struct {
 	db kvdb.Backend
 }
@@ -433,4 +435,31 @@ func (c *TrackedTransactionStore) QueryStoredTransactions(q StoredTransactionQue
 	}
 
 	return resp, nil
+}
+
+func (c *TrackedTransactionStore) ScanTrackedTransactions(scanFunc StoredTransactionScanFn, reset func()) error {
+	return kvdb.View(c.db, func(tx kvdb.RTx) error {
+		transactionsBucket := tx.ReadBucket(transactionBucketName)
+
+		if transactionsBucket == nil {
+			return ErrCorruptedTransactionsDb
+		}
+
+		return transactionsBucket.ForEach(func(k, v []byte) error {
+			var storedTxProto proto.TrackedTransaction
+			err := pm.Unmarshal(v, &storedTxProto)
+
+			if err != nil {
+				return ErrCorruptedTransactionsDb
+			}
+
+			txFromDb, err := protoTxToStoredTransaction(&storedTxProto)
+
+			if err != nil {
+				return err
+			}
+
+			return scanFunc(txFromDb)
+		})
+	}, reset)
 }
