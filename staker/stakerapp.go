@@ -238,9 +238,7 @@ func (app *StakerApp) Start() error {
 		go app.handleSentToBabylon()
 		go app.handleStaking()
 
-		err = app.checkTransactionsStatus()
-
-		if err != nil {
+		if err := app.checkTransactionsStatus(); err != nil {
 			startErr = err
 			return
 		}
@@ -265,7 +263,7 @@ func (app *StakerApp) Stop() error {
 	return stopErr
 }
 
-func (app *StakerApp) initWaitForStakingTransactionConfirmation(
+func (app *StakerApp) waitForStakingTransactionConfirmation(
 	stakingTxHash *chainhash.Hash,
 	stakingTxPkScript []byte,
 	requiredBlockDepth uint32,
@@ -308,7 +306,7 @@ func (app *StakerApp) handleBtcTxInfo(
 			"btcTxHash": stakingTxHash,
 		}).Debug("Transaction found in mempool. Stat waiting for confirmation")
 
-		if err := app.initWaitForStakingTransactionConfirmation(
+		if err := app.waitForStakingTransactionConfirmation(
 			stakingTxHash,
 			txInfo.BtcTx.TxOut[txInfo.StakingOutputIndex].PkScript,
 			params.ConfirmationTimeBlocks,
@@ -363,7 +361,7 @@ func (app *StakerApp) handleBtcTxInfo(
 				"currentBestBlockHeight": currentBestBlockHeight,
 			}).Debug("Transaction not deep enough in btc chain to be sent to Babylon. Waiting for confirmation")
 
-			if err := app.initWaitForStakingTransactionConfirmation(
+			if err := app.waitForStakingTransactionConfirmation(
 				stakingTxHash,
 				txInfo.BtcTx.TxOut[txInfo.StakingOutputIndex].PkScript,
 				params.ConfirmationTimeBlocks,
@@ -397,6 +395,11 @@ func (app *StakerApp) checkTransactionsStatus() error {
 	var transactionsSentToBtc []*chainhash.Hash
 	var transactionConfirmedOnBtc []*chainhash.Hash
 
+	reset := func() {
+		transactionsSentToBtc = make([]*chainhash.Hash, 0)
+		transactionConfirmedOnBtc = make([]*chainhash.Hash, 0)
+	}
+
 	// In our scan we only record transactions which state need to be checked, as`ScanTrackedTransactions`
 	// is long running read transaction, it could dead lock with write transactions which we would need
 	// to use to update transaction state.
@@ -424,7 +427,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 		default:
 			return fmt.Errorf("unknown transaction state: %d", tx.State)
 		}
-	}, func() {})
+	}, reset)
 
 	if err != nil {
 		return err
@@ -449,7 +452,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 
 	for _, txHash := range transactionConfirmedOnBtc {
 		stakingTxHash := txHash
-		alreadyOnBabylon, err := app.babylonClient.TxAlreadyPartOfDelegation(stakingTxHash)
+		alreadyOnBabylon, err := app.babylonClient.IsTxAlreadyPartOfDelegation(stakingTxHash)
 
 		if err != nil {
 			return err
@@ -883,7 +886,7 @@ func (app *StakerApp) handleStaking() {
 				continue
 			}
 
-			if err := app.initWaitForStakingTransactionConfirmation(
+			if err := app.waitForStakingTransactionConfirmation(
 				hash,
 				req.stakingOutputPkScript,
 				req.requiredDepthOnBtcChain,

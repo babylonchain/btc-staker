@@ -5,10 +5,10 @@ package e2etest
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"math/rand"
 	"net"
 	"net/netip"
 	"os"
@@ -21,6 +21,7 @@ import (
 
 	dc "github.com/babylonchain/btc-staker/stakerservice/client"
 
+	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
 	service "github.com/babylonchain/btc-staker/stakerservice"
@@ -650,6 +651,7 @@ func (tm *TestManager) insertAllMinedBlocksToBabylon(t *testing.T) {
 }
 
 func TestSendingStakingTransaction(t *testing.T) {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// need to have at least 300 block on testnet as only then segwit is activated
 	numMatureOutputs := uint32(200)
 	tm := StartManager(t, numMatureOutputs, 2, nil)
@@ -662,9 +664,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 	stakingTime := uint16(params.FinalizationTimeoutBlocks + 1)
 	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
-	// check chain for not exsitsing tx. This is to make sure that retrieving tx from chain works as expected
-	hash := sha256.Sum256([]byte("not exists tx"))
-	hashed, err := chainhash.NewHash(hash[:])
+	hashed, err := chainhash.NewHash(datagen.GenRandomByteArray(r, 32))
 	require.NoError(t, err)
 	scr, err := txscript.PayToTaprootScript(testStakingData.JuryKey)
 	require.NoError(t, err)

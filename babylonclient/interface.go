@@ -40,7 +40,7 @@ type BabylonClient interface {
 	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
 	QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error)
 	QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error)
-	TxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error)
+	IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error)
 }
 
 type MockBabylonClient struct {
@@ -116,7 +116,7 @@ func (m *MockBabylonClient) QueryHeaderDepth(headerHash *chainhash.Hash) (uint64
 	return uint64(m.ClientParams.ConfirmationTimeBlocks) + 1, nil
 }
 
-func (m *MockBabylonClient) TxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error) {
+func (m *MockBabylonClient) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error) {
 	return false, nil
 }
 

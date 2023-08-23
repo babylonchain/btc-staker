@@ -513,7 +513,7 @@ func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*Valida
 		)
 		if err != nil {
 			if strings.Contains(err.Error(), btcstypes.ErrBTCValNotFound.Error()) {
-				// if there is not validator with such key, we return unrecoverable error, as we not need to retry any more
+				// if there is no validator with such key, we return unrecoverable error, as we not need to retry any more
 				return retry.Unrecoverable(fmt.Errorf("failed to get validator with key: %s: %w", hexPubKey, ErrValidatorDoesNotExist))
 			}
 
@@ -626,7 +626,7 @@ func (bc *BabylonController) RegisterValidator(
 	return res, nil
 }
 
-func (bc *BabylonController) TxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error) {
+func (bc *BabylonController) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error) {
 	ctx, cancel := getQueryContext(bc.cfg.Timeout)
 	defer cancel()
 
