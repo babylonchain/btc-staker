@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/babylonchain/btc-staker/types"
@@ -128,6 +129,7 @@ type StakerApp struct {
 	sendDelegationRequestChan  chan *sendDelegationRequest
 	sendDelegationResponseChan chan *sendDelegationResponse
 	spendTxConfirmationChan    chan *spendTxConfirmationEvent
+	currentBestBlockHeight     atomic.Uint32
 }
 
 func NewStakerAppFromConfig(
@@ -246,7 +248,27 @@ func (app *StakerApp) Start() error {
 
 		app.logger.Infof("Successfully connected to node backend: %s", app.config.BtcNodeBackendConfig.Nodetype)
 
-		app.wg.Add(2)
+		blockEventNotifier, err := app.notifier.RegisterBlockEpochNtfn(nil)
+
+		if err != nil {
+			startErr = err
+			return
+		}
+
+		// we registered for notifications with `nil`  so we should receive best block
+		// immeadiatly
+		select {
+		case block := <-blockEventNotifier.Epochs:
+			app.currentBestBlockHeight.Store(uint32(block.Height))
+		case <-app.quit:
+			startErr = errors.New("staker app quit before finishing start")
+			return
+		}
+
+		app.logger.Infof("Initial btc best block height is: %d", app.currentBestBlockHeight.Load())
+
+		app.wg.Add(3)
+		go app.handleNewBlocks(blockEventNotifier)
 		go app.handleSentToBabylon()
 		go app.handleStaking()
 
@@ -257,6 +279,27 @@ func (app *StakerApp) Start() error {
 	})
 
 	return startErr
+}
+
+func (app *StakerApp) handleNewBlocks(blockNotifier *notifier.BlockEpochEvent) {
+	defer app.wg.Done()
+	defer blockNotifier.Cancel()
+	for {
+		select {
+		case block, ok := <-blockNotifier.Epochs:
+			if !ok {
+				return
+			}
+			app.currentBestBlockHeight.Store(uint32(block.Height))
+
+			app.logger.WithFields(logrus.Fields{
+				"btcBlockHeight": block.Height,
+				"btcBlockHash":   block.Hash.String(),
+			}).Debug("Received new best btc block")
+		case <-app.quit:
+			return
+		}
+	}
 }
 
 func (app *StakerApp) Stop() error {
@@ -396,12 +439,6 @@ func (app *StakerApp) checkTransactionsStatus() error {
 		return err
 	}
 
-	currentBestBtcBlock, err := app.wc.BestBlockHeight()
-
-	if err != nil {
-		return err
-	}
-
 	// Keep track of all staking transactions which need checking. chainhash.Hash objects are not relativly small
 	// so it should not OOM even for larage database
 	var transactionsSentToBtc []*chainhash.Hash
@@ -455,7 +492,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			return err
 		}
 
-		err = app.handleBtcTxInfo(stakingTxHash, tx, stakingParams, uint32(currentBestBtcBlock), status, details)
+		err = app.handleBtcTxInfo(stakingTxHash, tx, stakingParams, app.currentBestBlockHeight.Load(), status, details)
 
 		if err != nil {
 			return err
@@ -867,12 +904,7 @@ func (app *StakerApp) handleStaking() {
 		select {
 		case req := <-app.stakingRequestChan:
 			txHash := req.stakingTx.TxHash()
-			bestBlockHeight, err := app.wc.BestBlockHeight()
-
-			if err != nil {
-				req.errChan <- err
-				continue
-			}
+			bestBlockHeight := app.currentBestBlockHeight.Load()
 
 			app.logger.WithFields(logrus.Fields{
 				"btcTxHash":              txHash,
@@ -1288,14 +1320,6 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 		return nil, nil, fmt.Errorf("cannot spend staking which was not sent to babylon")
 	}
 
-	// this is necessary to later register notification for spending tx confirmation
-	// better do this now to fail fast if we cannot get best block height
-	currentBestBlock, err := app.wc.BestBlockHeight()
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot spend staking output. Error getting best block height: %w", err)
-	}
-
 	// this coud happen if we stared staker on wrong network.
 	// TODO: consider storing data for different networks in different folders
 	// to avoid this
@@ -1372,7 +1396,7 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 		spendTxHash,
 		spendTx.TxOut[0].PkScript,
 		stakingTxSpendTxConfirmation,
-		uint32(currentBestBlock),
+		app.currentBestBlockHeight.Load(),
 	)
 
 	if err != nil {

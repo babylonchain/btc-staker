@@ -17,9 +17,6 @@ const (
 )
 
 type WalletController interface {
-	// TODO: this is not really wallet methods, but rather chain methods. Consider
-	// seprate interface for that ?
-	BestBlockHeight() (int64, error)
 	UnlockWallet(timeoutSecs int64) error
 	AddressPublicKey(address btcutil.Address) (*btcec.PublicKey, error)
 	DumpPrivateKey(address btcutil.Address) (*btcec.PrivateKey, error)
