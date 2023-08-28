@@ -208,10 +208,6 @@ func (w *RpcWalletController) ListOutputs(onlySpendable bool) ([]Utxo, error) {
 	return utxos, nil
 }
 
-func (w *RpcWalletController) BestBlockHeight() (int64, error) {
-	return w.Client.GetBlockCount()
-}
-
 func nofitierStateToWalletState(state notifier.TxConfStatus) TxStatus {
 	switch state {
 	case notifier.TxNotFoundIndex:
