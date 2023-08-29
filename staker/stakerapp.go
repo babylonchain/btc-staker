@@ -1065,6 +1065,15 @@ func (app *StakerApp) validatorExists(validatorPk *btcec.PublicKey) error {
 
 }
 
+func GetMinStakingTime(p *cl.StakingParams) uint32 {
+	// Actual minimum staking time in babylon is k+w, but setting it to that would
+	// result in delegation which have voting power for 0 btc blocks.
+	// therefore setting it to 2*w + k, will result in delegation with voting power
+	// for at least w blocks. Therefore this conditions enforces min staking time i.e time
+	// when stake is active of w blocks
+	return 2*p.FinalizationTimeoutBlocks + p.ConfirmationTimeBlocks
+}
+
 func (app *StakerApp) StakeFunds(
 	stakerAddress btcutil.Address,
 	stakingAmount btcutil.Amount,
@@ -1097,9 +1106,10 @@ func (app *StakerApp) StakeFunds(
 			stakingAmount, slashingFee)
 	}
 
-	if uint32(stakingTimeBlocks) < params.FinalizationTimeoutBlocks {
-		return nil, fmt.Errorf("staking time %d is less than minimum finalization time %d",
-			stakingTimeBlocks, params.FinalizationTimeoutBlocks)
+	minStakingTime := GetMinStakingTime(params)
+	if uint32(stakingTimeBlocks) < minStakingTime {
+		return nil, fmt.Errorf("staking time %d is less than minimum staking time %d",
+			stakingTimeBlocks, minStakingTime)
 	}
 
 	// unlock wallet for the rest of the operations

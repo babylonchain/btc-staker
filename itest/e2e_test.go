@@ -661,7 +661,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 	cl := tm.Sa.BabylonController()
 	params, err := cl.Params()
 	require.NoError(t, err)
-	stakingTime := uint16(params.FinalizationTimeoutBlocks + 1)
+	stakingTime := uint16(staker.GetMinStakingTime(params))
 	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
 	hashed, err := chainhash.NewHash(datagen.GenRandomByteArray(r, 32))
@@ -711,7 +711,7 @@ func TestRestartingTxNotDeepEnough(t *testing.T) {
 	cl := tm.Sa.BabylonController()
 	params, err := cl.Params()
 	require.NoError(t, err)
-	stakingTime := uint16(params.FinalizationTimeoutBlocks + 1)
+	stakingTime := uint16(staker.GetMinStakingTime(params))
 	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
 	tm.createAndRegisterValidator(t, testStakingData)
@@ -734,7 +734,7 @@ func TestRestartingTxNotOnBabylon(t *testing.T) {
 	cl := tm.Sa.BabylonController()
 	params, err := cl.Params()
 	require.NoError(t, err)
-	stakingTime := uint16(params.FinalizationTimeoutBlocks + 1)
+	stakingTime := uint16(staker.GetMinStakingTime(params))
 	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
 	tm.createAndRegisterValidator(t, testStakingData)
