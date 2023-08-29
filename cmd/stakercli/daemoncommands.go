@@ -129,7 +129,7 @@ var stakeCmd = cli.Command{
 var unstakeCmd = cli.Command{
 	Name:      "unstake",
 	ShortName: "ust",
-	Usage:     "Spends staking transaction and sends funds back to staker",
+	Usage:     "Spends staking transaction and sends funds back to staker; this can only be done after timelock of staking transaction expires",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakingDaemonAddressFlag,
@@ -148,7 +148,7 @@ var unstakeCmd = cli.Command{
 var stakingDetailsCmd = cli.Command{
 	Name:      "staking-details",
 	ShortName: "sds",
-	Usage:     "Displays details of staking transaction with given hash. This can only be done after timelock of staking transaction expires.",
+	Usage:     "Displays details of staking transaction with given hash",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakingDaemonAddressFlag,
