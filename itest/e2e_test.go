@@ -44,6 +44,7 @@ import (
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	sttypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/signal"
 	"github.com/sirupsen/logrus"
@@ -524,6 +525,7 @@ func (tm *TestManager) createAndRegisterValidator(t *testing.T, testStakingData 
 		testStakingData.ValidatorBabaylonPublicKey,
 		btcValKey,
 		&params.Params.MinCommissionRate,
+		&sttypes.Description{},
 		pop,
 	)
 

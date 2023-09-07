@@ -31,6 +31,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	grpctypes "github.com/cosmos/cosmos-sdk/types/grpc"
 	bq "github.com/cosmos/cosmos-sdk/types/query"
+	sttypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/sirupsen/logrus"
 	lensclient "github.com/strangelove-ventures/lens/client"
 	lensquery "github.com/strangelove-ventures/lens/client/query"
@@ -610,13 +611,15 @@ func (bc *BabylonController) InsertBtcBlockHeaders(headers []*wire.BlockHeader) 
 // RegisterValidator registers a BTC validator via a MsgCreateBTCValidator to Babylon
 // it returns tx hash and error
 func (bc *BabylonController) RegisterValidator(
-	bbnPubKey *secp256k1.PubKey, btcPubKey *types.BIP340PubKey, commission *sdk.Dec, pop *btcstypes.ProofOfPossession) (*sdk.TxResponse, error) {
+	bbnPubKey *secp256k1.PubKey, btcPubKey *types.BIP340PubKey, commission *sdk.Dec,
+	description *sttypes.Description, pop *btcstypes.ProofOfPossession) (*sdk.TxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateBTCValidator{
-		Signer:     bc.getTxSigner(),
-		Commission: commission,
-		BabylonPk:  bbnPubKey,
-		BtcPk:      btcPubKey,
-		Pop:        pop,
+		Signer:      bc.getTxSigner(),
+		Commission:  commission,
+		BabylonPk:   bbnPubKey,
+		BtcPk:       btcPubKey,
+		Description: description,
+		Pop:         pop,
 	}
 
 	res, err := bc.reliablySendMsgs([]sdk.Msg{registerMsg}, "Failed to send validator registration transaction to babylon node")
