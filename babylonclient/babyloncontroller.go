@@ -310,9 +310,9 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 			BabylonSig: dg.BabylonEcdsaSigOverBtcPk,
 			BtcSig:     schnorSig,
 		},
-		StakingTx: &btcstypes.StakingTx{
-			Tx:            serizalizedStakingTransaction,
-			StakingScript: dg.StakingTransactionScript,
+		StakingTx: &btcstypes.BabylonBTCTaprootTx{
+			Tx:     serizalizedStakingTransaction,
+			Script: dg.StakingTransactionScript,
 		},
 		// TODO: It is super bad that this thing (TransactionInfo) spread over whole babylon codebase, and it
 		// is used in all modules, rpc, database etc.
