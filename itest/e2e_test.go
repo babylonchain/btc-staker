@@ -517,9 +517,13 @@ func (tm *TestManager) createAndRegisterValidator(t *testing.T, testStakingData 
 
 	btcValKey := bbntypes.NewBIP340PubKeyFromBTCPK(testStakingData.ValidatorBtcKey)
 
+	params, err := tm.BabylonClient.StakingParams()
+	require.NoError(t, err)
+
 	_, err = tm.BabylonClient.RegisterValidator(
 		testStakingData.ValidatorBabaylonPublicKey,
 		btcValKey,
+		&params.Params.MinCommissionRate,
 		pop,
 	)
 

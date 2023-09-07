@@ -610,12 +610,13 @@ func (bc *BabylonController) InsertBtcBlockHeaders(headers []*wire.BlockHeader) 
 // RegisterValidator registers a BTC validator via a MsgCreateBTCValidator to Babylon
 // it returns tx hash and error
 func (bc *BabylonController) RegisterValidator(
-	bbnPubKey *secp256k1.PubKey, btcPubKey *types.BIP340PubKey, pop *btcstypes.ProofOfPossession) (*sdk.TxResponse, error) {
+	bbnPubKey *secp256k1.PubKey, btcPubKey *types.BIP340PubKey, commission *sdk.Dec, pop *btcstypes.ProofOfPossession) (*sdk.TxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateBTCValidator{
-		Signer:    bc.getTxSigner(),
-		BabylonPk: bbnPubKey,
-		BtcPk:     btcPubKey,
-		Pop:       pop,
+		Signer:     bc.getTxSigner(),
+		Commission: commission,
+		BabylonPk:  bbnPubKey,
+		BtcPk:      btcPubKey,
+		Pop:        pop,
 	}
 
 	res, err := bc.reliablySendMsgs([]sdk.Msg{registerMsg}, "Failed to send validator registration transaction to babylon node")
