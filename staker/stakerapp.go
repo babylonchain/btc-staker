@@ -1074,6 +1074,52 @@ func GetMinStakingTime(p *cl.StakingParams) uint32 {
 	return 2*p.FinalizationTimeoutBlocks + p.ConfirmationTimeBlocks
 }
 
+func (app *StakerApp) WatchStaking(
+	stakingTx *wire.MsgTx,
+	stakingscript []byte,
+	stakerAddress btcutil.Address,
+	pop *stakerdb.ProofOfPossession,
+) (*chainhash.Hash, error) {
+
+	// TODO: This can be find from transaciton and stakingscript
+	stakingOutputIdx := uint32(1)
+
+	// TODO: I would probably add some bool `watched` to db, to know wheter tx is from
+	// connected wallet or from outside
+	err := app.txTracker.AddTransaction(
+		stakingTx,
+		stakingOutputIdx,
+		stakingscript,
+		pop,
+		stakerAddress,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakingTxHash := stakingTx.TxHash()
+	currentBestBlock := app.currentBestBlockHeight.Load()
+
+	// TODO Transform script to pk script
+	stakingOutputPkScript := stakingscript
+
+	// This start watching tx until it will be k deep on the btc chain
+	// the result is then reported to confirmationEventChan, which then sent tx
+	// to babylon and uses keyring attached to app.
+	if err := app.waitForStakingTransactionConfirmation(
+		&stakingTxHash,
+		stakingOutputPkScript,
+		// TODO Get from params
+		6,
+		currentBestBlock,
+	); err != nil {
+		return nil, err
+	}
+
+	return &stakingTxHash, nil
+}
+
 func (app *StakerApp) StakeFunds(
 	stakerAddress btcutil.Address,
 	stakingAmount btcutil.Amount,
