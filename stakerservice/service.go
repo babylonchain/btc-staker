@@ -315,7 +315,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
 
 		// watch api
-		"watch_staking_tx": rpc.NewRPCFunc(s.stake, "stakingTx,stakingScript,stakerAddress,pop"),
+		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,stakerAddress,pop"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),
