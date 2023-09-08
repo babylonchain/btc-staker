@@ -168,16 +168,16 @@ type TestManager struct {
 }
 
 type testStakingData struct {
-	StakerKey                  *btcec.PublicKey
-	ValidatorBabaylonPrivKey   *secp256k1.PrivKey
-	ValidatorBabaylonPublicKey *secp256k1.PubKey
-	ValidatorBtcPrivKey        *btcec.PrivateKey
-	ValidatorBtcKey            *btcec.PublicKey
-	JuryPrivKey                *btcec.PrivateKey
-	JuryKey                    *btcec.PublicKey
-	StakingTime                uint16
-	StakingAmount              int64
-	Script                     []byte
+	StakerKey                 *btcec.PublicKey
+	ValidatorBabylonPrivKey   *secp256k1.PrivKey
+	ValidatorBabylonPublicKey *secp256k1.PubKey
+	ValidatorBtcPrivKey       *btcec.PrivateKey
+	ValidatorBtcKey           *btcec.PublicKey
+	JuryPrivKey               *btcec.PrivateKey
+	JuryKey                   *btcec.PublicKey
+	StakingTime               uint16
+	StakingAmount             int64
+	Script                    []byte
 }
 
 func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime uint16, stakingAmount int64) *testStakingData {
@@ -197,20 +197,20 @@ func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime ui
 	script, err := stakingData.BuildStakingScript()
 	require.NoError(t, err)
 
-	validatorBabaylonPrivKey := secp256k1.GenPrivKey()
-	validatorBabaylonPubKey := validatorBabaylonPrivKey.PubKey().(*secp256k1.PubKey)
+	validatorBabylonPrivKey := secp256k1.GenPrivKey()
+	validatorBabylonPubKey := validatorBabylonPrivKey.PubKey().(*secp256k1.PubKey)
 
 	return &testStakingData{
-		StakerKey:                  stakerKey,
-		ValidatorBabaylonPrivKey:   validatorBabaylonPrivKey,
-		ValidatorBabaylonPublicKey: validatorBabaylonPubKey,
-		ValidatorBtcPrivKey:        delegatarPrivKey,
-		ValidatorBtcKey:            delegatarPrivKey.PubKey(),
-		JuryPrivKey:                juryPrivKey,
-		JuryKey:                    juryPrivKey.PubKey(),
-		StakingTime:                stakingTime,
-		StakingAmount:              stakingAmount,
-		Script:                     script,
+		StakerKey:                 stakerKey,
+		ValidatorBabylonPrivKey:   validatorBabylonPrivKey,
+		ValidatorBabylonPublicKey: validatorBabylonPubKey,
+		ValidatorBtcPrivKey:       delegatarPrivKey,
+		ValidatorBtcKey:           delegatarPrivKey.PubKey(),
+		JuryPrivKey:               juryPrivKey,
+		JuryKey:                   juryPrivKey.PubKey(),
+		StakingTime:               stakingTime,
+		StakingAmount:             stakingAmount,
+		Script:                    script,
 	}
 }
 
@@ -513,7 +513,7 @@ func (tm *TestManager) createAndRegisterValidator(t *testing.T, testStakingData 
 	require.Error(t, err)
 	require.True(t, errors.Is(err, babylonclient.ErrValidatorDoesNotExist))
 
-	pop, err := btcstypes.NewPoP(testStakingData.ValidatorBabaylonPrivKey, testStakingData.ValidatorBtcPrivKey)
+	pop, err := btcstypes.NewPoP(testStakingData.ValidatorBabylonPrivKey, testStakingData.ValidatorBtcPrivKey)
 	require.NoError(t, err)
 
 	btcValKey := bbntypes.NewBIP340PubKeyFromBTCPK(testStakingData.ValidatorBtcKey)
@@ -522,7 +522,7 @@ func (tm *TestManager) createAndRegisterValidator(t *testing.T, testStakingData 
 	require.NoError(t, err)
 
 	_, err = tm.BabylonClient.RegisterValidator(
-		testStakingData.ValidatorBabaylonPublicKey,
+		testStakingData.ValidatorBabylonPublicKey,
 		btcValKey,
 		&params.Params.MinCommissionRate,
 		&sttypes.Description{},
