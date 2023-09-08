@@ -137,11 +137,11 @@ func GetMockClient() *MockBabylonClient {
 		panic(err)
 	}
 
-	validatorBabaylonPrivKey := secp256k1.GenPrivKey()
-	validatorBabaylonPubKey := validatorBabaylonPrivKey.PubKey().(*secp256k1.PubKey)
+	validatorBabylonPrivKey := secp256k1.GenPrivKey()
+	validatorBabylonPubKey := validatorBabylonPrivKey.PubKey().(*secp256k1.PubKey)
 
 	vi := ValidatorInfo{
-		BabylonPk: *validatorBabaylonPubKey,
+		BabylonPk: *validatorBabylonPubKey,
 		BtcPk:     *validatorBtcPrivKey.PubKey(),
 	}
 
