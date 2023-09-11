@@ -1,6 +1,7 @@
 package staker
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/babylonchain/btc-staker/types"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 
+	"github.com/babylonchain/babylon/btcstaking"
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
@@ -34,6 +36,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type watchTxData struct {
+	slashingTx    *wire.MsgTx
+	slashingTxSig *schnorr.Signature
+}
+
 type stakingRequest struct {
 	stakerAddress           btcutil.Address
 	stakingTx               *wire.MsgTx
@@ -42,8 +49,64 @@ type stakingRequest struct {
 	stakingTxScript         []byte
 	requiredDepthOnBtcChain uint32
 	pop                     *stakerdb.ProofOfPossession
+	watchTxData             *watchTxData
 	errChan                 chan error
 	successChan             chan *chainhash.Hash
+}
+
+func newOwnedStakingRequest(
+	stakerAddress btcutil.Address,
+	stakingTx *wire.MsgTx,
+	stakingOutputIdx uint32,
+	stakingOutputPkScript []byte,
+	stakingScript []byte,
+	confirmationTimeBlocks uint32,
+	pop *stakerdb.ProofOfPossession,
+) *stakingRequest {
+	return &stakingRequest{
+		stakerAddress:           stakerAddress,
+		stakingTx:               stakingTx,
+		stakingOutputIdx:        stakingOutputIdx,
+		stakingOutputPkScript:   stakingOutputPkScript,
+		stakingTxScript:         stakingScript,
+		requiredDepthOnBtcChain: confirmationTimeBlocks,
+		pop:                     pop,
+		watchTxData:             nil,
+		errChan:                 make(chan error, 1),
+		successChan:             make(chan *chainhash.Hash, 1),
+	}
+}
+
+func newWatchedStakingRequest(
+	stakerAddress btcutil.Address,
+	stakingTx *wire.MsgTx,
+	stakingOutputIdx uint32,
+	stakingOutputPkScript []byte,
+	stakingScript []byte,
+	confirmationTimeBlocks uint32,
+	pop *stakerdb.ProofOfPossession,
+	slashingTx *wire.MsgTx,
+	slashingTxSignature *schnorr.Signature,
+) *stakingRequest {
+	return &stakingRequest{
+		stakerAddress:           stakerAddress,
+		stakingTx:               stakingTx,
+		stakingOutputIdx:        stakingOutputIdx,
+		stakingOutputPkScript:   stakingOutputPkScript,
+		stakingTxScript:         stakingScript,
+		requiredDepthOnBtcChain: confirmationTimeBlocks,
+		pop:                     pop,
+		watchTxData: &watchTxData{
+			slashingTx:    slashingTx,
+			slashingTxSig: slashingTxSignature,
+		},
+		errChan:     make(chan error, 1),
+		successChan: make(chan *chainhash.Hash, 1),
+	}
+}
+
+func (req *stakingRequest) isWatched() bool {
+	return req.watchTxData != nil
 }
 
 type confirmationEvent struct {
@@ -911,27 +974,46 @@ func (app *StakerApp) handleStaking() {
 				"currentBestBlockHeight": bestBlockHeight,
 			}).Infof("Received new staking request")
 
-			hash, err := app.wc.SendRawTransaction(req.stakingTx, true)
-			if err != nil {
-				req.errChan <- err
-				continue
-			}
+			if req.isWatched() {
+				err := app.txTracker.AddWatchedTransaction(
+					req.stakingTx,
+					req.stakingOutputIdx,
+					req.stakingTxScript,
+					req.pop,
+					req.stakerAddress,
+					req.watchTxData.slashingTx,
+					req.watchTxData.slashingTxSig,
+				)
 
-			err = app.txTracker.AddTransaction(
-				req.stakingTx,
-				req.stakingOutputIdx,
-				req.stakingTxScript,
-				req.pop,
-				req.stakerAddress,
-			)
+				if err != nil {
+					req.errChan <- err
+					continue
+				}
 
-			if err != nil {
-				req.errChan <- err
-				continue
+			} else {
+				// in case of owend transaction we need to send it, and then add to our tracking db.
+				_, err := app.wc.SendRawTransaction(req.stakingTx, true)
+				if err != nil {
+					req.errChan <- err
+					continue
+				}
+
+				err = app.txTracker.AddTransaction(
+					req.stakingTx,
+					req.stakingOutputIdx,
+					req.stakingTxScript,
+					req.pop,
+					req.stakerAddress,
+				)
+
+				if err != nil {
+					req.errChan <- err
+					continue
+				}
 			}
 
 			if err := app.waitForStakingTransactionConfirmation(
-				hash,
+				&txHash,
 				req.stakingOutputPkScript,
 				req.requiredDepthOnBtcChain,
 				uint32(bestBlockHeight),
@@ -941,11 +1023,12 @@ func (app *StakerApp) handleStaking() {
 			}
 
 			app.logger.WithFields(logrus.Fields{
-				"btcTxHash": hash,
+				"btcTxHash": &txHash,
 				"confLeft":  req.requiredDepthOnBtcChain,
-			}).Infof("Staking transaction successfully sent to BTC network. Waiting for confirmations")
+				"watched":   req.isWatched(),
+			}).Infof("Staking transaction successfully registred")
 
-			req.successChan <- hash
+			req.successChan <- &txHash
 
 		case confEvent := <-app.confirmationEventChan:
 			if err := app.txTracker.SetTxConfirmed(&confEvent.txHash); err != nil {
@@ -1077,47 +1160,104 @@ func GetMinStakingTime(p *cl.StakingParams) uint32 {
 func (app *StakerApp) WatchStaking(
 	stakingTx *wire.MsgTx,
 	stakingscript []byte,
+	slashingTx *wire.MsgTx,
+	slashingTxSig *schnorr.Signature,
 	stakerAddress btcutil.Address,
 	pop *stakerdb.ProofOfPossession,
 ) (*chainhash.Hash, error) {
 
-	// TODO: This can be find from transaciton and stakingscript
-	stakingOutputIdx := uint32(1)
-
-	// TODO: I would probably add some bool `watched` to db, to know wheter tx is from
-	// connected wallet or from outside
-	err := app.txTracker.AddTransaction(
+	// 1. Check script matches transaction
+	stakingOutputIdx, err := btcstaking.GetIdxOutputCommitingToScript(
 		stakingTx,
-		stakingOutputIdx,
 		stakingscript,
-		pop,
-		stakerAddress,
+		app.network,
 	)
 
 	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx due to script not matchin script: %w", err)
+	}
+
+	currentParams, err := app.babylonClient.Params()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Failed to get params: %w", err)
+	}
+
+	// 2. Check wheter slashing tx match staking tx
+	scriptData, err := btcstaking.CheckTransactions(
+		slashingTx,
+		stakingTx,
+		int64(currentParams.MinSlashingTxFeeSat),
+		currentParams.SlashingAddress,
+		stakingscript,
+		app.network,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid transactions: %w", err)
+	}
+
+	// 3.Check jury key in script
+	if !bytes.Equal(
+		schnorr.SerializePubKey(scriptData.StakingScriptData.JuryKey),
+		schnorr.SerializePubKey(&currentParams.JuryPk),
+	) {
+		return nil, fmt.Errorf("failed to watch staking tx. Script jury key do not match current node params")
+	}
+
+	// 4.Check validator exsits
+	if err := app.validatorExists(scriptData.StakingScriptData.ValidatorKey); err != nil {
 		return nil, err
 	}
 
-	stakingTxHash := stakingTx.TxHash()
-	currentBestBlock := app.currentBestBlockHeight.Load()
+	// 5. Check slashig tx sig is good. It implicitly verify staker pubkey, as script
+	// contain it.
+	err = btcstaking.VerifyTransactionSigWithOutputData(
+		slashingTx,
+		stakingTx.TxOut[stakingOutputIdx].PkScript,
+		stakingTx.TxOut[stakingOutputIdx].Value,
+		stakingscript,
+		scriptData.StakingScriptData.StakerKey,
+		slashingTxSig.Serialize(),
+	)
 
-	// TODO Transform script to pk script
-	stakingOutputPkScript := stakingscript
-
-	// This start watching tx until it will be k deep on the btc chain
-	// the result is then reported to confirmationEventChan, which then sent tx
-	// to babylon and uses keyring attached to app.
-	if err := app.waitForStakingTransactionConfirmation(
-		&stakingTxHash,
-		stakingOutputPkScript,
-		// TODO Get from params
-		6,
-		currentBestBlock,
-	); err != nil {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx sig: %w", err)
 	}
 
-	return &stakingTxHash, nil
+	app.logger.WithFields(logrus.Fields{
+		"stakerAddress": stakerAddress,
+		"stakingAmount": stakingTx.TxOut[stakingOutputIdx].Value,
+		"btxTxHash":     stakingTx.TxHash(),
+	}).Info("Received valid staking tx to watch")
+
+	req := newWatchedStakingRequest(
+		stakerAddress,
+		stakingTx,
+		uint32(stakingOutputIdx),
+		stakingTx.TxOut[stakingOutputIdx].PkScript,
+		stakingscript,
+		currentParams.ConfirmationTimeBlocks,
+		pop,
+		slashingTx,
+		slashingTxSig,
+	)
+
+	app.stakingRequestChan <- req
+
+	select {
+	case reqErr := <-req.errChan:
+		app.logger.WithFields(logrus.Fields{
+			"stakerAddress": stakerAddress,
+			"err":           reqErr,
+		}).Debugf("Sending staking tx failed")
+
+		return nil, reqErr
+	case hash := <-req.successChan:
+		return hash, nil
+	case <-app.quit:
+		return nil, nil
+	}
 }
 
 func (app *StakerApp) StakeFunds(
@@ -1208,17 +1348,15 @@ func (app *StakerApp) StakeFunds(
 		"fee":           feeRate,
 	}).Info("Created and signed staking transaction")
 
-	req := &stakingRequest{
-		stakerAddress:           stakerAddress,
-		stakingTx:               tx,
-		stakingOutputIdx:        0,
-		stakingOutputPkScript:   output.PkScript,
-		stakingTxScript:         script,
-		requiredDepthOnBtcChain: params.ConfirmationTimeBlocks,
-		pop:                     pop,
-		errChan:                 make(chan error),
-		successChan:             make(chan *chainhash.Hash),
-	}
+	req := newOwnedStakingRequest(
+		stakerAddress,
+		tx,
+		0,
+		output.PkScript,
+		script,
+		params.ConfirmationTimeBlocks,
+		pop,
+	)
 
 	app.stakingRequestChan <- req
 

@@ -12,11 +12,9 @@ import (
 
 	str "github.com/babylonchain/btc-staker/staker"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
-	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/cometbft/cometbft/libs/log"
 	rpc "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
@@ -276,32 +274,33 @@ func (s *StakerService) watchStaking(
 	pop string,
 ) (*ResultStake, error) {
 
-	script, err := hex.DecodeString(stakingScript)
-	if err != nil {
-		return nil, err
-	}
+	// script, err := hex.DecodeString(stakingScript)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+	// address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
 
-	if err != nil {
-		return nil, err
-	}
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	// TODO decode tx
-	var tx *wire.MsgTx
-	var popDec *stakerdb.ProofOfPossession
-	hash, err := s.staker.WatchStaking(
-		tx,
-		script,
-		address,
-		popDec,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &ResultStake{
-		TxHash: hash.String(),
-	}, nil
+	// // TODO decode tx
+	// var tx *wire.MsgTx
+	// var popDec *stakerdb.ProofOfPossession
+	// hash, err := s.staker.WatchStaking(
+	// 	tx,
+	// 	script,
+	// 	address,
+	// 	popDec,
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return &ResultStake{
+	// 	TxHash: hash.String(),
+	// }, nil
+	return nil, nil
 }
 
 func (s *StakerService) GetRoutes() RoutesMap {

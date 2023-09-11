@@ -11,6 +11,11 @@ enum TransactionState {
     SPENT_ON_BTC = 3;
 }
 
+message WatchedTxData {
+    bytes slashing_transaction = 1;
+    bytes slashing_transaction_sig = 2;
+}
+
 message TrackedTransaction {
     bytes staking_transaction = 1;
     bytes staking_script = 2;
@@ -19,5 +24,6 @@ message TrackedTransaction {
     bytes babylon_sig_btc_pk = 5;
     bytes schnor_sig_babylon_sig = 6;
     TransactionState state = 7;
+    bool watched = 8;
 }
 
