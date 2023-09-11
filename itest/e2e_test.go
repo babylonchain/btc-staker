@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"math/rand"
 	"net"
 	"net/netip"
@@ -823,7 +822,6 @@ func TestSendingWatchedStakingTransaction(t *testing.T) {
 	tm.createAndRegisterValidator(t, testStakingData)
 
 	txHash := tm.sendWatchedStakingTx(t, testStakingData, params)
-	fmt.Println(txHash)
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
