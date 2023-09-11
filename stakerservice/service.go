@@ -1,6 +1,7 @@
 package stakerservice
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -12,12 +13,15 @@ import (
 
 	str "github.com/babylonchain/btc-staker/staker"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
+	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/cometbft/cometbft/libs/log"
 	rpc "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/signal"
@@ -266,41 +270,118 @@ func (s *StakerService) listStakingTransactions(_ *rpctypes.Context, offset, lim
 	}, nil
 }
 
+func decodeBtcTx(txHex string) (*wire.MsgTx, error) {
+	txBytes, err := hex.DecodeString(txHex)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var txMsg wire.MsgTx
+
+	err = txMsg.Deserialize(bytes.NewReader(txBytes))
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &txMsg, nil
+}
+
 func (s *StakerService) watchStaking(
 	_ *rpctypes.Context,
 	stakingTx string,
 	stakingScript string,
+	slashingTx string,
+	slashingTxSig string,
+	stakerBabylonPk string,
 	stakerAddress string,
-	pop string,
+	stakerBabylonSig string,
+	stakerBtcSig string,
 ) (*ResultStake, error) {
 
-	// script, err := hex.DecodeString(stakingScript)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	stkTx, err := decodeBtcTx(stakingTx)
 
-	// address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+	if err != nil {
+		return nil, err
+	}
 
-	// if err != nil {
-	// 	return nil, err
-	// }
+	slshTx, err := decodeBtcTx(slashingTx)
 
-	// // TODO decode tx
-	// var tx *wire.MsgTx
-	// var popDec *stakerdb.ProofOfPossession
-	// hash, err := s.staker.WatchStaking(
-	// 	tx,
-	// 	script,
-	// 	address,
-	// 	popDec,
-	// )
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// return &ResultStake{
-	// 	TxHash: hash.String(),
-	// }, nil
-	return nil, nil
+	if err != nil {
+		return nil, err
+	}
+
+	stkScript, err := hex.DecodeString(stakingScript)
+
+	if err != nil {
+		return nil, err
+	}
+
+	address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+
+	if err != nil {
+		return nil, err
+	}
+
+	slashTxSigBytes, err := hex.DecodeString(slashingTxSig)
+
+	if err != nil {
+		return nil, err
+	}
+
+	slashingTxSchnorSig, err := schnorr.ParseSignature(slashTxSigBytes)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakerBabylonPubkeyBytes, err := hex.DecodeString(stakerBabylonPk)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(stakerBabylonPubkeyBytes) != secp256k1.PubKeySize {
+		return nil, fmt.Errorf("babylon public key must have %d bytes", secp256k1.PubKeySize)
+	}
+
+	stakerBabylonPubKey := secp256k1.PubKey{
+		Key: stakerBabylonPubkeyBytes,
+	}
+
+	stakerBabylonSigBytes, err := hex.DecodeString(stakerBabylonSig)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakerBtcSigBytes, err := hex.DecodeString(stakerBtcSig)
+
+	if err != nil {
+		return nil, err
+	}
+
+	hash, err := s.staker.WatchStaking(
+		stkTx,
+		stkScript,
+		slshTx,
+		slashingTxSchnorSig,
+		&stakerBabylonPubKey,
+		address,
+		&stakerdb.ProofOfPossession{
+			BabylonSigOverBtcPk:         stakerBabylonSigBytes,
+			BtcSchnorrSigOverBabylonSig: stakerBtcSigBytes,
+		},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ResultStake{
+		TxHash: hash.String(),
+	}, nil
 }
 
 func (s *StakerService) GetRoutes() RoutesMap {
@@ -314,7 +395,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
 
 		// watch api
-		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,stakerAddress,pop"),
+		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),
