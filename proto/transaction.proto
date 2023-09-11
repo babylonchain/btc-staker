@@ -14,6 +14,7 @@ enum TransactionState {
 message WatchedTxData {
     bytes slashing_transaction = 1;
     bytes slashing_transaction_sig = 2;
+    bytes staker_babylon_pk = 3;
 }
 
 message TrackedTransaction {

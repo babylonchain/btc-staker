@@ -13,6 +13,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/walletdb"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	pm "google.golang.org/protobuf/proto"
 
 	"github.com/lightningnetwork/lnd/kvdb"
@@ -63,6 +64,13 @@ type StoredTransaction struct {
 	// which requires knowing the network we are on
 	StakerAddress string
 	State         proto.TransactionState
+	Watched       bool
+}
+
+type WatchedTransactionData struct {
+	SlashingTx          *wire.MsgTx
+	SlashingTxSig       *schnorr.Signature
+	StakerBabylonPubKey *secp256k1.PubKey
 }
 
 type StoredTransactionQuery struct {
@@ -131,6 +139,31 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 		},
 		StakerAddress: ttx.StakerAddress,
 		State:         ttx.State,
+		Watched:       ttx.Watched,
+	}, nil
+}
+
+func protoWatchedDataToWatchedTransactionData(wd *proto.WatchedTxData) (*WatchedTransactionData, error) {
+	var slashingTx wire.MsgTx
+	err := slashingTx.Deserialize(bytes.NewReader(wd.SlashingTransaction))
+	if err != nil {
+		return nil, err
+	}
+
+	schnorSig, err := schnorr.ParseSignature(wd.SlashingTransactionSig)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakerBabylonKey := secp256k1.PubKey{
+		Key: wd.StakerBabylonPk,
+	}
+
+	return &WatchedTransactionData{
+		SlashingTx:          &slashingTx,
+		SlashingTxSig:       schnorSig,
+		StakerBabylonPubKey: &stakerBabylonKey,
 	}, nil
 }
 
@@ -300,6 +333,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	stakerAddress btcutil.Address,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
+	stakerBabylonPk *secp256k1.PubKey,
 ) error {
 	txHash := btcTx.TxHash()
 	txHashBytes := txHash[:]
@@ -330,6 +364,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	watchedData := proto.WatchedTxData{
 		SlashingTransaction:    serializedSlashingtx,
 		SlashingTransactionSig: serializedSig,
+		StakerBabylonPk:        stakerBabylonPk.Bytes(),
 	}
 
 	return c.addTransactionInternal(
@@ -432,6 +467,48 @@ func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*Store
 	}
 
 	return storedTx, nil
+}
+
+func (c *TrackedTransactionStore) GetWatchedTransactionData(txHash *chainhash.Hash) (*WatchedTransactionData, error) {
+	var watchedData *WatchedTransactionData
+	txHashBytes := txHash.CloneBytes()
+
+	err := c.db.View(func(tx kvdb.RTx) error {
+		watchedTxDataBucket := tx.ReadBucket(watchedTxDataBucketName)
+
+		if watchedTxDataBucket == nil {
+			return ErrCorruptedTransactionsDb
+		}
+
+		maybeWatchedData := watchedTxDataBucket.Get(txHashBytes)
+
+		if maybeWatchedData == nil {
+			return ErrWatchedDataNotFound
+		}
+
+		var watchedDataProto proto.WatchedTxData
+		err := pm.Unmarshal(maybeWatchedData, &watchedDataProto)
+
+		if err != nil {
+			return ErrCorruptedTransactionsDb
+		}
+
+		watchedDataFromDb, err := protoWatchedDataToWatchedTransactionData(&watchedDataProto)
+
+		if err != nil {
+			return err
+		}
+
+		watchedData = watchedDataFromDb
+
+		return nil
+	}, func() {})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return watchedData, nil
 }
 
 func (c *TrackedTransactionStore) GetAllStoredTransactions() ([]StoredTransaction, error) {
