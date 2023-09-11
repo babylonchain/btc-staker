@@ -266,7 +266,11 @@ func saveTrackedTransaction(
 			return err
 		}
 
-		watchedTxBucket.Put(txHashBytes, marshalled)
+		err = watchedTxBucket.Put(txHashBytes, marshalled)
+
+		if err != nil {
+			return err
+		}
 	}
 
 	// increment counter for the next transaction
