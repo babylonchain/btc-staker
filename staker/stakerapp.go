@@ -390,6 +390,10 @@ func (app *StakerApp) waitForStakingTransactionConfirmation(
 	requiredBlockDepth uint32,
 	currentBestBlockHeight uint32,
 ) error {
+	app.logger.WithFields(logrus.Fields{
+		"stakingTxHash": stakingTxHash.String(),
+	}).Debug("Register waiting for tx confirmation")
+
 	confEvent, err := app.notifier.RegisterConfirmationsNtfn(
 		stakingTxHash,
 		stakingTxPkScript,

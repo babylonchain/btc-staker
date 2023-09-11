@@ -117,6 +117,12 @@ func (c *TrackedTransactionStore) initBuckets() error {
 		if err != nil {
 			return err
 		}
+
+		_, err = tx.CreateTopLevelBucket(watchedTxDataBucketName)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 }
