@@ -1608,6 +1608,12 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 		return nil, nil, fmt.Errorf("cannot spend staking which was not sent to babylon")
 	}
 
+	// we cannont spend tx which is watch only.
+	// TODO. To make it possible additional endpoint is needed
+	if tx.Watched {
+		return nil, nil, fmt.Errorf("cannot spend staking which which is in watch only mode")
+	}
+
 	// this coud happen if we stared staker on wrong network.
 	// TODO: consider storing data for different networks in different folders
 	// to avoid this
