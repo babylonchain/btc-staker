@@ -20,6 +20,7 @@ import (
 	"strconv"
 
 	dc "github.com/babylonchain/btc-staker/stakerservice/client"
+	"github.com/babylonchain/btc-staker/utils"
 
 	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
@@ -169,6 +170,8 @@ type TestManager struct {
 
 type testStakingData struct {
 	StakerKey                 *btcec.PublicKey
+	StakerBabylonPrivKey      *secp256k1.PrivKey
+	StakerBabylonPubKey       *secp256k1.PubKey
 	ValidatorBabylonPrivKey   *secp256k1.PrivKey
 	ValidatorBabylonPublicKey *secp256k1.PubKey
 	ValidatorBtcPrivKey       *btcec.PrivateKey
@@ -200,8 +203,13 @@ func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime ui
 	validatorBabylonPrivKey := secp256k1.GenPrivKey()
 	validatorBabylonPubKey := validatorBabylonPrivKey.PubKey().(*secp256k1.PubKey)
 
+	stakerBabylonPrivKey := secp256k1.GenPrivKey()
+	stakerBabylonPubKey := stakerBabylonPrivKey.PubKey().(*secp256k1.PubKey)
+
 	return &testStakingData{
 		StakerKey:                 stakerKey,
+		StakerBabylonPrivKey:      stakerBabylonPrivKey,
+		StakerBabylonPubKey:       stakerBabylonPubKey,
 		ValidatorBabylonPrivKey:   validatorBabylonPrivKey,
 		ValidatorBabylonPublicKey: validatorBabylonPubKey,
 		ValidatorBtcPrivKey:       delegatarPrivKey,
@@ -589,6 +597,97 @@ func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingD
 	return hashFromString
 }
 
+func (tm *TestManager) sendWatchedStakingTx(
+	t *testing.T,
+	testStakingData *testStakingData,
+	params *babylonclient.StakingParams,
+) *chainhash.Hash {
+	stakingOutput, script, err := staking.BuildStakingOutput(
+		testStakingData.StakerKey,
+		testStakingData.ValidatorBtcKey,
+		&params.JuryPk,
+		testStakingData.StakingTime,
+		btcutil.Amount(testStakingData.StakingAmount),
+		simnetParams,
+	)
+
+	require.NoError(t, err)
+
+	err = tm.Sa.Wallet().UnlockWallet(20)
+	require.NoError(t, err)
+
+	tx, err := tm.Sa.Wallet().CreateAndSignTx(
+		[]*wire.TxOut{stakingOutput},
+		2000,
+		tm.MinerAddr,
+	)
+	require.NoError(t, err)
+	txHash := tx.TxHash()
+
+	_, err = tm.Sa.Wallet().SendRawTransaction(tx, true)
+	require.NoError(t, err)
+
+	stakingOutputIdx, err := staking.GetIdxOutputCommitingToScript(
+		tx, script, simnetParams,
+	)
+
+	require.NoError(t, err)
+
+	slashingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
+		tx,
+		uint32(stakingOutputIdx),
+		params.SlashingAddress,
+		int64(params.MinSlashingTxFeeSat)+10,
+		script,
+		simnetParams,
+	)
+
+	require.NoError(t, err)
+
+	slashSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
+		slashingTx,
+		tx.TxOut[stakingOutputIdx],
+		tm.WalletPrivKey,
+		script,
+	)
+
+	require.NoError(t, err)
+
+	serializedStakingTx, err := utils.SerializeBtcTransaction(tx)
+	require.NoError(t, err)
+	serializedSlashingTx, err := utils.SerializeBtcTransaction(slashingTx)
+	require.NoError(t, err)
+
+	// TODO: Update pop when new version will be ready
+	pop, err := btcstypes.NewPoP(
+		testStakingData.StakerBabylonPrivKey,
+		tm.WalletPrivKey,
+	)
+
+	require.NoError(t, err)
+
+	_, err = tm.StakerClient.WatchStaking(
+		context.Background(),
+		hex.EncodeToString(serializedStakingTx),
+		hex.EncodeToString(script),
+		hex.EncodeToString(serializedSlashingTx),
+		hex.EncodeToString(slashSig.Serialize()),
+		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
+		tm.MinerAddr.String(),
+		hex.EncodeToString(pop.BabylonSig),
+		pop.BtcSig.ToHexStr(),
+	)
+
+	require.NoError(t, err)
+
+	mBlock := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{&txHash}))
+	require.Equal(t, 2, len(mBlock.Transactions))
+	_, err = tm.BabylonClient.InsertBtcBlockHeaders([]*wire.BlockHeader{&mBlock.Header})
+	require.NoError(t, err)
+
+	return &txHash
+}
+
 func (tm *TestManager) spendStakingTxWithHash(t *testing.T, stakingTxHash *chainhash.Hash) (*chainhash.Hash, *btcutil.Amount) {
 	res, err := tm.StakerClient.SpendStakingTransaction(context.Background(), stakingTxHash.String())
 	require.NoError(t, err)
@@ -705,6 +804,26 @@ func TestSendingStakingTransaction(t *testing.T) {
 	require.Len(t, transactionsResult.Transactions, 1)
 	require.Equal(t, transactionsResult.TotalTransactionCount, "1")
 	require.Equal(t, transactionsResult.Transactions[0].StakingTxHash, txHash.String())
+}
+
+func TestSendingWatchedStakingTransaction(t *testing.T) {
+	// need to have at least 300 block on testnet as only then segwit is activated
+	numMatureOutputs := uint32(200)
+	tm := StartManager(t, numMatureOutputs, 2, nil)
+	defer tm.Stop(t)
+	tm.insertAllMinedBlocksToBabylon(t)
+
+	cl := tm.Sa.BabylonController()
+	params, err := cl.Params()
+	require.NoError(t, err)
+	stakingTime := uint16(staker.GetMinStakingTime(params))
+	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+
+	tm.createAndRegisterValidator(t, testStakingData)
+
+	txHash := tm.sendWatchedStakingTx(t, testStakingData, params)
+	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
 
 func TestRestartingTxNotDeepEnough(t *testing.T) {

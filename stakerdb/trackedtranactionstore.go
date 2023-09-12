@@ -3,14 +3,17 @@ package stakerdb
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/utils"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/walletdb"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	pm "google.golang.org/protobuf/proto"
 
 	"github.com/lightningnetwork/lnd/kvdb"
@@ -22,6 +25,10 @@ var (
 
 	// mapping txHash -> uint64
 	transactionIndexName = []byte("transactionIdx")
+
+	// mapping txHash -> proto.WatchedData
+	// It holds additional data for staking transaction in watch only mode
+	watchedTxDataBucketName = []byte("watched")
 
 	// key for next transaction
 	numTxKey = []byte("ntk")
@@ -57,6 +64,13 @@ type StoredTransaction struct {
 	// which requires knowing the network we are on
 	StakerAddress string
 	State         proto.TransactionState
+	Watched       bool
+}
+
+type WatchedTransactionData struct {
+	SlashingTx          *wire.MsgTx
+	SlashingTxSig       *schnorr.Signature
+	StakerBabylonPubKey *secp256k1.PubKey
 }
 
 type StoredTransactionQuery struct {
@@ -103,6 +117,12 @@ func (c *TrackedTransactionStore) initBuckets() error {
 		if err != nil {
 			return err
 		}
+
+		_, err = tx.CreateTopLevelBucket(watchedTxDataBucketName)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 }
@@ -125,6 +145,31 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 		},
 		StakerAddress: ttx.StakerAddress,
 		State:         ttx.State,
+		Watched:       ttx.Watched,
+	}, nil
+}
+
+func protoWatchedDataToWatchedTransactionData(wd *proto.WatchedTxData) (*WatchedTransactionData, error) {
+	var slashingTx wire.MsgTx
+	err := slashingTx.Deserialize(bytes.NewReader(wd.SlashingTransaction))
+	if err != nil {
+		return nil, err
+	}
+
+	schnorSig, err := schnorr.ParseSignature(wd.SlashingTransactionSig)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakerBabylonKey := secp256k1.PubKey{
+		Key: wd.StakerBabylonPk,
+	}
+
+	return &WatchedTransactionData{
+		SlashingTx:          &slashingTx,
+		SlashingTxSig:       schnorSig,
+		StakerBabylonPubKey: &stakerBabylonKey,
 	}, nil
 }
 
@@ -176,10 +221,16 @@ func getTxByHash(
 }
 
 func saveTrackedTransaction(
+	rwTx kvdb.RwTx,
 	txIdxBucket walletdb.ReadWriteBucket,
 	txBucket walletdb.ReadWriteBucket,
 	txHashBytes []byte,
-	tx *proto.TrackedTransaction) error {
+	tx *proto.TrackedTransaction,
+	watchedTxData *proto.WatchedTxData,
+) error {
+	if tx == nil {
+		return fmt.Errorf("cannot save nil tracked transaciton")
+	}
 
 	marshalled, err := pm.Marshal(tx)
 
@@ -203,25 +254,34 @@ func saveTrackedTransaction(
 		return err
 	}
 
+	if watchedTxData != nil {
+		watchedTxBucket := rwTx.ReadWriteBucket(watchedTxDataBucketName)
+		if watchedTxBucket == nil {
+			return ErrCorruptedTransactionsDb
+		}
+
+		marshalled, err := pm.Marshal(watchedTxData)
+
+		if err != nil {
+			return err
+		}
+
+		err = watchedTxBucket.Put(txHashBytes, marshalled)
+
+		if err != nil {
+			return err
+		}
+	}
+
 	// increment counter for the next transaction
 	return txIdxBucket.Put(numTxKey, uint64KeyToBytes(nextTxKey+1))
 }
 
-func (c *TrackedTransactionStore) AddTransaction(
-	btcTx *wire.MsgTx,
-	stakingOutputIndex uint32,
-	txscript []byte,
-	pop *ProofOfPossession,
-	stakerAddress btcutil.Address,
+func (c *TrackedTransactionStore) addTransactionInternal(
+	txHashBytes []byte,
+	tt *proto.TrackedTransaction,
+	wd *proto.WatchedTxData,
 ) error {
-	txHash := btcTx.TxHash()
-	txHashBytes := txHash[:]
-	serializedTx, err := utils.SerializeBtcTransaction(btcTx)
-
-	if err != nil {
-		return err
-	}
-
 	return kvdb.Batch(c.db, func(tx kvdb.RwTx) error {
 		transactionsBucketIdxBucket := tx.ReadWriteBucket(transactionIndexName)
 
@@ -240,18 +300,86 @@ func (c *TrackedTransactionStore) AddTransaction(
 			return ErrCorruptedTransactionsDb
 		}
 
-		msg := proto.TrackedTransaction{
-			StakingTransaction:  serializedTx,
-			StakingScript:       txscript,
-			StakingOutputIdx:    stakingOutputIndex,
-			StakerAddress:       stakerAddress.EncodeAddress(),
-			BabylonSigBtcPk:     pop.BabylonSigOverBtcPk,
-			SchnorSigBabylonSig: pop.BtcSchnorrSigOverBabylonSig,
-			State:               proto.TransactionState_SENT_TO_BTC,
-		}
-
-		return saveTrackedTransaction(transactionsBucketIdxBucket, transactionsBucket, txHashBytes, &msg)
+		return saveTrackedTransaction(tx, transactionsBucketIdxBucket, transactionsBucket, txHashBytes, tt, wd)
 	})
+}
+
+func (c *TrackedTransactionStore) AddTransaction(
+	btcTx *wire.MsgTx,
+	stakingOutputIndex uint32,
+	txscript []byte,
+	pop *ProofOfPossession,
+	stakerAddress btcutil.Address,
+) error {
+	txHash := btcTx.TxHash()
+	txHashBytes := txHash[:]
+	serializedTx, err := utils.SerializeBtcTransaction(btcTx)
+
+	if err != nil {
+		return err
+	}
+
+	msg := proto.TrackedTransaction{
+		StakingTransaction:  serializedTx,
+		StakingScript:       txscript,
+		StakingOutputIdx:    stakingOutputIndex,
+		StakerAddress:       stakerAddress.EncodeAddress(),
+		BabylonSigBtcPk:     pop.BabylonSigOverBtcPk,
+		SchnorSigBabylonSig: pop.BtcSchnorrSigOverBabylonSig,
+		State:               proto.TransactionState_SENT_TO_BTC,
+		Watched:             false,
+	}
+
+	return c.addTransactionInternal(
+		txHashBytes, &msg, nil,
+	)
+}
+
+func (c *TrackedTransactionStore) AddWatchedTransaction(
+	btcTx *wire.MsgTx,
+	stakingOutputIndex uint32,
+	txscript []byte,
+	pop *ProofOfPossession,
+	stakerAddress btcutil.Address,
+	slashingTx *wire.MsgTx,
+	slashingTxSig *schnorr.Signature,
+	stakerBabylonPk *secp256k1.PubKey,
+) error {
+	txHash := btcTx.TxHash()
+	txHashBytes := txHash[:]
+	serializedTx, err := utils.SerializeBtcTransaction(btcTx)
+
+	if err != nil {
+		return err
+	}
+
+	msg := proto.TrackedTransaction{
+		StakingTransaction:  serializedTx,
+		StakingScript:       txscript,
+		StakingOutputIdx:    stakingOutputIndex,
+		StakerAddress:       stakerAddress.EncodeAddress(),
+		BabylonSigBtcPk:     pop.BabylonSigOverBtcPk,
+		SchnorSigBabylonSig: pop.BtcSchnorrSigOverBabylonSig,
+		State:               proto.TransactionState_SENT_TO_BTC,
+		Watched:             true,
+	}
+
+	serializedSlashingtx, err := utils.SerializeBtcTransaction(slashingTx)
+	if err != nil {
+		return err
+	}
+
+	serializedSig := slashingTxSig.Serialize()
+
+	watchedData := proto.WatchedTxData{
+		SlashingTransaction:    serializedSlashingtx,
+		SlashingTransactionSig: serializedSig,
+		StakerBabylonPk:        stakerBabylonPk.Bytes(),
+	}
+
+	return c.addTransactionInternal(
+		txHashBytes, &msg, &watchedData,
+	)
 }
 
 func (c *TrackedTransactionStore) setTxState(txHash *chainhash.Hash, state proto.TransactionState) error {
@@ -349,6 +477,48 @@ func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*Store
 	}
 
 	return storedTx, nil
+}
+
+func (c *TrackedTransactionStore) GetWatchedTransactionData(txHash *chainhash.Hash) (*WatchedTransactionData, error) {
+	var watchedData *WatchedTransactionData
+	txHashBytes := txHash.CloneBytes()
+
+	err := c.db.View(func(tx kvdb.RTx) error {
+		watchedTxDataBucket := tx.ReadBucket(watchedTxDataBucketName)
+
+		if watchedTxDataBucket == nil {
+			return ErrCorruptedTransactionsDb
+		}
+
+		maybeWatchedData := watchedTxDataBucket.Get(txHashBytes)
+
+		if maybeWatchedData == nil {
+			return ErrWatchedDataNotFound
+		}
+
+		var watchedDataProto proto.WatchedTxData
+		err := pm.Unmarshal(maybeWatchedData, &watchedDataProto)
+
+		if err != nil {
+			return ErrCorruptedTransactionsDb
+		}
+
+		watchedDataFromDb, err := protoWatchedDataToWatchedTransactionData(&watchedDataProto)
+
+		if err != nil {
+			return err
+		}
+
+		watchedData = watchedDataFromDb
+
+		return nil
+	}, func() {})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return watchedData, nil
 }
 
 func (c *TrackedTransactionStore) GetAllStoredTransactions() ([]StoredTransaction, error) {

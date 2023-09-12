@@ -127,3 +127,34 @@ func (c *StakerServiceJsonRpcClient) SpendStakingTransaction(ctx context.Context
 	}
 	return result, nil
 }
+
+func (c *StakerServiceJsonRpcClient) WatchStaking(
+	ctx context.Context,
+	stakingTx string,
+	stakingScript string,
+	slashingTx string,
+	slashingTxSig string,
+	stakerBabylonPk string,
+	stakerAddress string,
+	stakerBabylonSig string,
+	stakerBtcSig string,
+) (*service.ResultStake, error) {
+
+	result := new(service.ResultStake)
+	params := make(map[string]interface{})
+
+	params["stakingTx"] = stakingTx
+	params["stakingScript"] = stakingScript
+	params["slashingTx"] = slashingTx
+	params["slashingTxSig"] = slashingTxSig
+	params["stakerBabylonPk"] = stakerBabylonPk
+	params["stakerAddress"] = stakerAddress
+	params["stakerBabylonSig"] = stakerBabylonSig
+	params["stakerBtcSig"] = stakerBtcSig
+
+	_, err := c.client.Call(ctx, "watch_staking_tx", params, result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
