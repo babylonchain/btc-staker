@@ -997,7 +997,7 @@ func (app *StakerApp) handleSentToBabylon() {
 			txResp, err := app.babylonClient.Delegate(dg)
 
 			if err != nil {
-				if errors.Is(err, cl.ErrInvalidBabylonDelegation) {
+				if errors.Is(err, cl.ErrInvalidBabylonExecution) {
 					// TODO: For now just kill the app to avoid construction more invalid delegations
 					app.logger.WithFields(logrus.Fields{
 						"btcTxHash":          req.txHash,
@@ -1717,4 +1717,34 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 
 func (app *StakerApp) ListActiveValidators(limit uint64, offset uint64) (*cl.ValidatorsClientResponse, error) {
 	return app.babylonClient.QueryValidators(limit, offset)
+}
+
+func (app *StakerApp) UnbondStaking(stakingTxHash chainhash.Hash) (*chainhash.Hash, error) {
+
+	// check we are not shutting down
+	select {
+	case <-app.quit:
+		return nil, nil
+
+	default:
+	}
+
+	// 1. Check staking tx is managed by staker program
+	tx, err := app.txTracker.GetTransaction(&stakingTxHash)
+
+	if err != nil {
+		return nil, fmt.Errorf("cannont unbond: %w", err)
+	}
+
+	// 2. Check tx is not watched and is in valid state
+	if tx.Watched {
+		return nil, fmt.Errorf("cannont unbond watched transaction")
+	}
+
+	if tx.State != proto.TransactionState_SENT_TO_BABYLON {
+		return nil, fmt.Errorf("cannont unbond transaction which is not sent to babylon")
+	}
+
+	// 3. Check tx against babylon chain, wheter it is ACTIVE, as only active tx can be unbonded
+	return nil, nil
 }
