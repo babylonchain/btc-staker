@@ -284,7 +284,7 @@ type DelegationData struct {
 
 type UnbondingData struct {
 	UnbondingTransaction         *wire.MsgTx
-	UnbondindTransactionScript   []byte
+	UnbondingTransactionScript   []byte
 	SlashUnbondingTransaction    *wire.MsgTx
 	SlashUnbondingTransactionSig *schnorr.Signature
 }
@@ -354,6 +354,13 @@ func unbondingDataToMsg(signer string, ud *UnbondingData) (*btcstypes.MsgBTCUnde
 		return nil, fmt.Errorf("nil unbonding data")
 	}
 
+	if ud.SlashUnbondingTransaction == nil ||
+		ud.SlashUnbondingTransactionSig == nil ||
+		ud.UnbondingTransaction == nil ||
+		ud.UnbondingTransactionScript == nil {
+		return nil, fmt.Errorf("received unbonding data with nil field")
+	}
+
 	serializedUnbondingTransaction, err := utils.SerializeBtcTransaction(ud.UnbondingTransaction)
 
 	if err != nil {
@@ -372,7 +379,7 @@ func unbondingDataToMsg(signer string, ud *UnbondingData) (*btcstypes.MsgBTCUnde
 		Signer: signer,
 		UnbondingTx: &btcstypes.BabylonBTCTaprootTx{
 			Tx:     serializedUnbondingTransaction,
-			Script: ud.UnbondindTransactionScript,
+			Script: ud.UnbondingTransactionScript,
 		},
 		SlashingTx:           slashUnbondindTx,
 		DelegatorSlashingSig: &slashingTxSig,
