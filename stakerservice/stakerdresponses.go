@@ -42,3 +42,7 @@ type ListStakingTransactionsResponse struct {
 	Transactions          []StakingDetails `json:"transactions"`
 	TotalTransactionCount string           `json:"total_transaction_count"`
 }
+
+type UnbondingResponse struct {
+	UnbondingTxHash string `json:"unbonding_tx_hash"`
+}

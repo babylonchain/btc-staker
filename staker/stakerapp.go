@@ -1915,13 +1915,21 @@ func (app *StakerApp) buildUnbondingAndSlashingTxFromStakingTx(
 // This function returns control to the caller after step 3. Later is up to the caller
 // to check what is state of unbonding transaction
 func (app *StakerApp) UnbondStaking(
-	stakingTxHash chainhash.Hash, unbondingTxFeeRatePerKb btcutil.Amount) (*chainhash.Hash, error) {
+	stakingTxHash chainhash.Hash, feeRate *btcutil.Amount) (*chainhash.Hash, error) {
 	// check we are not shutting down
 	select {
 	case <-app.quit:
 		return nil, nil
 
 	default:
+	}
+
+	// estimate fee rate if not provided
+	var unbondingTxFeeRatePerKb btcutil.Amount
+	if feeRate == nil {
+		unbondingTxFeeRatePerKb = btcutil.Amount(app.feeEstimator.EstimateFeePerKb())
+	} else {
+		unbondingTxFeeRatePerKb = *feeRate
 	}
 
 	// 1. Check staking tx is managed by staker program

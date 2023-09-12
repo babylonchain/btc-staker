@@ -394,6 +394,31 @@ func (s *StakerService) watchStaking(
 	}, nil
 }
 
+func (s *StakerService) unbondStaking(_ *rpctypes.Context, stakingTxHash string, feeRate *int) (*UnbondingResponse, error) {
+	txHash, err := chainhash.NewHashFromStr(stakingTxHash)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var feeRateBtc *btcutil.Amount = nil
+
+	if feeRate != nil {
+		amt := btcutil.Amount(*feeRate)
+		feeRateBtc = &amt
+	}
+
+	unbondingTxHash, err := s.staker.UnbondStaking(*txHash, feeRateBtc)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &UnbondingResponse{
+		UnbondingTxHash: unbondingTxHash.String(),
+	}, nil
+}
+
 func (s *StakerService) GetRoutes() RoutesMap {
 	return RoutesMap{
 		// info AP
@@ -403,6 +428,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_staking_tx":          rpc.NewRPCFunc(s.spendStakingTx, "stakingTxHash"),
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
+		"unbond_staking":            rpc.NewRPCFunc(s.unbondStaking, "stakingTxHash,feeRate"),
 
 		// watch api
 		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig,popType"),
