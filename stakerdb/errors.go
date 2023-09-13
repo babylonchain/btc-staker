@@ -14,4 +14,6 @@ var (
 
 	// ErrWatchedDataNotFound given watched data do not exists
 	ErrWatchedDataNotFound = errors.New("watched transaction data not found")
+
+	ErrInvalindUnbondingDataUpdate = errors.New("invalid unbonding data update")
 )

@@ -1211,6 +1211,10 @@ func (app *StakerApp) checkForUnbondingTxSignatures(stakingTxHash *chainhash.Has
 	}
 }
 
+func (app *StakerApp) initSendUnbondigTxToBtc() {
+
+}
+
 // main event loop for the staker app
 func (app *StakerApp) handleStaking() {
 	defer app.wg.Done()
@@ -1344,9 +1348,12 @@ func (app *StakerApp) handleStaking() {
 			}).Infof("BTC Staking transaction successfully spent and confirmed on BTC network")
 
 		case confirmation := <-app.sendUnbondingRequestConfirmChan:
-			if err := app.txTracker.SetTxUnbondingStarted(&confirmation.req.stakingTxHash); err != nil {
-				// TODO: handle this error somehow, it means we received spend stake confirmation for tx which we do not store
-				// which is seems like programming error. Maybe panic?
+			if err := app.txTracker.SetTxUnbondingStarted(
+				&confirmation.req.stakingTxHash,
+				confirmation.req.unbondinData.UnbondingTransaction,
+				confirmation.req.unbondinData.UnbondingTransactionScript,
+			); err != nil {
+				// TODO: handle this error somehow, it means we possilbly make invalid state transition
 				app.logger.Fatalf("Error setting state for tx %s: %s", &confirmation.req.stakingTxHash, err)
 			}
 			app.logger.WithFields(logrus.Fields{
@@ -1361,9 +1368,12 @@ func (app *StakerApp) handleStaking() {
 			confirmation.req.successChan <- &unbondingTxHash
 
 		case unbondingSignaturesConf := <-app.unbondingSignaturesConfirmedChan:
-			if err := app.txTracker.SetTxUnbondingSignaturesReceived(&unbondingSignaturesConf.stakingTxHash); err != nil {
-				// TODO: handle this error somehow, it means we received spend stake confirmation for tx which we do not store
-				// which is seems like programming error. Maybe panic?
+			if err := app.txTracker.SetTxUnbondingSignaturesReceived(
+				&unbondingSignaturesConf.stakingTxHash,
+				unbondingSignaturesConf.validatorUnbondingSignature,
+				unbondingSignaturesConf.juryUnbondingSignature,
+			); err != nil {
+				// TODO: handle this error somehow, it means we possilbly make invalid state transition
 				app.logger.Fatalf("Error setting state for tx %s: %s", &unbondingSignaturesConf.stakingTxHash, err)
 			}
 
