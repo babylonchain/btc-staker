@@ -115,6 +115,7 @@ func defaultStakerConfig(btcdCert []byte, btcdHost string) *stakercfg.Config {
 
 	// Set it to something low to not slow down tests
 	defaultConfig.StakerConfig.BabylonStallingInterval = 3 * time.Second
+	defaultConfig.StakerConfig.UnbondingTxCheckInterval = 3 * time.Second
 
 	return &defaultConfig
 }
@@ -166,6 +167,8 @@ type TestManager struct {
 	wg               *sync.WaitGroup
 	serviceAddress   string
 	StakerClient     *dc.StakerServiceJsonRpcClient
+	JuryPrivKey      *btcec.PrivateKey
+	JuryPubKey       *btcec.PublicKey
 }
 
 type testStakingData struct {
@@ -176,22 +179,22 @@ type testStakingData struct {
 	ValidatorBabylonPublicKey *secp256k1.PubKey
 	ValidatorBtcPrivKey       *btcec.PrivateKey
 	ValidatorBtcKey           *btcec.PublicKey
-	JuryPrivKey               *btcec.PrivateKey
-	JuryKey                   *btcec.PublicKey
 	StakingTime               uint16
 	StakingAmount             int64
 	Script                    []byte
 }
 
-func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime uint16, stakingAmount int64) *testStakingData {
+func (tm *TestManager) getTestStakingData(
+	t *testing.T,
+	stakerKey *btcec.PublicKey,
+	stakingTime uint16,
+	stakingAmount int64) *testStakingData {
 	delegatarPrivKey, err := btcec.NewPrivateKey()
-	require.NoError(t, err)
-	juryPrivKey, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
 	stakingData, err := staking.NewStakingScriptData(
 		stakerKey,
 		delegatarPrivKey.PubKey(),
-		juryPrivKey.PubKey(),
+		tm.JuryPubKey,
 		stakingTime,
 	)
 
@@ -214,8 +217,6 @@ func getTestStakingData(t *testing.T, stakerKey *btcec.PublicKey, stakingTime ui
 		ValidatorBabylonPublicKey: validatorBabylonPubKey,
 		ValidatorBtcPrivKey:       delegatarPrivKey,
 		ValidatorBtcKey:           delegatarPrivKey.PubKey(),
-		JuryPrivKey:               juryPrivKey,
-		JuryKey:                   juryPrivKey.PubKey(),
 		StakingTime:               stakingTime,
 		StakingAmount:             stakingAmount,
 		Script:                    script,
@@ -276,7 +277,11 @@ func StartManager(
 	err = wh.Start()
 	require.NoError(t, err)
 
-	bh, err := NewBabylonNodeHandler()
+	juryPrivKey, err := btcec.NewPrivateKey()
+	require.NoError(t, err)
+	juryPubKey := juryPrivKey.PubKey()
+
+	bh, err := NewBabylonNodeHandler(juryPubKey)
 	require.NoError(t, err)
 
 	err = bh.Start()
@@ -370,6 +375,8 @@ func StartManager(
 		wg:               &wg,
 		serviceAddress:   addressString,
 		StakerClient:     stakerClient,
+		JuryPrivKey:      juryPrivKey,
+		JuryPubKey:       juryPubKey,
 	}
 }
 
@@ -758,6 +765,81 @@ func (tm *TestManager) insertAllMinedBlocksToBabylon(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func (tm *TestManager) insertJurySigForDelegation(t *testing.T, btcDel *btcstypes.BTCDelegation) {
+	slashingTx := btcDel.SlashingTx
+	stakingTx := btcDel.StakingTx
+	stakingMsgTx, err := stakingTx.ToMsgTx()
+	require.NoError(t, err)
+
+	// get Jury private key from the keyring
+
+	jurySig, err := slashingTx.Sign(
+		stakingMsgTx,
+		stakingTx.Script,
+		tm.JuryPrivKey,
+		&tm.Config.ActiveNetParams,
+	)
+	require.NoError(t, err)
+
+	_, err = tm.BabylonClient.SubmitJurySig(btcDel.ValBtcPk, btcDel.BtcPk, stakingMsgTx.TxHash().String(), jurySig)
+	require.NoError(t, err)
+}
+
+func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes.BTCDelegation, td *testStakingData) {
+	stakingTx := btcDel.StakingTx
+	stakingMsgTx, err := stakingTx.ToMsgTx()
+	require.NoError(t, err)
+
+	unbondingTx := btcDel.BtcUndelegation.UnbondingTx
+
+	valSig, err := unbondingTx.Sign(
+		stakingMsgTx,
+		stakingTx.Script,
+		td.ValidatorBtcPrivKey,
+		simnetParams,
+	)
+	require.NoError(t, err)
+
+	stakingTxHash := stakingMsgTx.TxHash().String()
+
+	_, err = tm.BabylonClient.SubmitValidatorUnbondingSig(
+		btcDel.ValBtcPk,
+		btcDel.BtcPk,
+		stakingTxHash,
+		valSig,
+	)
+	require.NoError(t, err)
+
+	juryUnbondingSig, err := unbondingTx.Sign(
+		stakingMsgTx,
+		stakingTx.Script,
+		tm.JuryPrivKey,
+		simnetParams,
+	)
+
+	require.NoError(t, err)
+
+	unbondingTxMsg, err := unbondingTx.ToMsgTx()
+	require.NoError(t, err)
+
+	jurySlashingSig, err := btcDel.BtcUndelegation.SlashingTx.Sign(
+		unbondingTxMsg,
+		unbondingTx.Script,
+		tm.JuryPrivKey,
+		simnetParams,
+	)
+	require.NoError(t, err)
+
+	_, err = tm.BabylonClient.SubmitJuryUnbondingSigs(
+		btcDel.ValBtcPk,
+		btcDel.BtcPk,
+		stakingTxHash,
+		juryUnbondingSig,
+		jurySlashingSig,
+	)
+	require.NoError(t, err)
+}
+
 func TestSendingStakingTransaction(t *testing.T) {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// need to have at least 300 block on testnet as only then segwit is activated
@@ -770,11 +852,11 @@ func TestSendingStakingTransaction(t *testing.T) {
 	params, err := cl.Params()
 	require.NoError(t, err)
 	stakingTime := uint16(staker.GetMinStakingTime(params))
-	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
 	hashed, err := chainhash.NewHash(datagen.GenRandomByteArray(r, 32))
 	require.NoError(t, err)
-	scr, err := txscript.PayToTaprootScript(testStakingData.JuryKey)
+	scr, err := txscript.PayToTaprootScript(tm.JuryPubKey)
 	require.NoError(t, err)
 	_, st, erro := tm.Sa.Wallet().TxDetails(hashed, scr)
 	// query for exsisting tx is not an error, proper state should be returned
@@ -820,7 +902,7 @@ func TestSendingWatchedStakingTransaction(t *testing.T) {
 	params, err := cl.Params()
 	require.NoError(t, err)
 	stakingTime := uint16(staker.GetMinStakingTime(params))
-	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
 	tm.createAndRegisterValidator(t, testStakingData)
 
@@ -840,7 +922,7 @@ func TestRestartingTxNotDeepEnough(t *testing.T) {
 	params, err := cl.Params()
 	require.NoError(t, err)
 	stakingTime := uint16(staker.GetMinStakingTime(params))
-	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
 	tm.createAndRegisterValidator(t, testStakingData)
 	txHash := tm.sendStakingTx(t, testStakingData)
@@ -863,7 +945,7 @@ func TestRestartingTxNotOnBabylon(t *testing.T) {
 	params, err := cl.Params()
 	require.NoError(t, err)
 	stakingTime := uint16(staker.GetMinStakingTime(params))
-	testStakingData := getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
 	tm.createAndRegisterValidator(t, testStakingData)
 	txHash := tm.sendStakingTx(t, testStakingData)
@@ -879,4 +961,47 @@ func TestRestartingTxNotOnBabylon(t *testing.T) {
 	go tm.sendHeadersToBabylon(t, minedBlocks)
 
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
+}
+
+func TestStakingUnbonding(t *testing.T) {
+	// need to have at least 300 block on testnet as only then segwit is activated
+	numMatureOutputs := uint32(200)
+	tm := StartManager(t, numMatureOutputs, 2, nil)
+	defer tm.Stop(t)
+	tm.insertAllMinedBlocksToBabylon(t)
+
+	cl := tm.Sa.BabylonController()
+	params, err := cl.Params()
+	require.NoError(t, err)
+	// large staking time
+	stakingTime := uint16(1000)
+	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 50000)
+
+	tm.createAndRegisterValidator(t, testStakingData)
+
+	txHash := tm.sendStakingTx(t, testStakingData)
+
+	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
+	require.NoError(t, err)
+
+	pend, err := tm.BabylonClient.QueryPendingBTCDelegations()
+	require.NoError(t, err)
+	require.Len(t, pend, 1)
+	// need to activate delegation to unbond
+	tm.insertJurySigForDelegation(t, pend[0])
+
+	feeRate := 2000
+	_, err = tm.StakerClient.UnbondStaking(context.Background(), txHash.String(), &feeRate)
+	require.NoError(t, err)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_STARTED)
+
+	validatorDelegations, err := tm.BabylonClient.QueryValidatorDelegations(
+		testStakingData.ValidatorBtcKey,
+	)
+	require.NoError(t, err)
+	require.Len(t, validatorDelegations, 1)
+
+	tm.insertUnbondingSignatures(t, validatorDelegations[0], testStakingData)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED)
 }

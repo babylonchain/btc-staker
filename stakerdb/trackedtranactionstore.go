@@ -437,6 +437,14 @@ func (c *TrackedTransactionStore) SetTxSpentOnBtc(txHash *chainhash.Hash) error 
 	return c.setTxState(txHash, proto.TransactionState_SPENT_ON_BTC)
 }
 
+func (c *TrackedTransactionStore) SetTxUnbondingStarted(txHash *chainhash.Hash) error {
+	return c.setTxState(txHash, proto.TransactionState_UNBONDING_STARTED)
+}
+
+func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(txHash *chainhash.Hash) error {
+	return c.setTxState(txHash, proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED)
+}
+
 func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*StoredTransaction, error) {
 	var storedTx *StoredTransaction
 	txHashBytes := txHash.CloneBytes()

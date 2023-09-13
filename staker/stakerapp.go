@@ -132,6 +132,12 @@ func (req *stakingRequest) isWatched() bool {
 	return req.watchTxData != nil
 }
 
+type unbondingSignaturesConfirmed struct {
+	stakingTxHash               chainhash.Hash
+	juryUnbondingSignature      *schnorr.Signature
+	validatorUnbondingSignature *schnorr.Signature
+}
+
 type confirmationEvent struct {
 	txHash        chainhash.Hash
 	txIndex       uint32
@@ -215,22 +221,23 @@ type StakerApp struct {
 	wg        sync.WaitGroup
 	quit      chan struct{}
 
-	babylonClient                   cl.BabylonClient
-	wc                              walletcontroller.WalletController
-	notifier                        notifier.ChainNotifier
-	feeEstimator                    FeeEstimator
-	network                         *chaincfg.Params
-	config                          *scfg.Config
-	logger                          *logrus.Logger
-	txTracker                       *stakerdb.TrackedTransactionStore
-	stakingRequestChan              chan *stakingRequest
-	confirmationEventChan           chan *confirmationEvent
-	sendDelegationRequestChan       chan *sendDelegationRequest
-	sendDelegationResponseChan      chan *sendDelegationResponse
-	spendTxConfirmationChan         chan *spendTxConfirmationEvent
-	sendUnbondingRequestChan        chan *unbondingRequest
-	sendUnbondingRequestConfirmChan chan *unbondingRequestConfirm
-	currentBestBlockHeight          atomic.Uint32
+	babylonClient                    cl.BabylonClient
+	wc                               walletcontroller.WalletController
+	notifier                         notifier.ChainNotifier
+	feeEstimator                     FeeEstimator
+	network                          *chaincfg.Params
+	config                           *scfg.Config
+	logger                           *logrus.Logger
+	txTracker                        *stakerdb.TrackedTransactionStore
+	stakingRequestChan               chan *stakingRequest
+	confirmationEventChan            chan *confirmationEvent
+	sendDelegationRequestChan        chan *sendDelegationRequest
+	sendDelegationResponseChan       chan *sendDelegationResponse
+	spendTxConfirmationChan          chan *spendTxConfirmationEvent
+	sendUnbondingRequestChan         chan *unbondingRequest
+	sendUnbondingRequestConfirmChan  chan *unbondingRequestConfirm
+	unbondingSignaturesConfirmedChan chan *unbondingSignaturesConfirmed
+	currentBestBlockHeight           atomic.Uint32
 }
 
 func NewStakerAppFromConfig(
@@ -337,6 +344,10 @@ func NewStakerAppFromDeps(
 		// channel which confirms that unbonding request was sent to babylon, and update
 		// correct db state
 		sendUnbondingRequestConfirmChan: make(chan *unbondingRequestConfirm),
+
+		// Channel which receives unbonding signatures from jury and validator for unbonding
+		// transaction
+		unbondingSignaturesConfirmedChan: make(chan *unbondingSignaturesConfirmed),
 	}, nil
 }
 
@@ -1135,6 +1146,71 @@ func (app *StakerApp) sendDelegationWithTxToBabylon(
 	app.sendDelegationRequestChan <- req
 }
 
+// TODO for now we launch this handler indefinitly. At some point we may introduce
+// timeout, and if signatures are not find in this timeout, then we may submit
+// evidence that validator or jury are censoring our unbonding
+func (app *StakerApp) checkForUnbondingTxSignatures(stakingTxHash *chainhash.Hash) {
+	checkSigTicker := time.NewTicker(app.config.StakerConfig.UnbondingTxCheckInterval)
+	defer checkSigTicker.Stop()
+
+	for {
+		select {
+		case <-checkSigTicker.C:
+			di, err := app.babylonClient.GetDelegationInfo(stakingTxHash)
+
+			if err != nil {
+				if errors.Is(err, cl.ErrDelegationNotFound) {
+					// As we only start this handler when we are sure delegation is already on babylon
+					// this can only that:
+					// - either we are connected to wrong babylon network
+					// - or babylon node lost data and is still syncing
+					app.logger.WithFields(logrus.Fields{
+						"stakingTxHash": stakingTxHash,
+					}).Error("Delegation for given staking tx hash does not exsist on babylon. Check your babylon node.")
+				} else {
+					app.logger.WithFields(logrus.Fields{
+						"stakingTxHash": stakingTxHash,
+						"err":           err,
+					}).Error("Error getting delegation info from babylon")
+				}
+
+				continue
+			}
+
+			if di.UndelegationInfo == nil {
+				// As we only start this handler when we are sure delegation received unbonding request
+				// this can only that:
+				// - babylon node lost data and is still syncing, and not processed unbonding request yet
+				app.logger.WithFields(logrus.Fields{
+					"stakingTxHash": stakingTxHash,
+				}).Error("Delegation for given staking tx hash is not unbonding yet.")
+				continue
+			}
+
+			if di.UndelegationInfo.JuryUnbodningSignature != nil && di.UndelegationInfo.ValidatorUnbondingSignature != nil {
+				// we have both signatures, we can stop checking
+				app.logger.WithFields(logrus.Fields{
+					"stakingTxHash": stakingTxHash,
+				}).Error("Received both required signatures for unbonding tx for staking tx with given hash")
+
+				// first push signatures to the channel, this will block until signatures pushed on this channel
+				// as channel is unbbuffered
+				app.unbondingSignaturesConfirmedChan <- &unbondingSignaturesConfirmed{
+					stakingTxHash:               *stakingTxHash,
+					juryUnbondingSignature:      di.UndelegationInfo.JuryUnbodningSignature,
+					validatorUnbondingSignature: di.UndelegationInfo.ValidatorUnbondingSignature,
+				}
+
+				// our job is done, we can return
+				return
+			}
+
+		case <-app.quit:
+			return
+		}
+	}
+}
+
 // main event loop for the staker app
 func (app *StakerApp) handleStaking() {
 	defer app.wg.Done()
@@ -1268,15 +1344,28 @@ func (app *StakerApp) handleStaking() {
 			}).Infof("BTC Staking transaction successfully spent and confirmed on BTC network")
 
 		case confirmation := <-app.sendUnbondingRequestConfirmChan:
-			// TODO add lounching waiting for unbonding signatures
-			// TODO add state update with all related data
+			if err := app.txTracker.SetTxUnbondingStarted(&confirmation.req.stakingTxHash); err != nil {
+				// TODO: handle this error somehow, it means we received spend stake confirmation for tx which we do not store
+				// which is seems like programming error. Maybe panic?
+				app.logger.Fatalf("Error setting state for tx %s: %s", &confirmation.req.stakingTxHash, err)
+			}
 			app.logger.WithFields(logrus.Fields{
 				"btcTxHash": confirmation.req.stakingTxHash,
-			}).Debug("Unbonding request successfully sent to babylon")
+			}).Debug("Unbonding request successfully sent to babylon, waiting for signatures")
+
+			// start checking for signatures
+			go app.checkForUnbondingTxSignatures(&confirmation.req.stakingTxHash)
 
 			unbondingTxHash := confirmation.req.unbondinData.UnbondingTransaction.TxHash()
 			// return registred unbonding tx hash to caller
 			confirmation.req.successChan <- &unbondingTxHash
+
+		case unbondingSignaturesConf := <-app.unbondingSignaturesConfirmedChan:
+			if err := app.txTracker.SetTxUnbondingSignaturesReceived(&unbondingSignaturesConf.stakingTxHash); err != nil {
+				// TODO: handle this error somehow, it means we received spend stake confirmation for tx which we do not store
+				// which is seems like programming error. Maybe panic?
+				app.logger.Fatalf("Error setting state for tx %s: %s", &unbondingSignaturesConf.stakingTxHash, err)
+			}
 
 		case <-app.quit:
 			return
@@ -1845,13 +1934,13 @@ func (app *StakerApp) buildUnbondingAndSlashingTxFromStakingTx(
 
 	if unbondingOutputValue <= 0 {
 		return nil, fmt.Errorf(
-			"Too large fee rate %d sats/kb. Staking output value:%d sats. Unbonding tx fee:%d sats", int64(feeRatePerKb), stakingOutpout.Value, int64(unbondingTxFee),
+			"too large fee rate %d sats/kb. Staking output value:%d sats. Unbonding tx fee:%d sats", int64(feeRatePerKb), stakingOutpout.Value, int64(unbondingTxFee),
 		)
 	}
 
 	if unbondingOutputValue <= int64(slashingFee) {
 		return nil, fmt.Errorf(
-			"Too large fee rate %d sats/kb. Unbonding output value %d sats. Slashing tx fee: %d sats", int64(feeRatePerKb), unbondingOutputValue, int64(slashingFee),
+			"too large fee rate %d sats/kb. Unbonding output value %d sats. Slashing tx fee: %d sats", int64(feeRatePerKb), unbondingOutputValue, int64(slashingFee),
 		)
 	}
 
@@ -1895,6 +1984,14 @@ func (app *StakerApp) buildUnbondingAndSlashingTxFromStakingTx(
 	if err != nil {
 		return nil, fmt.Errorf("failed to build unbonding data: failed to sign slashing tx: %w", err)
 	}
+
+	app.logger.WithFields(logrus.Fields{
+		"stakingTxHash":        stakingTxHash,
+		"unbondingTxHash":      unbondingTx.TxHash(),
+		"unbondingTxFeeRate":   int64(feeRatePerKb),
+		"unbondingTxFee":       int64(unbondingTxFee),
+		"unbondingOutputValue": unbondingOutputValue,
+	}).Debug("Successfully built unbonding data")
 
 	return &cl.UnbondingData{
 		UnbondingTransaction:         unbondingTx,

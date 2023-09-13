@@ -732,14 +732,22 @@ func (bc *BabylonController) GetDelegationInfo(stakingTxHash *chainhash.Hash) (*
 		var udi *UndelegationInfo = nil
 
 		if resp.UndelegationInfo != nil {
-			jurySig, err := resp.UndelegationInfo.JuryUnbondingSig.ToBTCSig()
-			if err != nil {
-				return retry.Unrecoverable(fmt.Errorf("Malformed jury sig: %s : %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
+			var jurySig *schnorr.Signature = nil
+			if resp.UndelegationInfo.JuryUnbondingSig != nil {
+				jsig, err := resp.UndelegationInfo.JuryUnbondingSig.ToBTCSig()
+				if err != nil {
+					return retry.Unrecoverable(fmt.Errorf("malformed jury sig: %s : %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
+				}
+				jurySig = jsig
 			}
 
-			validatorSig, err := resp.UndelegationInfo.ValidatorUnbondingSig.ToBTCSig()
-			if err != nil {
-				return retry.Unrecoverable(fmt.Errorf("Malformed validatorSig: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
+			var validatorSig *schnorr.Signature = nil
+			if resp.UndelegationInfo.ValidatorUnbondingSig != nil {
+				vsig, err := resp.UndelegationInfo.ValidatorUnbondingSig.ToBTCSig()
+				if err != nil {
+					return retry.Unrecoverable(fmt.Errorf("malformed validatorSig: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
+				}
+				validatorSig = vsig
 			}
 
 			udi = &UndelegationInfo{
@@ -777,4 +785,139 @@ func (bc *BabylonController) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhas
 	}
 
 	return true, nil
+}
+
+// Test methods for e2e testing
+// Different babylon sig methods to support e2e testing
+func (bc *BabylonController) SubmitJurySig(
+	btcPubKey *bbntypes.BIP340PubKey,
+	delPubKey *bbntypes.BIP340PubKey,
+	stakingTxHash string,
+	sig *bbntypes.BIP340Signature) (*sdk.TxResponse, error) {
+	msg := &btcstypes.MsgAddJurySig{
+		Signer:        bc.getTxSigner(),
+		ValPk:         btcPubKey,
+		DelPk:         delPubKey,
+		StakingTxHash: stakingTxHash,
+		Sig:           sig,
+	}
+
+	res, err := bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury sig")
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (bc *BabylonController) SubmitJuryUnbondingSigs(
+	btcPubKey *bbntypes.BIP340PubKey,
+	delPubKey *bbntypes.BIP340PubKey,
+	stakingTxHash string,
+	unbondingSig *bbntypes.BIP340Signature,
+	slashUnbondingSig *bbntypes.BIP340Signature,
+) (*sdk.TxResponse, error) {
+	msg := &btcstypes.MsgAddJuryUnbondingSigs{
+		Signer:                 bc.getTxSigner(),
+		ValPk:                  btcPubKey,
+		DelPk:                  delPubKey,
+		StakingTxHash:          stakingTxHash,
+		UnbondingTxSig:         unbondingSig,
+		SlashingUnbondingTxSig: slashUnbondingSig,
+	}
+
+	res, err := bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury unbonding sig")
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (bc *BabylonController) SubmitValidatorUnbondingSig(
+	valPubKey *bbntypes.BIP340PubKey,
+	delPubKey *bbntypes.BIP340PubKey,
+	stakingTxHash string,
+	sig *bbntypes.BIP340Signature) (*sdk.TxResponse, error) {
+
+	msg := &btcstypes.MsgAddValidatorUnbondingSig{
+		Signer:         bc.getTxSigner(),
+		ValPk:          valPubKey,
+		DelPk:          delPubKey,
+		StakingTxHash:  stakingTxHash,
+		UnbondingTxSig: sig,
+	}
+
+	res, err := bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit validator unbonding sig")
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (bc *BabylonController) QueryPendingBTCDelegations() ([]*btcstypes.BTCDelegation, error) {
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
+	queryClient := btcstypes.NewQueryClient(clientCtx)
+
+	// query all the unsigned delegations
+	queryRequest := &btcstypes.QueryPendingBTCDelegationsRequest{}
+	res, err := queryClient.PendingBTCDelegations(ctx, queryRequest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query BTC delegations: %v", err)
+	}
+
+	return res.BtcDelegations, nil
+}
+
+// QueryUnbondingBTCDelegations queries BTC delegations that need a Jury sig for unbodning
+// it is only used when the program is running in Jury mode
+func (bc *BabylonController) QueryUnbondingBTCDelegations() ([]*btcstypes.BTCDelegation, error) {
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
+
+	queryClient := btcstypes.NewQueryClient(clientCtx)
+
+	// query all the unsigned delegations
+	queryRequest := &btcstypes.QueryUnbondingBTCDelegationsRequest{}
+	res, err := queryClient.UnbondingBTCDelegations(ctx, queryRequest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query BTC delegations: %v", err)
+	}
+
+	return res.BtcDelegations, nil
+}
+
+func (bc *BabylonController) QueryValidatorDelegations(validatorBtcPubKey *btcec.PublicKey) ([]*btcstypes.BTCDelegation, error) {
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
+
+	queryClient := btcstypes.NewQueryClient(clientCtx)
+
+	key := types.NewBIP340PubKeyFromBTCPK(validatorBtcPubKey)
+
+	// query all the unsigned delegations
+	queryRequest := &btcstypes.QueryBTCValidatorDelegationsRequest{
+		ValBtcPkHex: key.MarshalHex(),
+	}
+	res, err := queryClient.BTCValidatorDelegations(ctx, queryRequest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query BTC delegations: %v", err)
+	}
+
+	var delegations []*btcstypes.BTCDelegation
+
+	for _, dels := range res.BtcDelegatorDelegations {
+		delegations = append(delegations, dels.Dels...)
+	}
+
+	return delegations, nil
 }
