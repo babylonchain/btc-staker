@@ -2042,9 +2042,10 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 		return nil, nil, err
 	}
 
-	//	If transaction is not confirmed at least, fail fast
-	if tx.State < proto.TransactionState_CONFIRMED_ON_BTC {
-		return nil, nil, fmt.Errorf("cannot spend staking which was not sent to babylon")
+	//	We can only spend staking which was sent to babylon.
+	// TODO.. To make it possible to spend staking transaction which was sucessfuly unbonded
+	if tx.State != proto.TransactionState_SENT_TO_BABYLON {
+		return nil, nil, fmt.Errorf("cannot spend staking which was not sent to babylon. Current tx state: %s", tx.State.String())
 	}
 
 	// we cannont spend tx which is watch only.
