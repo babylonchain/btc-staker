@@ -300,9 +300,9 @@ type DelegationInfo struct {
 }
 
 func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
-    if dg == nil {
-        return nil, fmt.Errorf("nil delegation data")
-    }
+	if dg == nil {
+		return nil, fmt.Errorf("nil delegation data")
+	}
 
 	serizalizedStakingTransaction, err := utils.SerializeBtcTransaction(dg.StakingTransaction)
 
