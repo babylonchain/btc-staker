@@ -49,8 +49,8 @@ func genStoredTransaction(t *testing.T, r *rand.Rand) *stakerdb.StoredTransactio
 		StakingOutputIndex: outputIdx,
 		TxScript:           script,
 		Pop: &stakerdb.ProofOfPossession{
-			BabylonSigOverBtcPk:         datagen.GenRandomByteArray(r, 64),
-			BtcSchnorrSigOverBabylonSig: datagen.GenRandomByteArray(r, 64),
+			BabylonSigOverBtcPk:  datagen.GenRandomByteArray(r, 64),
+			BtcSigOverBabylonSig: datagen.GenRandomByteArray(r, 64),
 		},
 		StakerAddress: btcAddress.String(),
 	}

@@ -16,6 +16,7 @@ import (
 	btclctypes "github.com/babylonchain/babylon/x/btclightclient/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/babylonchain/btc-staker/stakercfg"
+	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/babylonchain/rpc-client/query"
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -276,18 +277,10 @@ type DelegationData struct {
 	SlashingTransaction                  *wire.MsgTx
 	SlashingTransactionSig               *schnorr.Signature
 	BabylonPk                            *secp256k1.PubKey
-	BabylonEcdsaSigOverBtcPk             []byte
-	BtcSchnorrSigOverBabylonSig          []byte
+	BabylonPop                           *stakerdb.ProofOfPossession
 }
 
 func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
-
-	schnorSig, err := bbntypes.NewBIP340Signature(dg.BtcSchnorrSigOverBabylonSig)
-
-	if err != nil {
-		return nil, err
-	}
-
 	serizalizedStakingTransaction, err := utils.SerializeBtcTransaction(dg.StakingTransaction)
 
 	if err != nil {
@@ -308,8 +301,10 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 		Signer:    signer,
 		BabylonPk: dg.BabylonPk,
 		Pop: &btcstypes.ProofOfPossession{
-			BabylonSig: dg.BabylonEcdsaSigOverBtcPk,
-			BtcSig:     schnorSig,
+			// Note: this should be always safe conversion as we received data from our db
+			BtcSigType: btcstypes.BTCSigType(dg.BabylonPop.BtcSigType),
+			BabylonSig: dg.BabylonPop.BabylonSigOverBtcPk,
+			BtcSig:     dg.BabylonPop.BtcSigOverBabylonSig,
 		},
 		StakingTx: &btcstypes.BabylonBTCTaprootTx{
 			Tx:     serizalizedStakingTransaction,

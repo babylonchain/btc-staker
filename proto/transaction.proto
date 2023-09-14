@@ -22,9 +22,10 @@ message TrackedTransaction {
     bytes staking_script = 2;
     uint32 staking_output_idx = 3;
     string staker_address = 4;
-    bytes babylon_sig_btc_pk = 5;
-    bytes schnor_sig_babylon_sig = 6;
-    TransactionState state = 7;
-    bool watched = 8;
+    uint32 btc_sig_type = 5;
+    bytes babylon_sig_btc_pk = 6;
+    bytes btc_sig_babylon_sig = 7;
+    TransactionState state = 8;
+    bool watched = 9;
 }
 

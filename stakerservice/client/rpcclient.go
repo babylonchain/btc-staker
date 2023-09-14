@@ -138,6 +138,7 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	stakerAddress string,
 	stakerBabylonSig string,
 	stakerBtcSig string,
+	popType int,
 ) (*service.ResultStake, error) {
 
 	result := new(service.ResultStake)
@@ -151,6 +152,7 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	params["stakerAddress"] = stakerAddress
 	params["stakerBabylonSig"] = stakerBabylonSig
 	params["stakerBtcSig"] = stakerBtcSig
+	params["popType"] = popType
 
 	_, err := c.client.Call(ctx, "watch_staking_tx", params, result)
 	if err != nil {
