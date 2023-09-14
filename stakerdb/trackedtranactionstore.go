@@ -259,6 +259,40 @@ func protoWatchedDataToWatchedTransactionData(wd *proto.WatchedTxData) (*Watched
 	}, nil
 }
 
+func protUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*UnbondingStoreData, error) {
+	var unbondingTx wire.MsgTx
+	err := unbondingTx.Deserialize(bytes.NewReader(ud.UnbondingTransaction))
+
+	if err != nil {
+		return nil, err
+	}
+
+	var validatorSig *schnorr.Signature
+	if ud.UnbondingTransactionValidatorSig != nil {
+		validatorSig, err = schnorr.ParseSignature(ud.UnbondingTransactionValidatorSig)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var jurySig *schnorr.Signature
+	if ud.UnbondingTransactionJurySig != nil {
+		jurySig, err = schnorr.ParseSignature(ud.UnbondingTransactionJurySig)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &UnbondingStoreData{
+		UnbondingTx:                   &unbondingTx,
+		UnbondingTxScript:             ud.UnbondingTransactionScript,
+		UnbondingTxValidatorSignature: validatorSig,
+		UnbondingTxJurySignature:      jurySig,
+	}, nil
+}
+
 func uint64KeyToBytes(key uint64) []byte {
 	var keyBytes = make([]byte, 8)
 	binary.BigEndian.PutUint64(keyBytes, key)
@@ -612,6 +646,12 @@ func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 	return c.setTxState(txHash, proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED, update)
 }
 
+func (c *TrackedTransactionStore) SetTxUnbondingConfirmedOnBtc(
+	txHash *chainhash.Hash,
+) error {
+	return c.setTxState(txHash, proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC, nil)
+}
+
 func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*StoredTransaction, error) {
 	var storedTx *StoredTransaction
 	txHashBytes := txHash.CloneBytes()
@@ -811,4 +851,46 @@ func (c *TrackedTransactionStore) ScanTrackedTransactions(scanFunc StoredTransac
 			return scanFunc(txFromDb)
 		})
 	}, reset)
+}
+
+func (c *TrackedTransactionStore) GetUnbondingTxData(stakingTxHash *chainhash.Hash) (*UnbondingStoreData, error) {
+	var unbondingData *UnbondingStoreData
+	txHashBytes := stakingTxHash.CloneBytes()
+
+	err := c.db.View(func(tx kvdb.RTx) error {
+		unbondingTxDataBucket := tx.ReadBucket(unbondingTxDataBucketName)
+
+		if unbondingTxDataBucket == nil {
+			return ErrCorruptedTransactionsDb
+		}
+
+		maybeUnbondingData := unbondingTxDataBucket.Get(txHashBytes)
+
+		if maybeUnbondingData == nil {
+			return ErrUnbondingDataNotFound
+		}
+
+		var unbondingDataProto proto.UnbondingTxData
+		err := pm.Unmarshal(maybeUnbondingData, &unbondingDataProto)
+
+		if err != nil {
+			return ErrCorruptedTransactionsDb
+		}
+
+		unbondingFromDb, err := protUnbondingDataToUnbondingStoreData(&unbondingDataProto)
+
+		if err != nil {
+			return err
+		}
+
+		unbondingData = unbondingFromDb
+
+		return nil
+	}, func() {})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return unbondingData, nil
 }

@@ -108,7 +108,7 @@ func newWatchedStakingRequest(
 
 type unbondingRequest struct {
 	stakingTxHash chainhash.Hash
-	unbondinData  *cl.UnbondingData
+	unbondingData *cl.UnbondingData
 	errChan       chan error
 	successChan   chan *chainhash.Hash
 }
@@ -118,7 +118,7 @@ func newUnbondingRequest(
 	unbondingData *cl.UnbondingData) *unbondingRequest {
 	return &unbondingRequest{
 		stakingTxHash: stakingTxHash,
-		unbondinData:  unbondingData,
+		unbondingData: unbondingData,
 		errChan:       make(chan error, 1),
 		successChan:   make(chan *chainhash.Hash, 1),
 	}
@@ -136,6 +136,10 @@ type unbondingSignaturesConfirmed struct {
 	stakingTxHash               chainhash.Hash
 	juryUnbondingSignature      *schnorr.Signature
 	validatorUnbondingSignature *schnorr.Signature
+}
+
+type unbondingConfirmedOnBtc struct {
+	stakingTxHash chainhash.Hash
 }
 
 type confirmationEvent struct {
@@ -213,6 +217,14 @@ const (
 
 	// Set minimum fee to 1 sat/byte, as in standard rules policy
 	MinFeePerKb = txrules.DefaultRelayFeePerKb
+
+	// If we fail to send unbonding tx to btc for any reason we will retry in this time
+	unbondingSendRetryTimeout = 30 * time.Second
+
+	// after this many confirmations we treat unbonding transaction as confirmed on btc
+	// TODO: needs to consolidate what is safe confirmation for different types of transaction
+	// as currently we have different values for different types of transactions
+	UnbondingTxConfirmations = 6
 )
 
 type StakerApp struct {
@@ -237,6 +249,7 @@ type StakerApp struct {
 	sendUnbondingRequestChan         chan *unbondingRequest
 	sendUnbondingRequestConfirmChan  chan *unbondingRequestConfirm
 	unbondingSignaturesConfirmedChan chan *unbondingSignaturesConfirmed
+	unbondingConfirmedOnBtcChan      chan *unbondingConfirmedOnBtc
 	currentBestBlockHeight           atomic.Uint32
 }
 
@@ -348,6 +361,9 @@ func NewStakerAppFromDeps(
 		// Channel which receives unbonding signatures from jury and validator for unbonding
 		// transaction
 		unbondingSignaturesConfirmedChan: make(chan *unbondingSignaturesConfirmed),
+
+		// channels which receives confirmation that unbonding transaction was confirmed on BTC
+		unbondingConfirmedOnBtcChan: make(chan *unbondingConfirmedOnBtc),
 	}, nil
 }
 
@@ -1099,7 +1115,7 @@ func (app *StakerApp) handleSentToBabylon() {
 				continue
 			}
 
-			txResp, err := app.babylonClient.Unbond(req.unbondinData)
+			txResp, err := app.babylonClient.Unbond(req.unbondingData)
 
 			if err != nil {
 				if errors.Is(err, cl.ErrInvalidBabylonExecution) {
@@ -1191,7 +1207,7 @@ func (app *StakerApp) checkForUnbondingTxSignatures(stakingTxHash *chainhash.Has
 				// we have both signatures, we can stop checking
 				app.logger.WithFields(logrus.Fields{
 					"stakingTxHash": stakingTxHash,
-				}).Error("Received both required signatures for unbonding tx for staking tx with given hash")
+				}).Debug("Received both required signatures for unbonding tx for staking tx with given hash")
 
 				// first push signatures to the channel, this will block until signatures pushed on this channel
 				// as channel is unbbuffered
@@ -1211,8 +1227,201 @@ func (app *StakerApp) checkForUnbondingTxSignatures(stakingTxHash *chainhash.Has
 	}
 }
 
-func (app *StakerApp) initSendUnbondigTxToBtc() {
+func (app *StakerApp) sendUnbondingTxWithWitness(
+	stakingTxHash *chainhash.Hash,
+	stakerAddress btcutil.Address,
+	storedTx *stakerdb.StoredTransaction,
+	unbondingData *stakerdb.UnbondingStoreData,
+) error {
+	if err := app.wc.UnlockWallet(defaultWalletUnlockTimeout); err != nil {
+		app.logger.WithFields(logrus.Fields{
+			"stakingTxHash": stakingTxHash,
+			"err":           err,
+		}).Error("Failed to unlock btc wallet to send unbonding tx to btc")
+		return err
+	}
 
+	privkey, err := app.wc.DumpPrivateKey(stakerAddress)
+
+	if err != nil {
+		app.logger.WithFields(logrus.Fields{
+			"stakingTxHash": stakingTxHash,
+			"err":           err,
+		}).Error("Failed to retrieve btc wallet private key send unbonding tx to btc")
+		return err
+	}
+
+	stakerUnbondingSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
+		unbondingData.UnbondingTx,
+		storedTx.BtcTx.TxOut[storedTx.StakingOutputIndex],
+		privkey,
+		storedTx.TxScript,
+	)
+
+	if err != nil {
+		// Critical err we should always be able to sign unbonding tx
+		app.logger.WithFields(logrus.Fields{
+			"stakingTxHash": stakingTxHash,
+			"err":           err,
+		}).Fatalf("Failed to sign unbonding tx with staker signature")
+	}
+
+	stakerWitness, err := staking.NewWitnessFromStakingScriptAndSignature(
+		storedTx.TxScript,
+		stakerUnbondingSig,
+	)
+
+	if err != nil {
+		// Critical err we should always be able to sign unbonding tx
+		app.logger.WithFields(logrus.Fields{
+			"stakingTxHash": stakingTxHash,
+			"err":           err,
+		}).Fatalf("Failed to sign unbonding tx with staker signature")
+	}
+
+	// Build valid wittness for spending staking output with all signatures
+	witnessStack := wire.TxWitness(make([][]byte, 6))
+	witnessStack[0] = unbondingData.UnbondingTxJurySignature.Serialize()
+	witnessStack[1] = unbondingData.UnbondingTxValidatorSignature.Serialize()
+	witnessStack[2] = stakerWitness[0]
+	witnessStack[3] = []byte{}
+	witnessStack[4] = stakerWitness[1]
+	witnessStack[5] = stakerWitness[2]
+
+	unbondingTx := unbondingData.UnbondingTx
+	unbondingTx.TxIn[0].Witness = witnessStack
+
+	_, err = app.wc.SendRawTransaction(unbondingTx, true)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// sendUnbondingTxToBtc sends unbonding tx to btc and registers for inclusion notification.
+// It retries until it successfully sends unbonding tx to btc and registers for notification.or until program finishes
+// TODO: Investigate wheter some of the errors should be treated as fatal and abort whole process
+func (app *StakerApp) sendUnbondingTxToBtc(
+	stakingTxHash *chainhash.Hash,
+	stakerAddress btcutil.Address,
+	storedTx *stakerdb.StoredTransaction,
+	unbondingData *stakerdb.UnbondingStoreData) *notifier.ConfirmationEvent {
+	for {
+		err := app.sendUnbondingTxWithWitness(
+			stakingTxHash,
+			stakerAddress,
+			storedTx,
+			unbondingData,
+		)
+
+		if err == nil {
+			app.logger.WithFields(logrus.Fields{
+				"stakingTxHash":   stakingTxHash,
+				"unbondingTxHash": unbondingData.UnbondingTx.TxHash(),
+			}).Info("Unbonding transaction successfully sent to btc")
+			// we can break the loop as we successfully sent unbonding tx to btc
+			break
+		}
+
+		app.logger.WithFields(logrus.Fields{
+			"stakingTxHash":   stakingTxHash,
+			"unbondingTxHash": unbondingData.UnbondingTx.TxHash(),
+			"err":             err,
+		}).Error("Failed to send unbodning tx to btc. Retrying...")
+
+		select {
+		case <-time.After(unbondingSendRetryTimeout):
+		case <-app.quit:
+			return nil
+		}
+	}
+
+	// at this moment we successfully sent unbonding tx to btc, register waiting for notification
+	unbondingTxHash := unbondingData.UnbondingTx.TxHash()
+	for {
+		notificationEv, err := app.notifier.RegisterConfirmationsNtfn(
+			&unbondingTxHash,
+			unbondingData.UnbondingTx.TxOut[0].PkScript,
+			UnbondingTxConfirmations,
+			app.currentBestBlockHeight.Load(),
+		)
+
+		// TODO: Check when this error can happen, maybe this is critical error which
+		// should not be retried
+		if err == nil {
+			app.logger.WithFields(logrus.Fields{
+				"stakingTxHash":   stakingTxHash,
+				"unbondingTxHash": unbondingData.UnbondingTx.TxHash(),
+			}).Debug("Notification event for unbonding tx received")
+			// we can break the loop as we successfully sent unbonding tx to btc
+			return notificationEv
+		}
+
+		select {
+		case <-time.After(unbondingSendRetryTimeout):
+		case <-app.quit:
+			return nil
+		}
+	}
+}
+
+// initBtcUnbonding tries to send unbonding tx to btc and register for confirmation notification.
+// it should be run in separate go routine.
+func (app *StakerApp) initBtcUnbonding(
+	stakingTxHash *chainhash.Hash,
+	stakerAddress btcutil.Address,
+	storedTx *stakerdb.StoredTransaction,
+	unbondingData *stakerdb.UnbondingStoreData) {
+
+	// check we are not quitting before we start whole process
+	select {
+	case <-app.quit:
+		return
+
+	default:
+	}
+
+	waitEv := app.sendUnbondingTxToBtc(
+		stakingTxHash,
+		stakerAddress,
+		storedTx,
+		unbondingData,
+	)
+
+	if waitEv == nil {
+		// this can be nil only when we are shutting down, just return it that case
+		return
+	}
+
+	defer waitEv.Cancel()
+	unbondingTxHash := unbondingData.UnbondingTx.TxHash()
+
+	for {
+		select {
+		case conf := <-waitEv.Confirmed:
+			app.logger.WithFields(logrus.Fields{
+				"stakingTxHash":   stakingTxHash,
+				"unbondingTxHash": unbondingTxHash,
+				"blockHash":       conf.BlockHash,
+				"blockHeight":     conf.BlockHeight,
+			}).Debug("Unbonding tx confirmed")
+
+			app.unbondingConfirmedOnBtcChan <- &unbondingConfirmedOnBtc{
+				stakingTxHash: *stakingTxHash,
+			}
+			return
+
+		case u := <-waitEv.Updates:
+			app.logger.WithFields(logrus.Fields{
+				"unbondingTxHas": unbondingTxHash,
+				"confLeft":       u,
+			}).Debugf("Unbonding transaction received confirmation")
+		case <-app.quit:
+			return
+		}
+	}
 }
 
 // main event loop for the staker app
@@ -1350,8 +1559,8 @@ func (app *StakerApp) handleStaking() {
 		case confirmation := <-app.sendUnbondingRequestConfirmChan:
 			if err := app.txTracker.SetTxUnbondingStarted(
 				&confirmation.req.stakingTxHash,
-				confirmation.req.unbondinData.UnbondingTransaction,
-				confirmation.req.unbondinData.UnbondingTransactionScript,
+				confirmation.req.unbondingData.UnbondingTransaction,
+				confirmation.req.unbondingData.UnbondingTransactionScript,
 			); err != nil {
 				// TODO: handle this error somehow, it means we possilbly make invalid state transition
 				app.logger.Fatalf("Error setting state for tx %s: %s", &confirmation.req.stakingTxHash, err)
@@ -1363,7 +1572,7 @@ func (app *StakerApp) handleStaking() {
 			// start checking for signatures
 			go app.checkForUnbondingTxSignatures(&confirmation.req.stakingTxHash)
 
-			unbondingTxHash := confirmation.req.unbondinData.UnbondingTransaction.TxHash()
+			unbondingTxHash := confirmation.req.unbondingData.UnbondingTransaction.TxHash()
 			// return registred unbonding tx hash to caller
 			confirmation.req.successChan <- &unbondingTxHash
 
@@ -1375,6 +1584,32 @@ func (app *StakerApp) handleStaking() {
 			); err != nil {
 				// TODO: handle this error somehow, it means we possilbly make invalid state transition
 				app.logger.Fatalf("Error setting state for tx %s: %s", &unbondingSignaturesConf.stakingTxHash, err)
+			}
+
+			storedTx, stakerAddress := app.mustGetTransactionAndStakerAddress(&unbondingSignaturesConf.stakingTxHash)
+
+			unbondingData, err := app.txTracker.GetUnbondingTxData(&unbondingSignaturesConf.stakingTxHash)
+
+			if err != nil {
+				app.logger.Fatalf("Error retieving unbonding data for tx %s: %s", &unbondingSignaturesConf.stakingTxHash, err)
+			}
+
+			app.logger.WithFields(logrus.Fields{
+				"stakingTxHash": &unbondingSignaturesConf.stakingTxHash,
+			}).Debug("Initiate sending btc unbonding tx to btc network and waiting for confirmation")
+
+			go app.initBtcUnbonding(
+				&unbondingSignaturesConf.stakingTxHash,
+				stakerAddress,
+				storedTx,
+				unbondingData,
+			)
+
+		case confOnBtc := <-app.unbondingConfirmedOnBtcChan:
+			if err := app.txTracker.SetTxUnbondingConfirmedOnBtc(&confOnBtc.stakingTxHash); err != nil {
+				// TODO: handle this error somehow, it means we received spend stake confirmation for tx which we do not store
+				// which is seems like programming error. Maybe panic?
+				app.logger.Fatalf("Error setting state for tx %s: %s", confOnBtc.stakingTxHash, err)
 			}
 
 		case <-app.quit:
@@ -1437,7 +1672,6 @@ func (app *StakerApp) validatorExists(validatorPk *btcec.PublicKey) error {
 	}
 
 	return nil
-
 }
 
 func GetMinStakingTime(p *cl.StakingParams) uint32 {

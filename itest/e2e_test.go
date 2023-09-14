@@ -992,7 +992,7 @@ func TestStakingUnbonding(t *testing.T) {
 	tm.insertJurySigForDelegation(t, pend[0])
 
 	feeRate := 2000
-	_, err = tm.StakerClient.UnbondStaking(context.Background(), txHash.String(), &feeRate)
+	resp, err := tm.StakerClient.UnbondStaking(context.Background(), txHash.String(), &feeRate)
 	require.NoError(t, err)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_STARTED)
 
@@ -1004,4 +1004,28 @@ func TestStakingUnbonding(t *testing.T) {
 
 	tm.insertUnbondingSignatures(t, validatorDelegations[0], testStakingData)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED)
+
+	unbondingTxHash, err := chainhash.NewHashFromStr(resp.UnbondingTxHash)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		tx, err := tm.MinerNode.Client.GetRawTransaction(unbondingTxHash)
+		if err != nil {
+			return false
+		}
+
+		if tx == nil {
+			return false
+
+		}
+
+		return true
+	}, 1*time.Minute, eventuallyPollTime)
+	tx, err := tm.MinerNode.Client.GetRawTransaction(unbondingTxHash)
+	require.NoError(t, err)
+	block := mineBlockWithTxs(t, tm.MinerNode, []*btcutil.Tx{tx})
+	require.Equal(t, 2, len(block.Transactions))
+	require.Equal(t, block.Transactions[1].TxHash(), *unbondingTxHash)
+	go tm.mineNEmptyBlocks(t, staker.UnbondingTxConfirmations, false)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC)
 }
