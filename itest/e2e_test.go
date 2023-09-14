@@ -658,7 +658,8 @@ func (tm *TestManager) sendWatchedStakingTx(
 	serializedSlashingTx, err := utils.SerializeBtcTransaction(slashingTx)
 	require.NoError(t, err)
 
-	// TODO: Update pop when new version will be ready
+	// TODO: Update pop when new version will be ready, for now using schnorr as we don't have
+	// easy way to generate bip322 sig on backend side
 	pop, err := btcstypes.NewPoP(
 		testStakingData.StakerBabylonPrivKey,
 		tm.WalletPrivKey,
@@ -675,7 +676,9 @@ func (tm *TestManager) sendWatchedStakingTx(
 		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
 		tm.MinerAddr.String(),
 		hex.EncodeToString(pop.BabylonSig),
-		pop.BtcSig.ToHexStr(),
+		hex.EncodeToString(pop.BtcSig),
+		// Use schnor verification
+		0,
 	)
 
 	require.NoError(t, err)

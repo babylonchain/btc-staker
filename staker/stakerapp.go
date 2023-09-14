@@ -49,7 +49,7 @@ type stakingRequest struct {
 	stakingOutputPkScript   []byte
 	stakingTxScript         []byte
 	requiredDepthOnBtcChain uint32
-	pop                     *stakerdb.ProofOfPossession
+	pop                     *cl.BabylonPop
 	watchTxData             *watchTxData
 	errChan                 chan error
 	successChan             chan *chainhash.Hash
@@ -62,7 +62,7 @@ func newOwnedStakingRequest(
 	stakingOutputPkScript []byte,
 	stakingScript []byte,
 	confirmationTimeBlocks uint32,
-	pop *stakerdb.ProofOfPossession,
+	pop *cl.BabylonPop,
 ) *stakingRequest {
 	return &stakingRequest{
 		stakerAddress:           stakerAddress,
@@ -85,7 +85,7 @@ func newWatchedStakingRequest(
 	stakingOutputPkScript []byte,
 	stakingScript []byte,
 	confirmationTimeBlocks uint32,
-	pop *stakerdb.ProofOfPossession,
+	pop *cl.BabylonPop,
 	slashingTx *wire.MsgTx,
 	slashingTxSignature *schnorr.Signature,
 	stakerBabylonPubKey *secp256k1.PubKey,
@@ -740,8 +740,7 @@ func (app *StakerApp) buildDelegationData(
 		SlashingTransaction:                  slashingTx,
 		SlashingTransactionSig:               slashingTxSignature,
 		BabylonPk:                            babylonPubKey,
-		BabylonEcdsaSigOverBtcPk:             storedTx.Pop.BabylonSigOverBtcPk,
-		BtcSchnorrSigOverBabylonSig:          storedTx.Pop.BtcSchnorrSigOverBabylonSig,
+		BabylonPop:                           storedTx.Pop,
 	}
 
 	return &dg, nil
@@ -1069,7 +1068,7 @@ func (app *StakerApp) handleStaking() {
 					req.stakingTx,
 					req.stakingOutputIdx,
 					req.stakingTxScript,
-					req.pop,
+					BabylonPopToDbPop(req.pop),
 					req.stakerAddress,
 					req.watchTxData.slashingTx,
 					req.watchTxData.slashingTxSig,
@@ -1093,7 +1092,7 @@ func (app *StakerApp) handleStaking() {
 					req.stakingTx,
 					req.stakingOutputIdx,
 					req.stakingTxScript,
-					req.pop,
+					BabylonPopToDbPop(req.pop),
 					req.stakerAddress,
 				)
 
@@ -1197,7 +1196,7 @@ func (app *StakerApp) BabylonController() cl.BabylonClient {
 
 // Generate proof of possessions for staker address.
 // Requires btc wallet to be unlocked!
-func (app *StakerApp) generatePop(stakerPrivKey *btcec.PrivateKey) (*stakerdb.ProofOfPossession, error) {
+func (app *StakerApp) generatePop(stakerPrivKey *btcec.PrivateKey) (*cl.BabylonPop, error) {
 	// build proof of possession, no point moving forward if staker does not have all
 	// the necessary keys
 	stakerKey := stakerPrivKey.PubKey()
@@ -1220,10 +1219,15 @@ func (app *StakerApp) generatePop(stakerPrivKey *btcec.PrivateKey) (*stakerdb.Pr
 		return nil, err
 	}
 
-	pop := stakerdb.NewProofOfPossession(
+	pop, err := cl.NewBabylonPop(
+		cl.SchnorType,
 		babylonSig,
 		btcSig.Serialize(),
 	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate pop: %w", err)
+	}
 
 	return pop, nil
 }
@@ -1255,7 +1259,7 @@ func (app *StakerApp) WatchStaking(
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
 	stakerAddress btcutil.Address,
-	pop *stakerdb.ProofOfPossession,
+	pop *cl.BabylonPop,
 ) (*chainhash.Hash, error) {
 	// 1. Check script matches transaction
 	stakingOutputIdx, err := btcstaking.GetIdxOutputCommitingToScript(
@@ -1316,7 +1320,10 @@ func (app *StakerApp) WatchStaking(
 		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx sig: %w", err)
 	}
 
-	// TODO: Check PoP.
+	// 6. Validate pop
+	if err = pop.ValidatePop(stakerBabylonPk, scriptData.StakingScriptData.StakerKey, app.network); err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid pop: %w", err)
+	}
 
 	app.logger.WithFields(logrus.Fields{
 		"stakerAddress": stakerAddress,
@@ -1408,6 +1415,7 @@ func (app *StakerApp) StakeFunds(
 		return nil, err
 	}
 
+	// We build pop ourselves so no need to verify it
 	pop, err := app.generatePop(stakerPrivKey)
 
 	if err != nil {

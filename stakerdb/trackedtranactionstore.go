@@ -41,8 +41,9 @@ type TrackedTransactionStore struct {
 }
 
 type ProofOfPossession struct {
-	BabylonSigOverBtcPk         []byte
-	BtcSchnorrSigOverBabylonSig []byte
+	BtcSigType           uint32
+	BabylonSigOverBtcPk  []byte
+	BtcSigOverBabylonSig []byte
 }
 
 func NewProofOfPossession(
@@ -50,8 +51,8 @@ func NewProofOfPossession(
 	btcSchnorrSigOverBabylonSig []byte,
 ) *ProofOfPossession {
 	return &ProofOfPossession{
-		BabylonSigOverBtcPk:         babylonSigOverBtcPk,
-		BtcSchnorrSigOverBabylonSig: btcSchnorrSigOverBabylonSig,
+		BabylonSigOverBtcPk:  babylonSigOverBtcPk,
+		BtcSigOverBabylonSig: btcSchnorrSigOverBabylonSig,
 	}
 }
 
@@ -140,8 +141,9 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 		StakingOutputIndex: ttx.StakingOutputIdx,
 		TxScript:           ttx.StakingScript,
 		Pop: &ProofOfPossession{
-			BabylonSigOverBtcPk:         ttx.BabylonSigBtcPk,
-			BtcSchnorrSigOverBabylonSig: ttx.SchnorSigBabylonSig,
+			BtcSigType:           ttx.BtcSigType,
+			BabylonSigOverBtcPk:  ttx.BabylonSigBtcPk,
+			BtcSigOverBabylonSig: ttx.BtcSigBabylonSig,
 		},
 		StakerAddress: ttx.StakerAddress,
 		State:         ttx.State,
@@ -320,14 +322,15 @@ func (c *TrackedTransactionStore) AddTransaction(
 	}
 
 	msg := proto.TrackedTransaction{
-		StakingTransaction:  serializedTx,
-		StakingScript:       txscript,
-		StakingOutputIdx:    stakingOutputIndex,
-		StakerAddress:       stakerAddress.EncodeAddress(),
-		BabylonSigBtcPk:     pop.BabylonSigOverBtcPk,
-		SchnorSigBabylonSig: pop.BtcSchnorrSigOverBabylonSig,
-		State:               proto.TransactionState_SENT_TO_BTC,
-		Watched:             false,
+		StakingTransaction: serializedTx,
+		StakingScript:      txscript,
+		StakingOutputIdx:   stakingOutputIndex,
+		StakerAddress:      stakerAddress.EncodeAddress(),
+		BtcSigType:         pop.BtcSigType,
+		BabylonSigBtcPk:    pop.BabylonSigOverBtcPk,
+		BtcSigBabylonSig:   pop.BtcSigOverBabylonSig,
+		State:              proto.TransactionState_SENT_TO_BTC,
+		Watched:            false,
 	}
 
 	return c.addTransactionInternal(
@@ -354,14 +357,15 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	}
 
 	msg := proto.TrackedTransaction{
-		StakingTransaction:  serializedTx,
-		StakingScript:       txscript,
-		StakingOutputIdx:    stakingOutputIndex,
-		StakerAddress:       stakerAddress.EncodeAddress(),
-		BabylonSigBtcPk:     pop.BabylonSigOverBtcPk,
-		SchnorSigBabylonSig: pop.BtcSchnorrSigOverBabylonSig,
-		State:               proto.TransactionState_SENT_TO_BTC,
-		Watched:             true,
+		StakingTransaction: serializedTx,
+		StakingScript:      txscript,
+		StakingOutputIdx:   stakingOutputIndex,
+		StakerAddress:      stakerAddress.EncodeAddress(),
+		BtcSigType:         pop.BtcSigType,
+		BabylonSigBtcPk:    pop.BabylonSigOverBtcPk,
+		BtcSigBabylonSig:   pop.BtcSigOverBabylonSig,
+		State:              proto.TransactionState_SENT_TO_BTC,
+		Watched:            true,
 	}
 
 	serializedSlashingtx, err := utils.SerializeBtcTransaction(slashingTx)

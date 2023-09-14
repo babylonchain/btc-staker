@@ -300,7 +300,7 @@ require (
 )
 
 replace (
-	github.com/babylonchain/babylon v0.7.2 => github.com/babylonchain/babylon-private v0.0.0-20230907061538-fc7452bb0600
+	github.com/babylonchain/babylon v0.7.2 => github.com/babylonchain/babylon-private v0.0.0-20230914082434-aece8a12b91c
 	github.com/cosmos/ibc-go/v7 => github.com/babylonchain/ibc-go/v7 v7.0.0-20230324085744-4d6a0d2c0fcf
 	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
 )

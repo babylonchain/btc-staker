@@ -11,9 +11,9 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/babylonchain/btc-staker/babylonclient"
 	str "github.com/babylonchain/btc-staker/staker"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
-	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -298,6 +298,7 @@ func (s *StakerService) watchStaking(
 	stakerAddress string,
 	stakerBabylonSig string,
 	stakerBtcSig string,
+	popType int,
 ) (*ResultStake, error) {
 
 	stkTx, err := decodeBtcTx(stakingTx)
@@ -362,6 +363,18 @@ func (s *StakerService) watchStaking(
 		return nil, err
 	}
 
+	btcPopType, err := babylonclient.IntToPopType(popType)
+
+	if err != nil {
+		return nil, err
+	}
+
+	proofOfPossesion, err := babylonclient.NewBabylonPop(btcPopType, stakerBabylonSigBytes, stakerBtcSigBytes)
+
+	if err != nil {
+		return nil, err
+	}
+
 	hash, err := s.staker.WatchStaking(
 		stkTx,
 		stkScript,
@@ -369,10 +382,7 @@ func (s *StakerService) watchStaking(
 		slashingTxSchnorSig,
 		&stakerBabylonPubKey,
 		address,
-		&stakerdb.ProofOfPossession{
-			BabylonSigOverBtcPk:         stakerBabylonSigBytes,
-			BtcSchnorrSigOverBabylonSig: stakerBtcSigBytes,
-		},
+		proofOfPossesion,
 	)
 
 	if err != nil {
@@ -395,7 +405,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
 
 		// watch api
-		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig"),
+		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig,popType"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),
