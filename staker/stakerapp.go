@@ -1220,7 +1220,7 @@ func (app *StakerApp) generatePop(stakerPrivKey *btcec.PrivateKey) (*cl.BabylonP
 	}
 
 	pop, err := cl.NewBabylonPop(
-		cl.SchnorType,
+		cl.SchnorrType,
 		babylonSig,
 		btcSig.Serialize(),
 	)

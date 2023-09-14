@@ -678,7 +678,7 @@ func (tm *TestManager) sendWatchedStakingTx(
 		hex.EncodeToString(pop.BabylonSig),
 		hex.EncodeToString(pop.BtcSig),
 		// Use schnor verification
-		0,
+		int(btcstypes.BTCSigType_BIP340),
 	)
 
 	require.NoError(t, err)

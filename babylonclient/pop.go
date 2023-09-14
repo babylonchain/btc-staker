@@ -13,7 +13,7 @@ import (
 type BtcSigType int
 
 const (
-	SchnorType BtcSigType = iota
+	SchnorrType BtcSigType = iota
 	Bip322Type
 )
 
@@ -37,7 +37,7 @@ func NewBabylonPop(t BtcSigType, babylonSig []byte, btcSig []byte) (*BabylonPop,
 
 func BabylonPopTypeToSigType(t BtcSigType) (btcstypes.BTCSigType, error) {
 	switch t {
-	case SchnorType:
+	case SchnorrType:
 		return btcstypes.BTCSigType_BIP340, nil
 	case Bip322Type:
 		return btcstypes.BTCSigType_BIP322, nil
@@ -49,11 +49,11 @@ func BabylonPopTypeToSigType(t BtcSigType) (btcstypes.BTCSigType, error) {
 func IntToPopType(t int) (BtcSigType, error) {
 	switch t {
 	case 0:
-		return SchnorType, nil
+		return SchnorrType, nil
 	case 1:
 		return Bip322Type, nil
 	default:
-		return SchnorType, fmt.Errorf("uknown pop type")
+		return SchnorrType, fmt.Errorf("uknown pop type")
 	}
 }
 
@@ -70,7 +70,7 @@ func IntToSigType(t int) (btcstypes.BTCSigType, error) {
 func (pop *BabylonPop) ToBtcStakingPop() (*btcstypes.ProofOfPossession, error) {
 	var popType btcstypes.BTCSigType
 	switch pop.BtcSigType {
-	case SchnorType:
+	case SchnorrType:
 		popType = btcstypes.BTCSigType_BIP340
 	case Bip322Type:
 		popType = btcstypes.BTCSigType_BIP322
