@@ -23,6 +23,7 @@ var daemonCommands = []cli.Command{
 			unstakeCmd,
 			stakingDetailsCmd,
 			listStakingTransactionsCmd,
+			unbondCmd,
 		},
 	},
 }
@@ -34,6 +35,7 @@ const (
 	validatorPkFlag            = "validator-pk"
 	stakingTimeBlocksFlag      = "staking-time"
 	stakingTransactionHashFlag = "staking-transaction-hash"
+	feeRateFlag                = "fee-rate"
 )
 
 var (
@@ -143,6 +145,29 @@ var unstakeCmd = cli.Command{
 		},
 	},
 	Action: unstake,
+}
+
+var unbondCmd = cli.Command{
+	Name:      "unbond",
+	ShortName: "ubd",
+	Usage:     "initiates unbonding flow: build unbonding tx, send to babylon, wait for signatures, and send unbonding tx to bitcoin",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+		cli.StringFlag{
+			Name:     stakingTransactionHashFlag,
+			Usage:    "Hash of original staking transaction in bitcoin hex format",
+			Required: true,
+		},
+		cli.IntFlag{
+			Name:  feeRateFlag,
+			Usage: "fee rate to pay for unbonding tx in sats/kb",
+		},
+	},
+	Action: unbond,
 }
 
 var stakingDetailsCmd = cli.Command{
@@ -296,6 +321,38 @@ func unstake(ctx *cli.Context) error {
 	stakingTransactionHash := ctx.String(stakingTransactionHashFlag)
 
 	result, err := client.SpendStakingTransaction(sctx, stakingTransactionHash)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(result)
+
+	return nil
+}
+
+func unbond(ctx *cli.Context) error {
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+
+	stakingTransactionHash := ctx.String(stakingTransactionHashFlag)
+
+	feeRate := ctx.Int(feeRateFlag)
+
+	if feeRate < 0 {
+		return cli.NewExitError("Fee rate must be non-negative", 1)
+	}
+
+	var fr *int = nil
+	if feeRate > 0 {
+		fr = &feeRate
+	}
+
+	result, err := client.UnbondStaking(sctx, stakingTransactionHash, fr)
 	if err != nil {
 		return err
 	}
