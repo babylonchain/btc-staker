@@ -8,6 +8,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+
+	"github.com/babylonchain/babylon/types"
+	"github.com/btcsuite/btcd/btcec/v2"
 )
 
 func baseDirBabylondir() (string, error) {
@@ -114,11 +117,13 @@ type BabylonNodeHandler struct {
 	babylonNode *babylonNode
 }
 
-func NewBabylonNodeHandler() (*BabylonNodeHandler, error) {
+func NewBabylonNodeHandler(juryPk *btcec.PublicKey) (*BabylonNodeHandler, error) {
 	testDir, err := baseDirBabylondir()
 	if err != nil {
 		return nil, err
 	}
+
+	pubBabylon := types.NewBIP340PubKeyFromBTCPK(juryPk)
 
 	initTestnetCmd := exec.Command(
 		"babylond",
@@ -131,6 +136,7 @@ func NewBabylonNodeHandler() (*BabylonNodeHandler, error) {
 		"--btc-finalization-timeout=4",
 		"--btc-confirmation-depth=2",
 		"--additional-sender-account",
+		fmt.Sprintf("--jury-pk=%s", pubBabylon.MarshalHex()),
 	)
 
 	var stderr bytes.Buffer

@@ -8,13 +8,23 @@ enum TransactionState {
     SENT_TO_BTC = 0;
     CONFIRMED_ON_BTC = 1;
     SENT_TO_BABYLON = 2;
-    SPENT_ON_BTC = 3;
+    UNBONDING_STARTED =3;
+    UNBONDING_SIGNATURES_RECEIVED = 5;
+    UNBONDING_CONFIRMED_ON_BTC = 6;
+    SPENT_ON_BTC = 7;
 }
 
 message WatchedTxData {
     bytes slashing_transaction = 1;
     bytes slashing_transaction_sig = 2;
     bytes staker_babylon_pk = 3;
+}
+
+message UnbondingTxData {
+    bytes unbonding_transaction = 1;
+    bytes unbonding_transaction_script = 2;
+    bytes unbonding_transaction_validator_sig = 3;
+    bytes unbonding_transaction_jury_sig = 4;
 }
 
 message TrackedTransaction {

@@ -48,11 +48,13 @@ var (
 )
 
 var (
-	ErrInvalidBabylonDelegation = errors.New("sent invalid babylon delegation")
-	ErrHeaderNotKnownToBabylon  = errors.New("btc header not known to babylon")
-	ErrHeaderOnBabylonLCFork    = errors.New("btc header is on babylon btc light client fork")
-	ErrValidatorDoesNotExist    = errors.New("validator does not exist")
-	ErrValidatorIsSlashed       = errors.New("validator is slashed")
+	ErrInvalidBabylonExecution             = errors.New("message send to babylon was executed with error")
+	ErrHeaderNotKnownToBabylon             = errors.New("btc header not known to babylon")
+	ErrHeaderOnBabylonLCFork               = errors.New("btc header is on babylon btc light client fork")
+	ErrValidatorDoesNotExist               = errors.New("validator does not exist")
+	ErrValidatorIsSlashed                  = errors.New("validator is slashed")
+	ErrDelegationNotFound                  = errors.New("delegation not found")
+	ErrInvalidValueReceivedFromBabylonNode = errors.New("invalid value received from babylon node")
 )
 
 func newLensClient(ccc *lensclient.ChainClientConfig, kro ...keyring.Option) (*lensclient.ChainClient, error) {
@@ -280,7 +282,28 @@ type DelegationData struct {
 	BabylonPop                           *stakerdb.ProofOfPossession
 }
 
+type UndelegationData struct {
+	UnbondingTransaction         *wire.MsgTx
+	UnbondingTransactionScript   []byte
+	SlashUnbondingTransaction    *wire.MsgTx
+	SlashUnbondingTransactionSig *schnorr.Signature
+}
+
+type UndelegationInfo struct {
+	JuryUnbodningSignature      *schnorr.Signature
+	ValidatorUnbondingSignature *schnorr.Signature
+}
+
+type DelegationInfo struct {
+	Active           bool
+	UndelegationInfo *UndelegationInfo
+}
+
 func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
+	if dg == nil {
+		return nil, fmt.Errorf("nil delegation data")
+	}
+
 	serizalizedStakingTransaction, err := utils.SerializeBtcTransaction(dg.StakingTransaction)
 
 	if err != nil {
@@ -326,6 +349,43 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 	}, nil
 }
 
+func undelegationDataToMsg(signer string, ud *UndelegationData) (*btcstypes.MsgBTCUndelegate, error) {
+	if ud == nil {
+		return nil, fmt.Errorf("nil unbonding data")
+	}
+
+	if ud.SlashUnbondingTransaction == nil ||
+		ud.SlashUnbondingTransactionSig == nil ||
+		ud.UnbondingTransaction == nil ||
+		ud.UnbondingTransactionScript == nil {
+		return nil, fmt.Errorf("received unbonding data with nil field")
+	}
+
+	serializedUnbondingTransaction, err := utils.SerializeBtcTransaction(ud.UnbondingTransaction)
+
+	if err != nil {
+		return nil, err
+	}
+
+	slashUnbondindTx, err := btcstypes.NewBTCSlashingTxFromMsgTx(ud.SlashUnbondingTransaction)
+
+	if err != nil {
+		return nil, err
+	}
+
+	slashingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(ud.SlashUnbondingTransactionSig)
+
+	return &btcstypes.MsgBTCUndelegate{
+		Signer: signer,
+		UnbondingTx: &btcstypes.BabylonBTCTaprootTx{
+			Tx:     serializedUnbondingTransaction,
+			Script: ud.UnbondingTransactionScript,
+		},
+		SlashingTx:           slashUnbondindTx,
+		DelegatorSlashingSig: &slashingTxSig,
+	}, nil
+}
+
 func (bc *BabylonController) reliablySendMsgs(msgs []sdk.Msg, errorMsg string) (*sdk.TxResponse, error) {
 	ctx := context.Background()
 
@@ -333,9 +393,18 @@ func (bc *BabylonController) reliablySendMsgs(msgs []sdk.Msg, errorMsg string) (
 	// great as it bundles all the functionality: builidng tx, signing, broadcasting to mempool, waiting for inclusion in block
 	// therefore this operation can tak a lot of time i.e at most cfg.BlockTimeout
 	var response *sdk.TxResponse
-	if err := retry.Do(func() error {
+	err := retry.Do(func() error {
 		resp, err := bc.ChainClient.SendMsgs(ctx, msgs, "")
-		if err != nil {
+
+		// Case when transaction was sucesffully broadcasted and included in block
+		// but execution failed. Do not retry in this case, and return ErrInvalidBabylonExecution type to
+		// the caller
+		if err != nil && resp != nil {
+			response = resp
+			return retry.Unrecoverable(fmt.Errorf("%s: %w", err.Error(), ErrInvalidBabylonExecution))
+		}
+
+		if err != nil && resp == nil {
 			// Our transactions was correct, but it was not included in the block for cfg.BlockTimeout
 			// no point in retrying
 			if errors.Is(err, lensclient.ErrTimeoutAfterWaitingForTxBroadcast) {
@@ -343,6 +412,7 @@ func (bc *BabylonController) reliablySendMsgs(msgs []sdk.Msg, errorMsg string) (
 			}
 			return err
 		}
+
 		response = resp
 		return nil
 	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
@@ -351,11 +421,9 @@ func (bc *BabylonController) reliablySendMsgs(msgs []sdk.Msg, errorMsg string) (
 			"max_attempts": RtyAttNum,
 			"error":        err,
 		}).Error(errorMsg)
-	})); err != nil {
-		return nil, err
-	}
+	}))
 
-	return response, nil
+	return response, err
 }
 
 // TODO: for now return sdk.TxResponse, it will ease up debugging/testing
@@ -367,20 +435,17 @@ func (bc *BabylonController) Delegate(dg *DelegationData) (*sdk.TxResponse, erro
 		return nil, err
 	}
 
-	response, err := bc.reliablySendMsgs([]sdk.Msg{delegateMsg}, "Failed to send delegation transaction to babylon node")
+	return bc.reliablySendMsgs([]sdk.Msg{delegateMsg}, "Failed to send delegation transaction to babylon node")
+}
+
+func (bc *BabylonController) Undelegate(ud *UndelegationData) (*sdk.TxResponse, error) {
+	unbondMsg, err := undelegationDataToMsg(bc.getTxSigner(), ud)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if response.Code != 0 {
-		// This quite specific case in which we send delegation to babylon, it was included in the block
-		// but it execution failed. It is a bit criticial error, as we are wasting gas on invalid transaction
-		// we return error and response so that caller decides what to do with it.
-		return response, ErrInvalidBabylonDelegation
-	}
-
-	return response, nil
+	return bc.reliablySendMsgs([]sdk.Msg{unbondMsg}, "Failed to send undelegate transaction to babylon node")
 }
 
 func getQueryContext(timeout time.Duration) (context.Context, context.CancelFunc) {
@@ -617,36 +682,61 @@ func (bc *BabylonController) RegisterValidator(
 		Pop:         pop,
 	}
 
-	res, err := bc.reliablySendMsgs([]sdk.Msg{registerMsg}, "Failed to send validator registration transaction to babylon node")
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
+	return bc.reliablySendMsgs([]sdk.Msg{registerMsg}, "Failed to send validator registration transaction to babylon node")
 }
 
-func (bc *BabylonController) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error) {
-	ctx, cancel := getQueryContext(bc.cfg.Timeout)
-	defer cancel()
-
+func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error) {
 	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
 	queryClient := btcstypes.NewQueryClient(clientCtx)
 
-	var txAlreadyPartOfDelegation bool = false
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	var di *DelegationInfo
 	if err := retry.Do(func() error {
-		_, err := queryClient.BTCDelegation(ctx, &btcstypes.QueryBTCDelegationRequest{
+		resp, err := queryClient.BTCDelegation(ctx, &btcstypes.QueryBTCDelegationRequest{
 			StakingTxHashHex: stakingTxHash.String(),
 		})
 		if err != nil {
 			if strings.Contains(err.Error(), btcstypes.ErrBTCDelNotFound.Error()) {
-				return nil
+				// delegation is not found on babylon, do not retry further
+				return retry.Unrecoverable(ErrDelegationNotFound)
 			}
 
 			return err
 		}
 
-		// No error, delegation is already on babylon
-		txAlreadyPartOfDelegation = true
+		var udi *UndelegationInfo = nil
+
+		if resp.UndelegationInfo != nil {
+			var jurySig *schnorr.Signature = nil
+			if resp.UndelegationInfo.JuryUnbondingSig != nil {
+				jsig, err := resp.UndelegationInfo.JuryUnbondingSig.ToBTCSig()
+				if err != nil {
+					return retry.Unrecoverable(fmt.Errorf("malformed jury sig: %s : %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
+				}
+				jurySig = jsig
+			}
+
+			var validatorSig *schnorr.Signature = nil
+			if resp.UndelegationInfo.ValidatorUnbondingSig != nil {
+				vsig, err := resp.UndelegationInfo.ValidatorUnbondingSig.ToBTCSig()
+				if err != nil {
+					return retry.Unrecoverable(fmt.Errorf("malformed validator sig: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
+				}
+				validatorSig = vsig
+			}
+
+			udi = &UndelegationInfo{
+				JuryUnbodningSignature:      jurySig,
+				ValidatorUnbondingSignature: validatorSig,
+			}
+		}
+
+		di = &DelegationInfo{
+			Active:           resp.Active,
+			UndelegationInfo: udi,
+		}
 		return nil
 	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
 		bc.logger.WithFields(logrus.Fields{
@@ -655,8 +745,140 @@ func (bc *BabylonController) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhas
 			"error":        err,
 		}).Error("Failed to query babylon for the staking transaction")
 	})); err != nil {
+		return nil, err
+	}
+
+	return di, nil
+}
+
+func (bc *BabylonController) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error) {
+	_, err := bc.QueryDelegationInfo(stakingTxHash)
+
+	if err != nil {
+		if errors.Is(err, ErrDelegationNotFound) {
+			return false, nil
+		}
 		return false, err
 	}
 
-	return txAlreadyPartOfDelegation, nil
+	return true, nil
+}
+
+// Test methods for e2e testing
+// Different babylon sig methods to support e2e testing
+func (bc *BabylonController) SubmitJurySig(
+	btcPubKey *bbntypes.BIP340PubKey,
+	delPubKey *bbntypes.BIP340PubKey,
+	stakingTxHash string,
+	sig *bbntypes.BIP340Signature) (*sdk.TxResponse, error) {
+	msg := &btcstypes.MsgAddJurySig{
+		Signer:        bc.getTxSigner(),
+		ValPk:         btcPubKey,
+		DelPk:         delPubKey,
+		StakingTxHash: stakingTxHash,
+		Sig:           sig,
+	}
+
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury sig")
+}
+
+func (bc *BabylonController) SubmitJuryUnbondingSigs(
+	btcPubKey *bbntypes.BIP340PubKey,
+	delPubKey *bbntypes.BIP340PubKey,
+	stakingTxHash string,
+	unbondingSig *bbntypes.BIP340Signature,
+	slashUnbondingSig *bbntypes.BIP340Signature,
+) (*sdk.TxResponse, error) {
+	msg := &btcstypes.MsgAddJuryUnbondingSigs{
+		Signer:                 bc.getTxSigner(),
+		ValPk:                  btcPubKey,
+		DelPk:                  delPubKey,
+		StakingTxHash:          stakingTxHash,
+		UnbondingTxSig:         unbondingSig,
+		SlashingUnbondingTxSig: slashUnbondingSig,
+	}
+
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury unbonding sig")
+}
+
+func (bc *BabylonController) SubmitValidatorUnbondingSig(
+	valPubKey *bbntypes.BIP340PubKey,
+	delPubKey *bbntypes.BIP340PubKey,
+	stakingTxHash string,
+	sig *bbntypes.BIP340Signature) (*sdk.TxResponse, error) {
+
+	msg := &btcstypes.MsgAddValidatorUnbondingSig{
+		Signer:         bc.getTxSigner(),
+		ValPk:          valPubKey,
+		DelPk:          delPubKey,
+		StakingTxHash:  stakingTxHash,
+		UnbondingTxSig: sig,
+	}
+
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit validator unbonding sig")
+}
+
+func (bc *BabylonController) QueryPendingBTCDelegations() ([]*btcstypes.BTCDelegation, error) {
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
+	queryClient := btcstypes.NewQueryClient(clientCtx)
+
+	// query all the unsigned delegations
+	queryRequest := &btcstypes.QueryPendingBTCDelegationsRequest{}
+	res, err := queryClient.PendingBTCDelegations(ctx, queryRequest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query BTC delegations: %v", err)
+	}
+
+	return res.BtcDelegations, nil
+}
+
+// QueryUnbondingBTCDelegations queries BTC delegations that need a Jury sig for unbodning
+// it is only used when the program is running in Jury mode
+func (bc *BabylonController) QueryUnbondingBTCDelegations() ([]*btcstypes.BTCDelegation, error) {
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
+
+	queryClient := btcstypes.NewQueryClient(clientCtx)
+
+	// query all the unsigned delegations
+	queryRequest := &btcstypes.QueryUnbondingBTCDelegationsRequest{}
+	res, err := queryClient.UnbondingBTCDelegations(ctx, queryRequest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query BTC delegations: %v", err)
+	}
+
+	return res.BtcDelegations, nil
+}
+
+func (bc *BabylonController) QueryValidatorDelegations(validatorBtcPubKey *btcec.PublicKey) ([]*btcstypes.BTCDelegation, error) {
+	ctx, cancel := getQueryContext(bc.cfg.Timeout)
+	defer cancel()
+
+	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
+
+	queryClient := btcstypes.NewQueryClient(clientCtx)
+
+	key := types.NewBIP340PubKeyFromBTCPK(validatorBtcPubKey)
+
+	// query all the unsigned delegations
+	queryRequest := &btcstypes.QueryBTCValidatorDelegationsRequest{
+		ValBtcPkHex: key.MarshalHex(),
+	}
+	res, err := queryClient.BTCValidatorDelegations(ctx, queryRequest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query BTC delegations: %v", err)
+	}
+
+	var delegations []*btcstypes.BTCDelegation
+
+	for _, dels := range res.BtcDelegatorDelegations {
+		delegations = append(delegations, dels.Dels...)
+	}
+
+	return delegations, nil
 }

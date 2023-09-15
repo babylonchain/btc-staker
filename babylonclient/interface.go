@@ -1,6 +1,8 @@
 package babylonclient
 
 import (
+	"fmt"
+
 	"github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
@@ -37,10 +39,12 @@ type BabylonClient interface {
 	SingleKeyKeyring
 	Params() (*StakingParams, error)
 	Delegate(dg *DelegationData) (*sdk.TxResponse, error)
+	Undelegate(ud *UndelegationData) (*sdk.TxResponse, error)
 	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
 	QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error)
 	QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error)
 	IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error)
+	QueryDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error)
 }
 
 type MockBabylonClient struct {
@@ -118,6 +122,14 @@ func (m *MockBabylonClient) QueryHeaderDepth(headerHash *chainhash.Hash) (uint64
 
 func (m *MockBabylonClient) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error) {
 	return false, nil
+}
+
+func (m *MockBabylonClient) QueryDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error) {
+	return nil, fmt.Errorf("delegation do not exist")
+}
+
+func (m *MockBabylonClient) Undelegate(ud *UndelegationData) (*sdk.TxResponse, error) {
+	return &sdk.TxResponse{Code: 0}, nil
 }
 
 func GetMockClient() *MockBabylonClient {
