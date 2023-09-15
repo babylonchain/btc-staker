@@ -108,14 +108,14 @@ func newWatchedStakingRequest(
 
 type unbondingRequest struct {
 	stakingTxHash chainhash.Hash
-	unbondingData *cl.UnbondingData
+	unbondingData *cl.UndelegationData
 	errChan       chan error
 	successChan   chan *chainhash.Hash
 }
 
 func newUnbondingRequest(
 	stakingTxHash chainhash.Hash,
-	unbondingData *cl.UnbondingData) *unbondingRequest {
+	unbondingData *cl.UndelegationData) *unbondingRequest {
 	return &unbondingRequest{
 		stakingTxHash: stakingTxHash,
 		unbondingData: unbondingData,
@@ -206,7 +206,12 @@ const (
 	defaultWalletUnlockTimeout = 15
 
 	// Actual virtual size of transaction which spends staking transaction through slashing
-	// path. (in reality it is more like 177-178vb depending on address)
+	// path. In reality it highly depends on slashingAddress size:
+	// for p2pk - 222vb
+	// for p2wpkh - 177vb
+	// for p2tr - 189vb
+	// We are chosing 180vb as we expect slashing address will be one of the more recent
+	// address types.
 	// Transaction is quite big as witness to spend is composed of:
 	// 1. StakerSig
 	// 2. JurySig
@@ -1115,7 +1120,7 @@ func (app *StakerApp) handleSentToBabylon() {
 				continue
 			}
 
-			txResp, err := app.babylonClient.Unbond(req.unbondingData)
+			txResp, err := app.babylonClient.Undelegate(req.unbondingData)
 
 			if err != nil {
 				if errors.Is(err, cl.ErrInvalidBabylonExecution) {
@@ -1374,9 +1379,9 @@ func (app *StakerApp) sendUnbondingTxToBtc(
 	}
 }
 
-// initBtcUnbonding tries to send unbonding tx to btc and register for confirmation notification.
+// sendUnbondingTxToBtcAndWaitForConfirmation tries to send unbonding tx to btc and register for confirmation notification.
 // it should be run in separate go routine.
-func (app *StakerApp) initBtcUnbonding(
+func (app *StakerApp) sendUnbondingTxToBtcAndWaitForConfirmation(
 	stakingTxHash *chainhash.Hash,
 	stakerAddress btcutil.Address,
 	storedTx *stakerdb.StoredTransaction,
@@ -1615,7 +1620,7 @@ func (app *StakerApp) handleStaking() {
 			}).Debug("Initiate sending btc unbonding tx to btc network and waiting for confirmation")
 
 			app.wg.Add(1)
-			go app.initBtcUnbonding(
+			go app.sendUnbondingTxToBtcAndWaitForConfirmation(
 				&unbondingSignaturesConf.stakingTxHash,
 				stakerAddress,
 				storedTx,
@@ -2176,7 +2181,7 @@ func (app *StakerApp) buildUnbondingAndSlashingTxFromStakingTx(
 	feeRatePerKb btcutil.Amount,
 	finalizationTimeBlocks uint16,
 	slashingFee btcutil.Amount,
-) (*cl.UnbondingData, error) {
+) (*cl.UndelegationData, error) {
 	stakingTxHash := storedTx.BtcTx.TxHash()
 
 	stakingScriptData, err := staking.ParseStakingTransactionScript(storedTx.TxScript)
@@ -2255,7 +2260,7 @@ func (app *StakerApp) buildUnbondingAndSlashingTxFromStakingTx(
 		"unbondingOutputValue": unbondingOutputValue,
 	}).Debug("Successfully built unbonding data")
 
-	return &cl.UnbondingData{
+	return &cl.UndelegationData{
 		UnbondingTransaction:         unbondingTx,
 		UnbondingTransactionScript:   unbondingScript,
 		SlashUnbondingTransaction:    slashUnbondingTx,

@@ -282,7 +282,7 @@ type DelegationData struct {
 	BabylonPop                           *stakerdb.ProofOfPossession
 }
 
-type UnbondingData struct {
+type UndelegationData struct {
 	UnbondingTransaction         *wire.MsgTx
 	UnbondingTransactionScript   []byte
 	SlashUnbondingTransaction    *wire.MsgTx
@@ -349,7 +349,7 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 	}, nil
 }
 
-func unbondingDataToMsg(signer string, ud *UnbondingData) (*btcstypes.MsgBTCUndelegate, error) {
+func undelegationDataToMsg(signer string, ud *UndelegationData) (*btcstypes.MsgBTCUndelegate, error) {
 	if ud == nil {
 		return nil, fmt.Errorf("nil unbonding data")
 	}
@@ -438,8 +438,8 @@ func (bc *BabylonController) Delegate(dg *DelegationData) (*sdk.TxResponse, erro
 	return bc.reliablySendMsgs([]sdk.Msg{delegateMsg}, "Failed to send delegation transaction to babylon node")
 }
 
-func (bc *BabylonController) Unbond(ud *UnbondingData) (*sdk.TxResponse, error) {
-	unbondMsg, err := unbondingDataToMsg(bc.getTxSigner(), ud)
+func (bc *BabylonController) Undelegate(ud *UndelegationData) (*sdk.TxResponse, error) {
+	unbondMsg, err := undelegationDataToMsg(bc.getTxSigner(), ud)
 
 	if err != nil {
 		return nil, err

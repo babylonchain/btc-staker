@@ -842,7 +842,9 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 
 func TestSendingStakingTransaction(t *testing.T) {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	// need to have at least 300 block on testnet as only then segwit is activated
+	// need to have at least 300 block on testnet as only then segwit is activated.
+	// Mature output is out which has 100 confirmations, which means 200mature outputs
+	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
 	tm := StartManager(t, numMatureOutputs, 2, nil)
 	defer tm.Stop(t)
@@ -892,7 +894,9 @@ func TestSendingStakingTransaction(t *testing.T) {
 }
 
 func TestSendingWatchedStakingTransaction(t *testing.T) {
-	// need to have at least 300 block on testnet as only then segwit is activated
+	// need to have at least 300 block on testnet as only then segwit is activated.
+	// Mature output is out which has 100 confirmations, which means 200mature outputs
+	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
 	tm := StartManager(t, numMatureOutputs, 2, nil)
 	defer tm.Stop(t)
@@ -912,7 +916,9 @@ func TestSendingWatchedStakingTransaction(t *testing.T) {
 }
 
 func TestRestartingTxNotDeepEnough(t *testing.T) {
-	// need to have at least 300 block on testnet as only then segwit is activated
+	// need to have at least 300 block on testnet as only then segwit is activated.
+	// Mature output is out which has 100 confirmations, which means 200mature outputs
+	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
 	tm := StartManager(t, numMatureOutputs, 2, nil)
 	defer tm.Stop(t)
@@ -935,7 +941,9 @@ func TestRestartingTxNotDeepEnough(t *testing.T) {
 }
 
 func TestRestartingTxNotOnBabylon(t *testing.T) {
-	// need to have at least 300 block on testnet as only then segwit is activated
+	// need to have at least 300 block on testnet as only then segwit is activated.
+	// Mature output is out which has 100 confirmations, which means 200mature outputs
+	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
 	tm := StartManager(t, numMatureOutputs, 2, nil)
 	defer tm.Stop(t)
@@ -964,7 +972,9 @@ func TestRestartingTxNotOnBabylon(t *testing.T) {
 }
 
 func TestStakingUnbonding(t *testing.T) {
-	// need to have at least 300 block on testnet as only then segwit is activated
+	// need to have at least 300 block on testnet as only then segwit is activated.
+	// Mature output is out which has 100 confirmations, which means 200mature outputs
+	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
 	tm := StartManager(t, numMatureOutputs, 2, nil)
 	defer tm.Stop(t)

@@ -39,7 +39,7 @@ type BabylonClient interface {
 	SingleKeyKeyring
 	Params() (*StakingParams, error)
 	Delegate(dg *DelegationData) (*sdk.TxResponse, error)
-	Unbond(ud *UnbondingData) (*sdk.TxResponse, error)
+	Undelegate(ud *UndelegationData) (*sdk.TxResponse, error)
 	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
 	QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error)
 	QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error)
@@ -128,7 +128,7 @@ func (m *MockBabylonClient) QueryDelegationInfo(stakingTxHash *chainhash.Hash) (
 	return nil, fmt.Errorf("delegation do not exist")
 }
 
-func (m *MockBabylonClient) Unbond(ud *UnbondingData) (*sdk.TxResponse, error) {
+func (m *MockBabylonClient) Undelegate(ud *UndelegationData) (*sdk.TxResponse, error) {
 	return &sdk.TxResponse{Code: 0}, nil
 }
 
