@@ -44,7 +44,7 @@ type BabylonClient interface {
 	QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error)
 	QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error)
 	IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error)
-	GetDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error)
+	QueryDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error)
 }
 
 type MockBabylonClient struct {
@@ -124,7 +124,7 @@ func (m *MockBabylonClient) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash
 	return false, nil
 }
 
-func (m *MockBabylonClient) GetDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error) {
+func (m *MockBabylonClient) QueryDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error) {
 	return nil, fmt.Errorf("delegation do not exist")
 }
 

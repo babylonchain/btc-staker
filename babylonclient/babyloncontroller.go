@@ -393,9 +393,18 @@ func (bc *BabylonController) reliablySendMsgs(msgs []sdk.Msg, errorMsg string) (
 	// great as it bundles all the functionality: builidng tx, signing, broadcasting to mempool, waiting for inclusion in block
 	// therefore this operation can tak a lot of time i.e at most cfg.BlockTimeout
 	var response *sdk.TxResponse
-	if err := retry.Do(func() error {
+	err := retry.Do(func() error {
 		resp, err := bc.ChainClient.SendMsgs(ctx, msgs, "")
-		if err != nil {
+
+		// Case when transaction was sucesffully broadcasted and included in block
+		// but execution failed. Do not retry in this case, and return ErrInvalidBabylonExecution type to
+		// the caller
+		if err != nil && resp != nil {
+			response = resp
+			return retry.Unrecoverable(fmt.Errorf("%s: %w", err.Error(), ErrInvalidBabylonExecution))
+		}
+
+		if err != nil && resp == nil {
 			// Our transactions was correct, but it was not included in the block for cfg.BlockTimeout
 			// no point in retrying
 			if errors.Is(err, lensclient.ErrTimeoutAfterWaitingForTxBroadcast) {
@@ -403,6 +412,7 @@ func (bc *BabylonController) reliablySendMsgs(msgs []sdk.Msg, errorMsg string) (
 			}
 			return err
 		}
+
 		response = resp
 		return nil
 	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
@@ -411,11 +421,9 @@ func (bc *BabylonController) reliablySendMsgs(msgs []sdk.Msg, errorMsg string) (
 			"max_attempts": RtyAttNum,
 			"error":        err,
 		}).Error(errorMsg)
-	})); err != nil {
-		return nil, err
-	}
+	}))
 
-	return response, nil
+	return response, err
 }
 
 // TODO: for now return sdk.TxResponse, it will ease up debugging/testing
@@ -427,20 +435,7 @@ func (bc *BabylonController) Delegate(dg *DelegationData) (*sdk.TxResponse, erro
 		return nil, err
 	}
 
-	response, err := bc.reliablySendMsgs([]sdk.Msg{delegateMsg}, "Failed to send delegation transaction to babylon node")
-
-	if err != nil {
-		return nil, err
-	}
-
-	if response.Code != 0 {
-		// This quite specific case in which we send delegation to babylon, it was included in the block
-		// but it execution failed. It is a bit criticial error, as we are wasting gas on invalid transaction
-		// we return error and response so that caller decides what to do with it.
-		return response, ErrInvalidBabylonExecution
-	}
-
-	return response, nil
+	return bc.reliablySendMsgs([]sdk.Msg{delegateMsg}, "Failed to send delegation transaction to babylon node")
 }
 
 func (bc *BabylonController) Unbond(ud *UnbondingData) (*sdk.TxResponse, error) {
@@ -450,20 +445,7 @@ func (bc *BabylonController) Unbond(ud *UnbondingData) (*sdk.TxResponse, error) 
 		return nil, err
 	}
 
-	response, err := bc.reliablySendMsgs([]sdk.Msg{unbondMsg}, "Failed to send delegation transaction to babylon node")
-
-	if err != nil {
-		return nil, err
-	}
-
-	if response.Code != 0 {
-		// This quite specific case in which we send delegation to babylon, it was included in the block
-		// but it execution failed. It is a bit criticial error, as we are wasting gas on invalid transaction
-		// we return error and response so that caller decides what to do with it.
-		return response, ErrInvalidBabylonExecution
-	}
-
-	return response, nil
+	return bc.reliablySendMsgs([]sdk.Msg{unbondMsg}, "Failed to send undelegate transaction to babylon node")
 }
 
 func getQueryContext(timeout time.Duration) (context.Context, context.CancelFunc) {
@@ -700,15 +682,10 @@ func (bc *BabylonController) RegisterValidator(
 		Pop:         pop,
 	}
 
-	res, err := bc.reliablySendMsgs([]sdk.Msg{registerMsg}, "Failed to send validator registration transaction to babylon node")
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
+	return bc.reliablySendMsgs([]sdk.Msg{registerMsg}, "Failed to send validator registration transaction to babylon node")
 }
 
-func (bc *BabylonController) GetDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error) {
+func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error) {
 	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
 	queryClient := btcstypes.NewQueryClient(clientCtx)
 
@@ -745,7 +722,7 @@ func (bc *BabylonController) GetDelegationInfo(stakingTxHash *chainhash.Hash) (*
 			if resp.UndelegationInfo.ValidatorUnbondingSig != nil {
 				vsig, err := resp.UndelegationInfo.ValidatorUnbondingSig.ToBTCSig()
 				if err != nil {
-					return retry.Unrecoverable(fmt.Errorf("malformed validatorSig: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
+					return retry.Unrecoverable(fmt.Errorf("malformed validator sig: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
 				}
 				validatorSig = vsig
 			}
@@ -775,7 +752,7 @@ func (bc *BabylonController) GetDelegationInfo(stakingTxHash *chainhash.Hash) (*
 }
 
 func (bc *BabylonController) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error) {
-	_, err := bc.GetDelegationInfo(stakingTxHash)
+	_, err := bc.QueryDelegationInfo(stakingTxHash)
 
 	if err != nil {
 		if errors.Is(err, ErrDelegationNotFound) {
@@ -802,12 +779,7 @@ func (bc *BabylonController) SubmitJurySig(
 		Sig:           sig,
 	}
 
-	res, err := bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury sig")
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury sig")
 }
 
 func (bc *BabylonController) SubmitJuryUnbondingSigs(
@@ -826,12 +798,7 @@ func (bc *BabylonController) SubmitJuryUnbondingSigs(
 		SlashingUnbondingTxSig: slashUnbondingSig,
 	}
 
-	res, err := bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury unbonding sig")
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury unbonding sig")
 }
 
 func (bc *BabylonController) SubmitValidatorUnbondingSig(
@@ -848,13 +815,7 @@ func (bc *BabylonController) SubmitValidatorUnbondingSig(
 		UnbondingTxSig: sig,
 	}
 
-	res, err := bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit validator unbonding sig")
-
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit validator unbonding sig")
 }
 
 func (bc *BabylonController) QueryPendingBTCDelegations() ([]*btcstypes.BTCDelegation, error) {

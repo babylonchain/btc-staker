@@ -358,11 +358,11 @@ func NewStakerAppFromDeps(
 		// correct db state
 		sendUnbondingRequestConfirmChan: make(chan *unbondingRequestConfirm),
 
-		// Channel which receives unbonding signatures from jury and validator for unbonding
+		// channel which receives unbonding signatures from jury and validator for unbonding
 		// transaction
 		unbondingSignaturesConfirmedChan: make(chan *unbondingSignaturesConfirmed),
 
-		// channels which receives confirmation that unbonding transaction was confirmed on BTC
+		// channel which receives confirmation that unbonding transaction was confirmed on BTC
 		unbondingConfirmedOnBtcChan: make(chan *unbondingConfirmedOnBtc),
 	}, nil
 }
@@ -1098,7 +1098,7 @@ func (app *StakerApp) handleSentToBabylon() {
 			}
 
 		case req := <-app.sendUnbondingRequestChan:
-			di, err := app.babylonClient.GetDelegationInfo(&req.stakingTxHash)
+			di, err := app.babylonClient.QueryDelegationInfo(&req.stakingTxHash)
 
 			if err != nil {
 				req.errChan <- fmt.Errorf("failed to retrieve delegation info for staking tx with hash: %s : %w", req.stakingTxHash.String(), err)
@@ -1168,11 +1168,12 @@ func (app *StakerApp) sendDelegationWithTxToBabylon(
 func (app *StakerApp) checkForUnbondingTxSignatures(stakingTxHash *chainhash.Hash) {
 	checkSigTicker := time.NewTicker(app.config.StakerConfig.UnbondingTxCheckInterval)
 	defer checkSigTicker.Stop()
+	defer app.wg.Done()
 
 	for {
 		select {
 		case <-checkSigTicker.C:
-			di, err := app.babylonClient.GetDelegationInfo(stakingTxHash)
+			di, err := app.babylonClient.QueryDelegationInfo(stakingTxHash)
 
 			if err != nil {
 				if errors.Is(err, cl.ErrDelegationNotFound) {
@@ -1210,12 +1211,18 @@ func (app *StakerApp) checkForUnbondingTxSignatures(stakingTxHash *chainhash.Has
 				}).Debug("Received both required signatures for unbonding tx for staking tx with given hash")
 
 				// first push signatures to the channel, this will block until signatures pushed on this channel
-				// as channel is unbbuffered
-				app.unbondingSignaturesConfirmedChan <- &unbondingSignaturesConfirmed{
+				// as channel is unbuffered
+				req := &unbondingSignaturesConfirmed{
 					stakingTxHash:               *stakingTxHash,
 					juryUnbondingSignature:      di.UndelegationInfo.JuryUnbodningSignature,
 					validatorUnbondingSignature: di.UndelegationInfo.ValidatorUnbondingSignature,
 				}
+
+				PushOrQuit[*unbondingSignaturesConfirmed](
+					app.unbondingSignaturesConfirmedChan,
+					req,
+					app.quit,
+				)
 
 				// our job is done, we can return
 				return
@@ -1375,6 +1382,7 @@ func (app *StakerApp) initBtcUnbonding(
 	storedTx *stakerdb.StoredTransaction,
 	unbondingData *stakerdb.UnbondingStoreData) {
 
+	defer app.wg.Done()
 	// check we are not quitting before we start whole process
 	select {
 	case <-app.quit:
@@ -1408,15 +1416,22 @@ func (app *StakerApp) initBtcUnbonding(
 				"blockHeight":     conf.BlockHeight,
 			}).Debug("Unbonding tx confirmed")
 
-			app.unbondingConfirmedOnBtcChan <- &unbondingConfirmedOnBtc{
+			req := &unbondingConfirmedOnBtc{
 				stakingTxHash: *stakingTxHash,
 			}
+
+			PushOrQuit[*unbondingConfirmedOnBtc](
+				app.unbondingConfirmedOnBtcChan,
+				req,
+				app.quit,
+			)
+
 			return
 
 		case u := <-waitEv.Updates:
 			app.logger.WithFields(logrus.Fields{
-				"unbondingTxHas": unbondingTxHash,
-				"confLeft":       u,
+				"unbondingTxHash": unbondingTxHash,
+				"confLeft":        u,
 			}).Debugf("Unbonding transaction received confirmation")
 		case <-app.quit:
 			return
@@ -1570,10 +1585,11 @@ func (app *StakerApp) handleStaking() {
 			}).Debug("Unbonding request successfully sent to babylon, waiting for signatures")
 
 			// start checking for signatures
+			app.wg.Add(1)
 			go app.checkForUnbondingTxSignatures(&confirmation.req.stakingTxHash)
 
 			unbondingTxHash := confirmation.req.unbondingData.UnbondingTransaction.TxHash()
-			// return registred unbonding tx hash to caller
+			// return registered unbonding tx hash to caller
 			confirmation.req.successChan <- &unbondingTxHash
 
 		case unbondingSignaturesConf := <-app.unbondingSignaturesConfirmedChan:
@@ -1598,6 +1614,7 @@ func (app *StakerApp) handleStaking() {
 				"stakingTxHash": &unbondingSignaturesConf.stakingTxHash,
 			}).Debug("Initiate sending btc unbonding tx to btc network and waiting for confirmation")
 
+			app.wg.Add(1)
 			go app.initBtcUnbonding(
 				&unbondingSignaturesConf.stakingTxHash,
 				stakerAddress,
@@ -2164,14 +2181,14 @@ func (app *StakerApp) buildUnbondingAndSlashingTxFromStakingTx(
 
 	stakingScriptData, err := staking.ParseStakingTransactionScript(storedTx.TxScript)
 
-	stakingOutpout := storedTx.BtcTx.TxOut[storedTx.StakingOutputIndex]
-
 	if err != nil {
 		app.logger.WithFields(logrus.Fields{
 			"stakingTxHash": stakingTxHash,
 			"err":           err,
 		}).Fatalf("Invalid staking transaction script in db")
 	}
+
+	stakingOutpout := storedTx.BtcTx.TxOut[storedTx.StakingOutputIndex]
 
 	unbondingTxFee := txrules.FeeForSerializeSize(feeRatePerKb, slashingPathSpendTxVSize)
 

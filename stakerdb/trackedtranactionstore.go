@@ -259,7 +259,7 @@ func protoWatchedDataToWatchedTransactionData(wd *proto.WatchedTxData) (*Watched
 	}, nil
 }
 
-func protUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*UnbondingStoreData, error) {
+func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*UnbondingStoreData, error) {
 	var unbondingTx wire.MsgTx
 	err := unbondingTx.Deserialize(bytes.NewReader(ud.UnbondingTransaction))
 
@@ -877,7 +877,7 @@ func (c *TrackedTransactionStore) GetUnbondingTxData(stakingTxHash *chainhash.Ha
 			return ErrCorruptedTransactionsDb
 		}
 
-		unbondingFromDb, err := protUnbondingDataToUnbondingStoreData(&unbondingDataProto)
+		unbondingFromDb, err := protoUnbondingDataToUnbondingStoreData(&unbondingDataProto)
 
 		if err != nil {
 			return err
