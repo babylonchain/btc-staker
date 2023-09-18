@@ -1038,4 +1038,11 @@ func TestStakingUnbonding(t *testing.T) {
 	require.Equal(t, block.Transactions[1].TxHash(), *unbondingTxHash)
 	go tm.mineNEmptyBlocks(t, staker.UnbondingTxConfirmations, false)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC)
+
+	// We can spend unbonding tx immediately as in e2e test, finalization time is 4 blocks and we locked it
+	// finalization time + 1 i.e 5 blocks, but to consider unboning tx as confirmed we need to wait for 6 blocks
+	// so at this point time lock should already have passed
+	tm.spendStakingTxWithHash(t, txHash)
+	go tm.mineNEmptyBlocks(t, staker.SpendStakeTxConfirmations, false)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SPENT_ON_BTC)
 }

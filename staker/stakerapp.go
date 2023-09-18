@@ -180,6 +180,13 @@ type externalDelegationData struct {
 	slashingFee btcutil.Amount
 }
 
+type spendStakeTxInfo struct {
+	spendStakeTx        *wire.MsgTx
+	fundingOutput       *wire.TxOut
+	fundingOutputScript []byte
+	calculatedFee       btcutil.Amount
+}
+
 type Delegation struct {
 	StakingTxHash string
 	State         proto.TransactionState
@@ -197,7 +204,7 @@ const (
 
 	// after this many confirmations we consider transaction which spends staking tx as
 	// confirmed on btc
-	stakingTxSpendTxConfirmation = 3
+	SpendStakeTxConfirmations = 3
 
 	// 2 hours seems like a reasonable timeout waiting for spend tx confirmations given
 	// probabilistic nature of bitcoin
@@ -1970,12 +1977,12 @@ func (app *StakerApp) GetStoredTransaction(txHash *chainhash.Hash) (*stakerdb.St
 func (app *StakerApp) ListUnspentOutputs() ([]walletcontroller.Utxo, error) {
 	return app.wc.ListOutputs(false)
 }
-func (app *StakerApp) spendStakingTx(
+func (app *StakerApp) spendStakeTx(
 	destAddress btcutil.Address,
-	stakingTx *wire.MsgTx,
-	stakingTxHash *chainhash.Hash,
-	stakingTxScript []byte,
-	stakingOutputIdx uint32,
+	fundingTx *wire.MsgTx,
+	fundingTxHash *chainhash.Hash,
+	fundingTxStakingScript []byte,
+	fundingTxStakingOutputIdx uint32,
 ) (*wire.MsgTx, *btcutil.Amount, error) {
 	destAddressScript, err := txscript.PayToAddrScript(destAddress)
 
@@ -1983,7 +1990,7 @@ func (app *StakerApp) spendStakingTx(
 		return nil, nil, fmt.Errorf("cannot spend staking output. Cannot built destination script: %w", err)
 	}
 
-	script, err := staking.ParseStakingTransactionScript(stakingTxScript)
+	script, err := staking.ParseStakingTransactionScript(fundingTxStakingScript)
 
 	if err != nil {
 		app.logger.WithFields(logrus.Fields{
@@ -1991,10 +1998,10 @@ func (app *StakerApp) spendStakingTx(
 		}).Fatal("error parsing staking transaction script from db")
 	}
 
-	stakingOutput := stakingTx.TxOut[stakingOutputIdx]
+	stakingOutput := fundingTx.TxOut[fundingTxStakingOutputIdx]
 	newOutput := wire.NewTxOut(stakingOutput.Value, destAddressScript)
 
-	stakingOutputOutpoint := wire.NewOutPoint(stakingTxHash, stakingOutputIdx)
+	stakingOutputOutpoint := wire.NewOutPoint(fundingTxHash, fundingTxStakingOutputIdx)
 	stakingOutputAsInput := wire.NewTxIn(stakingOutputOutpoint, nil, nil)
 	// need to set valid sequence to unlock tx.
 	stakingOutputAsInput.Sequence = uint32(script.StakingTime)
@@ -2049,7 +2056,75 @@ func (app *StakerApp) waitForSpendConfirmation(stakingTxHash chainhash.Hash, ev 
 	}
 }
 
-func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainhash.Hash, *btcutil.Amount, error) {
+func (app *StakerApp) buildSpendStakeTx(
+	stakingTxHash *chainhash.Hash,
+	storedtx *stakerdb.StoredTransaction,
+	destAddress btcutil.Address,
+) (*spendStakeTxInfo, error) {
+	if storedtx.State == proto.TransactionState_SENT_TO_BABYLON {
+		// transaction is only in sent to babylon state we try to spend staking output directly
+		spendTx, calculatedFee, err := app.spendStakeTx(
+			destAddress,
+			storedtx.BtcTx,
+			stakingTxHash,
+			storedtx.TxScript,
+			storedtx.StakingOutputIndex,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &spendStakeTxInfo{
+			spendStakeTx:        spendTx,
+			fundingOutputScript: storedtx.TxScript,
+			fundingOutput:       storedtx.BtcTx.TxOut[storedtx.StakingOutputIndex],
+			calculatedFee:       *calculatedFee,
+		}, nil
+	} else if storedtx.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC {
+		// transaction is in unbonding confirmed on BTC state, we need to retrieve
+		// unbonding transaction and try to spend unbonding output
+		data, err := app.txTracker.GetUnbondingTxData(stakingTxHash)
+
+		if err != nil {
+			app.logger.WithFields(logrus.Fields{
+				"err": err,
+			}).Fatalf("Error retrieving unbonding data for tx which unbonding tx is confirmed on BTC")
+		}
+
+		unbondingTxHash := data.UnbondingTx.TxHash()
+
+		spendTx, calculatedFee, err := app.spendStakeTx(
+			destAddress,
+			data.UnbondingTx,
+			&unbondingTxHash,
+			data.UnbondingTxScript,
+			// unbonding tx has only one output
+			0,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		return &spendStakeTxInfo{
+			spendStakeTx:        spendTx,
+			fundingOutput:       data.UnbondingTx.TxOut[0],
+			fundingOutputScript: data.UnbondingTxScript,
+			calculatedFee:       *calculatedFee,
+		}, nil
+	} else {
+		return nil, fmt.Errorf("cannot build spend stake transactions.Staking transaction is in invalid state: %s", storedtx.State)
+	}
+}
+
+// SpendStake spends stake identified by stakingTxHash. Stake can be currently locked in
+// two types of outputs:
+// 1. Staking output - this is output which is created by staking transaction
+// 2. Unbonding output - this is output which is created by unbonding transaction, if user requested
+// unbonding of his stake.
+// We find in which type of output stake is locked by checking state of staking transaction, and build
+// proper spend transaction based on that state.
+func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash, *btcutil.Amount, error) {
 	// check we are not shutting down
 	select {
 	case <-app.quit:
@@ -2062,12 +2137,6 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 
 	if err != nil {
 		return nil, nil, err
-	}
-
-	//	We can only spend staking which was sent to babylon.
-	// TODO.. To make it possible to spend staking transaction which was sucessfuly unbonded
-	if tx.State != proto.TransactionState_SENT_TO_BABYLON {
-		return nil, nil, fmt.Errorf("cannot spend staking which was not sent to babylon. Current tx state: %s", tx.State.String())
 	}
 
 	// we cannont spend tx which is watch only.
@@ -2089,14 +2158,10 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 		return nil, nil, fmt.Errorf("cannot spend staking output. Error decoding staker address: %w", err)
 	}
 
-	stakingOutput := tx.BtcTx.TxOut[tx.StakingOutputIndex]
-
-	spendTx, calculatedFee, err := app.spendStakingTx(
-		destAddress,
-		tx.BtcTx,
+	spendStakeTxInfo, err := app.buildSpendStakeTx(
 		stakingTxHash,
-		tx.TxScript,
-		tx.StakingOutputIndex,
+		tx,
+		destAddress,
 	)
 
 	if err != nil {
@@ -2116,9 +2181,9 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 	}
 
 	witness, err := staking.BuildWitnessToSpendStakingOutput(
-		spendTx,
-		stakingOutput,
-		tx.TxScript,
+		spendStakeTxInfo.spendStakeTx,
+		spendStakeTxInfo.fundingOutput,
+		spendStakeTxInfo.fundingOutputScript,
 		privKey,
 	)
 
@@ -2126,32 +2191,32 @@ func (app *StakerApp) SpendStakingOutput(stakingTxHash *chainhash.Hash) (*chainh
 		return nil, nil, fmt.Errorf("cannot spend staking output. Error building witness: %w", err)
 	}
 
-	spendTx.TxIn[0].Witness = witness
+	spendStakeTxInfo.spendStakeTx.TxIn[0].Witness = witness
 
 	// We do not check if transaction is spendable i.e the staking time has passed
 	// as this is validated in mempool so in of not meeting this time requirement
 	// we will receive error here: `transaction's sequence locks on inputs not met`
-	spendTxHash, err := app.wc.SendRawTransaction(spendTx, true)
+	spendTxHash, err := app.wc.SendRawTransaction(spendStakeTxInfo.spendStakeTx, true)
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot spend staking output. Error sending tx: %w", err)
 	}
 
-	spendTxValue := btcutil.Amount(spendTx.TxOut[0].Value)
+	spendTxValue := btcutil.Amount(spendStakeTxInfo.spendStakeTx.TxOut[0].Value)
 
 	app.logger.WithFields(logrus.Fields{
-		"stakeValue":    btcutil.Amount(stakingOutput.Value),
+		"stakeValue":    btcutil.Amount(spendStakeTxInfo.fundingOutput.Value),
 		"spendTxHash":   spendTxHash,
 		"spendTxValue":  spendTxValue,
-		"fee":           calculatedFee,
+		"fee":           spendStakeTxInfo.calculatedFee,
 		"stakerAddress": destAddress,
 		"destAddress":   destAddress,
 	}).Infof("Successfully sent transaction spending staking output")
 
 	confEvent, err := app.notifier.RegisterConfirmationsNtfn(
 		spendTxHash,
-		spendTx.TxOut[0].PkScript,
-		stakingTxSpendTxConfirmation,
+		spendStakeTxInfo.spendStakeTx.TxOut[0].PkScript,
+		SpendStakeTxConfirmations,
 		app.currentBestBlockHeight.Load(),
 	)
 

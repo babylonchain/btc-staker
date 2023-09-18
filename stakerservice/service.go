@@ -137,7 +137,7 @@ func (s *StakerService) stakingDetails(_ *rpctypes.Context,
 	}, nil
 }
 
-func (s *StakerService) spendStakingTx(_ *rpctypes.Context,
+func (s *StakerService) spendStake(_ *rpctypes.Context,
 	stakingTxHash string) (*SpendTxDetails, error) {
 	txHash, err := chainhash.NewHashFromStr(stakingTxHash)
 
@@ -145,7 +145,7 @@ func (s *StakerService) spendStakingTx(_ *rpctypes.Context,
 		return nil, err
 	}
 
-	spendTxHash, value, err := s.staker.SpendStakingOutput(txHash)
+	spendTxHash, value, err := s.staker.SpendStake(txHash)
 
 	if err != nil {
 		return nil, err
@@ -426,7 +426,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// staking API
 		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
-		"spend_staking_tx":          rpc.NewRPCFunc(s.spendStakingTx, "stakingTxHash"),
+		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
 		"unbond_staking":            rpc.NewRPCFunc(s.unbondStaking, "stakingTxHash,feeRate"),
 
