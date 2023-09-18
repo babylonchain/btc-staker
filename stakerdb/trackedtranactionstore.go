@@ -79,6 +79,15 @@ type StoredTransaction struct {
 	Watched       bool
 }
 
+// IsSpendableOnBtc check whatever tracked staking tx is in proper state to be spendable on btc.
+// It is only possible when:
+//   - transaction is in state SENT_TO_BABYLON, i.e staker created valid delegation and sent it to babylon
+//   - transaction is in state UNBONDING_CONFIRMED_ON_BTC, i.e staker already sent unbonding tx to btc network and
+//     it is confirmed
+func (s *StoredTransaction) IsSpendableOnBtc() bool {
+	return s.State == proto.TransactionState_SENT_TO_BABYLON || s.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC
+}
+
 type WatchedTransactionData struct {
 	SlashingTx          *wire.MsgTx
 	SlashingTxSig       *schnorr.Signature

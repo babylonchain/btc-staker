@@ -1038,4 +1038,8 @@ func TestStakingUnbonding(t *testing.T) {
 	require.Equal(t, block.Transactions[1].TxHash(), *unbondingTxHash)
 	go tm.mineNEmptyBlocks(t, staker.UnbondingTxConfirmations, false)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC)
+
+	tm.spendStakingTxWithHash(t, txHash)
+	go tm.mineNEmptyBlocks(t, staker.SpendStakeTxConfirmations, false)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SPENT_ON_BTC)
 }

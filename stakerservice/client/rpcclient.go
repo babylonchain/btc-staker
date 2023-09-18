@@ -121,7 +121,7 @@ func (c *StakerServiceJsonRpcClient) SpendStakingTransaction(ctx context.Context
 	params := make(map[string]interface{})
 	params["stakingTxHash"] = txHash
 
-	_, err := c.client.Call(ctx, "spend_staking_tx", params, result)
+	_, err := c.client.Call(ctx, "spend_stake", params, result)
 	if err != nil {
 		return nil, err
 	}
