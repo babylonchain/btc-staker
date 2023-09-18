@@ -622,6 +622,13 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			// TODO: If we will have automatic unstaking, we should check wheter tx is expired
 			// and proceed with sending unstake transaction
 			return nil
+		// TODO handle restart with unbonding transactions
+		case proto.TransactionState_UNBONDING_STARTED:
+			return nil
+		case proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED:
+			return nil
+		case proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC:
+			return nil
 		case proto.TransactionState_SPENT_ON_BTC:
 			// nothing to do, staking transaction is already spent
 			return nil
