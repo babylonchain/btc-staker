@@ -741,6 +741,11 @@ func (app *StakerApp) checkTransactionsStatus() error {
 	for _, localInfo := range transactionsOnBabylon {
 		// we only can have three local states here
 		if localInfo.stakingTxState == proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED {
+			app.logger.WithFields(logrus.Fields{
+				"stakingTxHash": localInfo.stakingTxHash,
+				"stakingState":  localInfo.stakingTxState,
+			}).Debug("Restarting unbonding process for staking request which already received all necessary signatures")
+
 			// we got everything we wanted from babylon, and we also tracked that unbonding transaction received
 			// all required signatures. Check btc chain and based on that resume unbonding process.
 			ud, err := app.txTracker.GetUnbondingTxData(localInfo.stakingTxHash)
@@ -764,6 +769,11 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			}
 
 			if status == walletcontroller.TxNotFound {
+				app.logger.WithFields(logrus.Fields{
+					"stakingTxHash": localInfo.stakingTxHash,
+					"stakingState":  localInfo.stakingTxState,
+				}).Debug("Unbonding transaction not found on btc chain. Sending it again")
+
 				app.wg.Add(1)
 				go app.sendUnbondingTxToBtcAndWaitForConfirmation(
 					localInfo.stakingTxHash,
@@ -778,8 +788,20 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				// If it is in chain, we set our height hint to inclusion block heigh
 				// if it is in mempool, we set our height hint to current best block height
 				if status == walletcontroller.TxInChain {
+					app.logger.WithFields(logrus.Fields{
+						"stakingTxHash":     localInfo.stakingTxHash,
+						"stakingState":      localInfo.stakingTxState,
+						"unbondingTxHeight": details.BlockHeight,
+					}).Debug("Unbonding transaction in btc chain. Wait for more confirmations")
+
 					txHeightHint = details.BlockHeight
 				} else {
+					app.logger.WithFields(logrus.Fields{
+						"stakingTxHash":     localInfo.stakingTxHash,
+						"stakingState":      localInfo.stakingTxState,
+						"unbondingTxHeight": details.BlockHeight,
+					}).Debug("Unbonding transaction in btc mempool. Wait for more confirmations")
+
 					txHeightHint = app.currentBestBlockHeight.Load()
 				}
 
@@ -806,12 +828,18 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				}(waitEv, ud, localInfo.stakingTxHash)
 			}
 		} else if localInfo.stakingTxState == proto.TransactionState_UNBONDING_STARTED {
+			app.logger.WithFields(logrus.Fields{
+				"stakingTxHash": localInfo.stakingTxHash,
+				"stakingState":  localInfo.stakingTxState,
+			}).Debug("Restarting unbonding process for staking request which was already sent to babylon")
+
 			// we successfuly sent unbonding transaction to babylon, and it was successfuly included in the chain.
 			// start polling for unbonding signatures. If signatures are already received on babylon, `checkForUnbondingTxSignatures`
 			// will quickly finish and move to the next step in unbonding process
 			app.wg.Add(1)
 			go app.checkForUnbondingTxSignatures(localInfo.stakingTxHash)
 		} else if localInfo.stakingTxState == proto.TransactionState_SENT_TO_BABYLON {
+
 			// we need to check this case as it is possible that we send undelegation request to babylon
 			// but crashed before updating our local database.
 
@@ -835,10 +863,17 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				continue
 			}
 
+			app.logger.WithFields(logrus.Fields{
+				"stakingTxHash": localInfo.stakingTxHash,
+				"stakingState":  localInfo.stakingTxState,
+			}).Debug("Restarting unbonding process for staking request which was already sent to babylon but not registered in local db")
+
 			// If we are here, it means we encountered edge case where we sent undelegation successfully
 			// but staker application crashed before we could update database.
 			// we just need to restart our unbonding process just after we sent unbonding transaction.
 			// If jury and validator signatures are on babylon, the whole process will just finish quickly.
+			// TODO: Thinkg of how to test this case. It is a bit tricky as restarting would need to happen
+			// precisely after sending unbonding transaction, but before write tx to db.
 			confirmation := &unbondingRequestConfirm{
 				stakingTxHash:              *localInfo.stakingTxHash,
 				unbondingTransaction:       babylonInfo.UndelegationInfo.UnbondingTransaction,
