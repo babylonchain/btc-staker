@@ -181,10 +181,10 @@ type externalDelegationData struct {
 }
 
 type spendStakeTxInfo struct {
-	spendStakeTx         *wire.MsgTx
-	foundingOutput       *wire.TxOut
-	foundingOutputScript []byte
-	calculatedFee        btcutil.Amount
+	spendStakeTx        *wire.MsgTx
+	fundingOutput       *wire.TxOut
+	fundingOutputScript []byte
+	calculatedFee       btcutil.Amount
 }
 
 type Delegation struct {
@@ -1979,10 +1979,10 @@ func (app *StakerApp) ListUnspentOutputs() ([]walletcontroller.Utxo, error) {
 }
 func (app *StakerApp) spendStakeTx(
 	destAddress btcutil.Address,
-	foundingTx *wire.MsgTx,
-	foundingTxHash *chainhash.Hash,
-	foundingTxStakingScript []byte,
-	foundingTxStakingOutputIdx uint32,
+	fundingTx *wire.MsgTx,
+	fundingTxHash *chainhash.Hash,
+	fundingTxStakingScript []byte,
+	fundingTxStakingOutputIdx uint32,
 ) (*wire.MsgTx, *btcutil.Amount, error) {
 	destAddressScript, err := txscript.PayToAddrScript(destAddress)
 
@@ -1990,7 +1990,7 @@ func (app *StakerApp) spendStakeTx(
 		return nil, nil, fmt.Errorf("cannot spend staking output. Cannot built destination script: %w", err)
 	}
 
-	script, err := staking.ParseStakingTransactionScript(foundingTxStakingScript)
+	script, err := staking.ParseStakingTransactionScript(fundingTxStakingScript)
 
 	if err != nil {
 		app.logger.WithFields(logrus.Fields{
@@ -1998,10 +1998,10 @@ func (app *StakerApp) spendStakeTx(
 		}).Fatal("error parsing staking transaction script from db")
 	}
 
-	stakingOutput := foundingTx.TxOut[foundingTxStakingOutputIdx]
+	stakingOutput := fundingTx.TxOut[fundingTxStakingOutputIdx]
 	newOutput := wire.NewTxOut(stakingOutput.Value, destAddressScript)
 
-	stakingOutputOutpoint := wire.NewOutPoint(foundingTxHash, foundingTxStakingOutputIdx)
+	stakingOutputOutpoint := wire.NewOutPoint(fundingTxHash, fundingTxStakingOutputIdx)
 	stakingOutputAsInput := wire.NewTxIn(stakingOutputOutpoint, nil, nil)
 	// need to set valid sequence to unlock tx.
 	stakingOutputAsInput.Sequence = uint32(script.StakingTime)
@@ -2076,10 +2076,10 @@ func (app *StakerApp) buildSpendStakeTx(
 		}
 
 		return &spendStakeTxInfo{
-			spendStakeTx:         spendTx,
-			foundingOutputScript: storedtx.TxScript,
-			foundingOutput:       storedtx.BtcTx.TxOut[storedtx.StakingOutputIndex],
-			calculatedFee:        *calculatedFee,
+			spendStakeTx:        spendTx,
+			fundingOutputScript: storedtx.TxScript,
+			fundingOutput:       storedtx.BtcTx.TxOut[storedtx.StakingOutputIndex],
+			calculatedFee:       *calculatedFee,
 		}, nil
 	} else if storedtx.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC {
 		// transaction is in unbonding confirmed on BTC state, we need to retrieve
@@ -2107,10 +2107,10 @@ func (app *StakerApp) buildSpendStakeTx(
 		}
 
 		return &spendStakeTxInfo{
-			spendStakeTx:         spendTx,
-			foundingOutput:       data.UnbondingTx.TxOut[0],
-			foundingOutputScript: data.UnbondingTxScript,
-			calculatedFee:        *calculatedFee,
+			spendStakeTx:        spendTx,
+			fundingOutput:       data.UnbondingTx.TxOut[0],
+			fundingOutputScript: data.UnbondingTxScript,
+			calculatedFee:       *calculatedFee,
 		}, nil
 	} else {
 		return nil, fmt.Errorf("cannot build spend stake transactions.Staking transaction is in invalid state: %s", storedtx.State)
@@ -2182,8 +2182,8 @@ func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash
 
 	witness, err := staking.BuildWitnessToSpendStakingOutput(
 		spendStakeTxInfo.spendStakeTx,
-		spendStakeTxInfo.foundingOutput,
-		spendStakeTxInfo.foundingOutputScript,
+		spendStakeTxInfo.fundingOutput,
+		spendStakeTxInfo.fundingOutputScript,
 		privKey,
 	)
 
@@ -2205,7 +2205,7 @@ func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash
 	spendTxValue := btcutil.Amount(spendStakeTxInfo.spendStakeTx.TxOut[0].Value)
 
 	app.logger.WithFields(logrus.Fields{
-		"stakeValue":    btcutil.Amount(spendStakeTxInfo.foundingOutput.Value),
+		"stakeValue":    btcutil.Amount(spendStakeTxInfo.fundingOutput.Value),
 		"spendTxHash":   spendTxHash,
 		"spendTxValue":  spendTxValue,
 		"fee":           spendStakeTxInfo.calculatedFee,
