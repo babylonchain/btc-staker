@@ -295,17 +295,9 @@ type UndelegationInfo struct {
 	UnbondingTransactionScript  []byte
 }
 
-func (ui *UndelegationInfo) ReceivedSignatures() bool {
-	return ui.JuryUnbodningSignature != nil && ui.ValidatorUnbondingSignature != nil
-}
-
 type DelegationInfo struct {
 	Active           bool
 	UndelegationInfo *UndelegationInfo
-}
-
-func (di *DelegationInfo) IsUndelegating() bool {
-	return di.UndelegationInfo != nil
 }
 
 func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {

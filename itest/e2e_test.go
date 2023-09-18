@@ -840,7 +840,7 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	require.NoError(t, err)
 }
 
-func ATestSendingStakingTransaction(t *testing.T) {
+func TestSendingStakingTransaction(t *testing.T) {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
@@ -893,7 +893,7 @@ func ATestSendingStakingTransaction(t *testing.T) {
 	require.Equal(t, transactionsResult.Transactions[0].StakingTxHash, txHash.String())
 }
 
-func ATestSendingWatchedStakingTransaction(t *testing.T) {
+func TestSendingWatchedStakingTransaction(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -915,7 +915,7 @@ func ATestSendingWatchedStakingTransaction(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
 
-func ATestRestartingTxNotDeepEnough(t *testing.T) {
+func TestRestartingTxNotDeepEnough(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -940,7 +940,7 @@ func ATestRestartingTxNotDeepEnough(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
 
-func ATestRestartingTxNotOnBabylon(t *testing.T) {
+func TestRestartingTxNotOnBabylon(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -971,7 +971,7 @@ func ATestRestartingTxNotOnBabylon(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
 
-func ATestStakingUnbonding(t *testing.T) {
+func TestStakingUnbonding(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
