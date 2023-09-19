@@ -30,19 +30,8 @@ var (
 	// It holds additional data for staking transaction in watch only mode
 	watchedTxDataBucketName = []byte("watched")
 
-	// mapping txHash -> proto.UnbondingTxData
-	// only exists for transactions in state > UNBONDING_STARTED
-	unbondingTxDataBucketName = []byte("unbonding")
-
 	// key for next transaction
 	numTxKey = []byte("ntk")
-)
-
-type unbondingDataUpdateType int
-
-const (
-	initialUnbondingDataStore unbondingDataUpdateType = iota
-	unbondingSignaturesUpdate
 )
 
 type StoredTransactionScanFn func(tx *StoredTransaction) error
@@ -74,9 +63,10 @@ type StoredTransaction struct {
 	Pop                *ProofOfPossession
 	// Returning address as string, to avoid having to know how to decode address
 	// which requires knowing the network we are on
-	StakerAddress string
-	State         proto.TransactionState
-	Watched       bool
+	StakerAddress   string
+	State           proto.TransactionState
+	Watched         bool
+	UnbondingTxData *UnbondingStoreData
 }
 
 type WatchedTransactionData struct {
@@ -92,15 +82,10 @@ type UnbondingStoreData struct {
 	UnbondingTxJurySignature      *schnorr.Signature
 }
 
-type unbondingDataUpdate struct {
-	updateType    unbondingDataUpdateType
-	unbondingData *proto.UnbondingTxData
-}
-
 func newInitialUnbondingTxData(
 	unbondingTx *wire.MsgTx,
 	unbondingTxScript []byte,
-) (*unbondingDataUpdate, error) {
+) (*proto.UnbondingTxData, error) {
 	if unbondingTx == nil {
 		return nil, fmt.Errorf("cannot create unbonding tx data without unbonding tx")
 	}
@@ -122,16 +107,13 @@ func newInitialUnbondingTxData(
 		UnbondingTransactionJurySig:      nil,
 	}
 
-	return &unbondingDataUpdate{
-		updateType:    initialUnbondingDataStore,
-		unbondingData: unbondingData,
-	}, nil
+	return unbondingData, nil
 }
 
 func newUnbondingSignaturesUpdate(
 	unbondingTxValidatorSignature *schnorr.Signature,
 	unbondingTxJurySignature *schnorr.Signature,
-) (*unbondingDataUpdate, error) {
+) (*proto.UnbondingTxData, error) {
 	if unbondingTxValidatorSignature == nil {
 		return nil, fmt.Errorf("cannot create unbonding tx data without validator signature")
 	}
@@ -147,10 +129,7 @@ func newUnbondingSignaturesUpdate(
 		UnbondingTransactionJurySig:      unbondingTxJurySignature.Serialize(),
 	}
 
-	return &unbondingDataUpdate{
-		updateType:    unbondingSignaturesUpdate,
-		unbondingData: unbondingData,
-	}, nil
+	return unbondingData, nil
 }
 
 type StoredTransactionQuery struct {
@@ -203,63 +182,12 @@ func (c *TrackedTransactionStore) initBuckets() error {
 			return err
 		}
 
-		_, err = tx.CreateTopLevelBucket(unbondingTxDataBucketName)
-		if err != nil {
-			return err
-		}
-
 		return nil
 	})
 }
 
-func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransaction, error) {
-	var stakingTx wire.MsgTx
-	err := stakingTx.Deserialize(bytes.NewReader(ttx.StakingTransaction))
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &StoredTransaction{
-		BtcTx:              &stakingTx,
-		StakingOutputIndex: ttx.StakingOutputIdx,
-		TxScript:           ttx.StakingScript,
-		Pop: &ProofOfPossession{
-			BtcSigType:           ttx.BtcSigType,
-			BabylonSigOverBtcPk:  ttx.BabylonSigBtcPk,
-			BtcSigOverBabylonSig: ttx.BtcSigBabylonSig,
-		},
-		StakerAddress: ttx.StakerAddress,
-		State:         ttx.State,
-		Watched:       ttx.Watched,
-	}, nil
-}
-
-func protoWatchedDataToWatchedTransactionData(wd *proto.WatchedTxData) (*WatchedTransactionData, error) {
-	var slashingTx wire.MsgTx
-	err := slashingTx.Deserialize(bytes.NewReader(wd.SlashingTransaction))
-	if err != nil {
-		return nil, err
-	}
-
-	schnorSig, err := schnorr.ParseSignature(wd.SlashingTransactionSig)
-
-	if err != nil {
-		return nil, err
-	}
-
-	stakerBabylonKey := secp256k1.PubKey{
-		Key: wd.StakerBabylonPk,
-	}
-
-	return &WatchedTransactionData{
-		SlashingTx:          &slashingTx,
-		SlashingTxSig:       schnorSig,
-		StakerBabylonPubKey: &stakerBabylonKey,
-	}, nil
-}
-
 func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*UnbondingStoreData, error) {
+	// Unbodning txdata should always containt unbodning transaction and script
 	var unbondingTx wire.MsgTx
 	err := unbondingTx.Deserialize(bytes.NewReader(ud.UnbondingTransaction))
 
@@ -290,6 +218,66 @@ func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*Unbondi
 		UnbondingTxScript:             ud.UnbondingTransactionScript,
 		UnbondingTxValidatorSignature: validatorSig,
 		UnbondingTxJurySignature:      jurySig,
+	}, nil
+}
+
+func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransaction, error) {
+	var stakingTx wire.MsgTx
+	err := stakingTx.Deserialize(bytes.NewReader(ttx.StakingTransaction))
+
+	if err != nil {
+		return nil, err
+	}
+
+	var utd *UnbondingStoreData = nil
+
+	if ttx.UnbondingTxData != nil {
+		unbondingData, err := protoUnbondingDataToUnbondingStoreData(ttx.UnbondingTxData)
+
+		if err != nil {
+			return nil, err
+		}
+
+		utd = unbondingData
+	}
+
+	return &StoredTransaction{
+		BtcTx:              &stakingTx,
+		StakingOutputIndex: ttx.StakingOutputIdx,
+		TxScript:           ttx.StakingScript,
+		Pop: &ProofOfPossession{
+			BtcSigType:           ttx.BtcSigType,
+			BabylonSigOverBtcPk:  ttx.BabylonSigBtcPk,
+			BtcSigOverBabylonSig: ttx.BtcSigBabylonSig,
+		},
+		StakerAddress:   ttx.StakerAddress,
+		State:           ttx.State,
+		Watched:         ttx.Watched,
+		UnbondingTxData: utd,
+	}, nil
+}
+
+func protoWatchedDataToWatchedTransactionData(wd *proto.WatchedTxData) (*WatchedTransactionData, error) {
+	var slashingTx wire.MsgTx
+	err := slashingTx.Deserialize(bytes.NewReader(wd.SlashingTransaction))
+	if err != nil {
+		return nil, err
+	}
+
+	schnorSig, err := schnorr.ParseSignature(wd.SlashingTransactionSig)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakerBabylonKey := secp256k1.PubKey{
+		Key: wd.StakerBabylonPk,
+	}
+
+	return &WatchedTransactionData{
+		SlashingTx:          &slashingTx,
+		SlashingTxSig:       schnorSig,
+		StakerBabylonPubKey: &stakerBabylonKey,
 	}, nil
 }
 
@@ -449,6 +437,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 		BtcSigBabylonSig:   pop.BtcSigOverBabylonSig,
 		State:              proto.TransactionState_SENT_TO_BTC,
 		Watched:            false,
+		UnbondingTxData:    nil,
 	}
 
 	return c.addTransactionInternal(
@@ -484,6 +473,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 		BtcSigBabylonSig:   pop.BtcSigOverBabylonSig,
 		State:              proto.TransactionState_SENT_TO_BTC,
 		Watched:            true,
+		UnbondingTxData:    nil,
 	}
 
 	serializedSlashingtx, err := utils.SerializeBtcTransaction(slashingTx)
@@ -506,8 +496,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 
 func (c *TrackedTransactionStore) setTxState(
 	txHash *chainhash.Hash,
-	state proto.TransactionState,
-	utu *unbondingDataUpdate,
+	stateTransitionFn func(*proto.TrackedTransaction) error,
 ) error {
 	txHashBytes := txHash.CloneBytes()
 
@@ -535,7 +524,9 @@ func (c *TrackedTransactionStore) setTxState(
 			return ErrCorruptedTransactionsDb
 		}
 
-		storedTx.State = state
+		if err := stateTransitionFn(&storedTx); err != nil {
+			return err
+		}
 
 		marshalled, err := pm.Marshal(&storedTx)
 
@@ -549,73 +540,35 @@ func (c *TrackedTransactionStore) setTxState(
 			return err
 		}
 
-		// check if we need to update unbonding data
-		if utu != nil {
-			unbondingDataBucket := tx.ReadWriteBucket(unbondingTxDataBucketName)
-			if unbondingDataBucket == nil {
-				return ErrCorruptedTransactionsDb
-			}
-
-			maybeUnbondingData := unbondingDataBucket.Get(txHashBytes)
-
-			if maybeUnbondingData == nil {
-				if utu.updateType != initialUnbondingDataStore {
-					return fmt.Errorf("cannot update unbonding signatures without initial unbonding data: %w", ErrInvalindUnbondingDataUpdate)
-				}
-
-				marshalled, err := pm.Marshal(utu.unbondingData)
-
-				if err != nil {
-					return err
-				}
-
-				return unbondingDataBucket.Put(txHashBytes, marshalled)
-			}
-
-			// we alraedy have unbonding data, so this update should only contain signatures
-			if utu.updateType != unbondingSignaturesUpdate {
-				return fmt.Errorf("initial unbonding data alredy exists: %w", ErrInvalindUnbondingDataUpdate)
-			}
-
-			var storedUnbondingTxData proto.UnbondingTxData
-			err = pm.Unmarshal(maybeUnbondingData, &storedUnbondingTxData)
-
-			if err != nil {
-				return err
-			}
-
-			// check if we do not have signatures already
-			if storedUnbondingTxData.UnbondingTransactionValidatorSig != nil || storedUnbondingTxData.UnbondingTransactionJurySig != nil {
-				return fmt.Errorf("cannot save unbonding signatures, signatures already exist: %w", ErrInvalindUnbondingDataUpdate)
-			}
-
-			// all is fine update stored data with new signatures and save it back
-			storedUnbondingTxData.UnbondingTransactionValidatorSig = utu.unbondingData.UnbondingTransactionValidatorSig
-			storedUnbondingTxData.UnbondingTransactionJurySig = utu.unbondingData.UnbondingTransactionJurySig
-
-			marshalled, err := pm.Marshal(&storedUnbondingTxData)
-
-			if err != nil {
-				return err
-			}
-
-			return unbondingDataBucket.Put(txHashBytes, marshalled)
-		}
-
 		return nil
 	})
 }
 
 func (c *TrackedTransactionStore) SetTxConfirmed(txHash *chainhash.Hash) error {
-	return c.setTxState(txHash, proto.TransactionState_CONFIRMED_ON_BTC, nil)
+	setTxConfirmed := func(tx *proto.TrackedTransaction) error {
+		tx.State = proto.TransactionState_CONFIRMED_ON_BTC
+		return nil
+	}
+
+	return c.setTxState(txHash, setTxConfirmed)
 }
 
 func (c *TrackedTransactionStore) SetTxSentToBabylon(txHash *chainhash.Hash) error {
-	return c.setTxState(txHash, proto.TransactionState_SENT_TO_BABYLON, nil)
+	setTxSentToBabylon := func(tx *proto.TrackedTransaction) error {
+		tx.State = proto.TransactionState_SENT_TO_BABYLON
+		return nil
+	}
+
+	return c.setTxState(txHash, setTxSentToBabylon)
 }
 
 func (c *TrackedTransactionStore) SetTxSpentOnBtc(txHash *chainhash.Hash) error {
-	return c.setTxState(txHash, proto.TransactionState_SPENT_ON_BTC, nil)
+	setTxSpentOnBtc := func(tx *proto.TrackedTransaction) error {
+		tx.State = proto.TransactionState_SPENT_ON_BTC
+		return nil
+	}
+
+	return c.setTxState(txHash, setTxSpentOnBtc)
 }
 
 func (c *TrackedTransactionStore) SetTxUnbondingStarted(
@@ -629,7 +582,18 @@ func (c *TrackedTransactionStore) SetTxUnbondingStarted(
 		return err
 	}
 
-	return c.setTxState(txHash, proto.TransactionState_UNBONDING_STARTED, update)
+	setUnbondingStarted := func(tx *proto.TrackedTransaction) error {
+		if tx.UnbondingTxData != nil {
+			return fmt.Errorf("cannot set unbonding started, because unbonding tx data already exists: %w", ErrInvalidUnbondingDataUpdate)
+		}
+
+		tx.State = proto.TransactionState_UNBONDING_STARTED
+		tx.UnbondingTxData = update
+
+		return nil
+	}
+
+	return c.setTxState(txHash, setUnbondingStarted)
 }
 
 func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
@@ -643,13 +607,33 @@ func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 		return err
 	}
 
-	return c.setTxState(txHash, proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED, update)
+	setUnbondingSignaturesReceived := func(tx *proto.TrackedTransaction) error {
+		if tx.UnbondingTxData == nil {
+			return fmt.Errorf("cannot set unbonding signatures received, because unbonding tx data does not exist: %w", ErrUnbondingDataNotFound)
+		}
+
+		if tx.UnbondingTxData.UnbondingTransactionJurySig != nil || tx.UnbondingTxData.UnbondingTransactionValidatorSig != nil {
+			return fmt.Errorf("cannot set unbonding signatures received, because unbonding signatures already exist: %w", ErrInvalidUnbondingDataUpdate)
+		}
+
+		tx.State = proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED
+		tx.UnbondingTxData.UnbondingTransactionJurySig = update.UnbondingTransactionJurySig
+		tx.UnbondingTxData.UnbondingTransactionValidatorSig = update.UnbondingTransactionValidatorSig
+		return nil
+	}
+
+	return c.setTxState(txHash, setUnbondingSignaturesReceived)
 }
 
 func (c *TrackedTransactionStore) SetTxUnbondingConfirmedOnBtc(
 	txHash *chainhash.Hash,
 ) error {
-	return c.setTxState(txHash, proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC, nil)
+	setUnbondingConfirmedOnBtc := func(tx *proto.TrackedTransaction) error {
+		tx.State = proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC
+		return nil
+	}
+
+	return c.setTxState(txHash, setUnbondingConfirmedOnBtc)
 }
 
 func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*StoredTransaction, error) {
@@ -851,46 +835,4 @@ func (c *TrackedTransactionStore) ScanTrackedTransactions(scanFunc StoredTransac
 			return scanFunc(txFromDb)
 		})
 	}, reset)
-}
-
-func (c *TrackedTransactionStore) GetUnbondingTxData(stakingTxHash *chainhash.Hash) (*UnbondingStoreData, error) {
-	var unbondingData *UnbondingStoreData
-	txHashBytes := stakingTxHash.CloneBytes()
-
-	err := c.db.View(func(tx kvdb.RTx) error {
-		unbondingTxDataBucket := tx.ReadBucket(unbondingTxDataBucketName)
-
-		if unbondingTxDataBucket == nil {
-			return ErrCorruptedTransactionsDb
-		}
-
-		maybeUnbondingData := unbondingTxDataBucket.Get(txHashBytes)
-
-		if maybeUnbondingData == nil {
-			return ErrUnbondingDataNotFound
-		}
-
-		var unbondingDataProto proto.UnbondingTxData
-		err := pm.Unmarshal(maybeUnbondingData, &unbondingDataProto)
-
-		if err != nil {
-			return ErrCorruptedTransactionsDb
-		}
-
-		unbondingFromDb, err := protoUnbondingDataToUnbondingStoreData(&unbondingDataProto)
-
-		if err != nil {
-			return err
-		}
-
-		unbondingData = unbondingFromDb
-
-		return nil
-	}, func() {})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return unbondingData, nil
 }

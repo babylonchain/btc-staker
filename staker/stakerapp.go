@@ -754,22 +754,12 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				"stakingState":  localInfo.stakingTxState,
 			}).Debug("Restarting unbonding process for staking request which already received all necessary signatures")
 
-			// we got everything we wanted from babylon, and we also tracked that unbonding transaction received
-			// all required signatures. Check btc chain and based on that resume unbonding process.
-			ud, err := app.txTracker.GetUnbondingTxData(localInfo.stakingTxHash)
-
-			if err != nil {
-				app.logger.WithFields(logrus.Fields{
-					"stakingTxHash": localInfo.stakingTxHash,
-					"stakingState":  localInfo.stakingTxState,
-				}).Fatalf("Failed to get unbonding data for tx with unbonding state")
-			}
-
 			stored, address := app.mustGetTransactionAndStakerAddress(localInfo.stakingTxHash)
 
-			unbondingTxHash := ud.UnbondingTx.TxHash()
+			unbondingTxHash := stored.UnbondingTxData.UnbondingTx.TxHash()
+			unbondingPkScript := stored.UnbondingTxData.UnbondingTx.TxOut[0].PkScript
 
-			details, status, err := app.wc.TxDetails(&unbondingTxHash, ud.UnbondingTx.TxOut[0].PkScript)
+			details, status, err := app.wc.TxDetails(&unbondingTxHash, unbondingPkScript)
 
 			if err != nil {
 				// some communication error, return error and kill app startup
@@ -787,7 +777,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 					localInfo.stakingTxHash,
 					address,
 					stored,
-					ud,
+					stored.UnbondingTxData,
 				)
 			} else {
 				var txHeightHint uint32
@@ -816,7 +806,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				// tx is either in chain or in mempool, we need to wait for confirmation,
 				waitEv, err := app.notifier.RegisterConfirmationsNtfn(
 					&unbondingTxHash,
-					ud.UnbondingTx.TxOut[0].PkScript,
+					unbondingPkScript,
 					UnbondingTxConfirmations,
 					txHeightHint,
 				)
@@ -826,7 +816,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				}
 
 				app.wg.Add(1)
-				go app.waitForUnbondingTxConfirmationWithWg(waitEv, ud, localInfo.stakingTxHash)
+				go app.waitForUnbondingTxConfirmationWithWg(waitEv, stored.UnbondingTxData, localInfo.stakingTxHash)
 			}
 		} else if localInfo.stakingTxState == proto.TransactionState_UNBONDING_STARTED {
 			app.logger.WithFields(logrus.Fields{
@@ -1820,12 +1810,6 @@ func (app *StakerApp) handleStaking() {
 
 			storedTx, stakerAddress := app.mustGetTransactionAndStakerAddress(&unbondingSignaturesConf.stakingTxHash)
 
-			unbondingData, err := app.txTracker.GetUnbondingTxData(&unbondingSignaturesConf.stakingTxHash)
-
-			if err != nil {
-				app.logger.Fatalf("Error retieving unbonding data for tx %s: %s", &unbondingSignaturesConf.stakingTxHash, err)
-			}
-
 			app.logger.WithFields(logrus.Fields{
 				"stakingTxHash": &unbondingSignaturesConf.stakingTxHash,
 			}).Debug("Initiate sending btc unbonding tx to btc network and waiting for confirmation")
@@ -1835,7 +1819,7 @@ func (app *StakerApp) handleStaking() {
 				&unbondingSignaturesConf.stakingTxHash,
 				stakerAddress,
 				storedTx,
-				unbondingData,
+				storedTx.UnbondingTxData,
 			)
 
 		case confOnBtc := <-app.unbondingConfirmedOnBtcChan:
@@ -2287,15 +2271,7 @@ func (app *StakerApp) buildSpendStakeTx(
 			calculatedFee:       *calculatedFee,
 		}, nil
 	} else if storedtx.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC {
-		// transaction is in unbonding confirmed on BTC state, we need to retrieve
-		// unbonding transaction and try to spend unbonding output
-		data, err := app.txTracker.GetUnbondingTxData(stakingTxHash)
-
-		if err != nil {
-			app.logger.WithFields(logrus.Fields{
-				"err": err,
-			}).Fatalf("Error retrieving unbonding data for tx which unbonding tx is confirmed on BTC")
-		}
+		data := storedtx.UnbondingTxData
 
 		unbondingTxHash := data.UnbondingTx.TxHash()
 

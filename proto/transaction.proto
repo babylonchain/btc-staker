@@ -37,5 +37,6 @@ message TrackedTransaction {
     bytes btc_sig_babylon_sig = 7;
     TransactionState state = 8;
     bool watched = 9;
+    UnbondingTxData unbonding_tx_data = 10;
 }
 
