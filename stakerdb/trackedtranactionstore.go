@@ -62,6 +62,7 @@ type BtcConfirmationInfo struct {
 }
 
 type StoredTransaction struct {
+	StoredTransactionIdx      uint64
 	StakingTx                 *wire.MsgTx
 	StakingOutputIndex        uint32
 	StakingTxConfirmationInfo *BtcConfirmationInfo
@@ -282,6 +283,7 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 	}
 
 	return &StoredTransaction{
+		StoredTransactionIdx:      ttx.TrackedTransactionIdx,
 		StakingTx:                 &stakingTx,
 		StakingOutputIndex:        ttx.StakingOutputIdx,
 		StakingTxConfirmationInfo: stakingTxConfgInfo,
@@ -380,14 +382,15 @@ func saveTrackedTransaction(
 	if tx == nil {
 		return fmt.Errorf("cannot save nil tracked transaciton")
 	}
+	nextTxKey := nextTxKey(txIdxBucket)
+
+	tx.TrackedTransactionIdx = nextTxKey
 
 	marshalled, err := pm.Marshal(tx)
 
 	if err != nil {
 		return err
 	}
-
-	nextTxKey := nextTxKey(txIdxBucket)
 
 	nextTxKeyBytes := uint64KeyToBytes(nextTxKey)
 
@@ -469,6 +472,8 @@ func (c *TrackedTransactionStore) AddTransaction(
 	}
 
 	msg := proto.TrackedTransaction{
+		// Setting it to 0, proper number will be filled by `addTransactionInternal`
+		TrackedTransactionIdx:        0,
 		StakingTransaction:           serializedTx,
 		StakingScript:                txscript,
 		StakingOutputIdx:             stakingOutputIndex,
@@ -506,6 +511,8 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	}
 
 	msg := proto.TrackedTransaction{
+		// Setting it to 0, proper number will be filled by `addTransactionInternal`
+		TrackedTransactionIdx:        0,
 		StakingTransaction:           serializedTx,
 		StakingScript:                txscript,
 		StakingOutputIdx:             stakingOutputIndex,

@@ -98,7 +98,7 @@ func FuzzStoringTxs(f *testing.F) {
 			)
 			require.NoError(t, err)
 		}
-
+		var expectedIdx uint64 = 1
 		for _, storedTx := range generatedStoredTxs {
 			hash := storedTx.StakingTx.TxHash()
 			tx, err := s.GetTransaction(&hash)
@@ -108,6 +108,8 @@ func FuzzStoringTxs(f *testing.F) {
 			require.Equal(t, storedTx.TxScript, tx.TxScript)
 			require.Equal(t, storedTx.Pop, tx.Pop)
 			require.Equal(t, storedTx.StakerAddress, tx.StakerAddress)
+			require.Equal(t, expectedIdx, tx.StoredTransactionIdx)
+			expectedIdx++
 		}
 
 		storedResult, err := s.QueryStoredTransactions(stakerdb.DefaultStoredTransactionQuery())
@@ -158,6 +160,7 @@ func TestStateTransitions(t *testing.T) {
 	storedTx, err := s.GetTransaction(&txHash)
 	require.NoError(t, err)
 	require.Equal(t, proto.TransactionState_SENT_TO_BTC, storedTx.State)
+	require.Equal(t, uint64(1), storedTx.StoredTransactionIdx)
 	// Confirmed
 	hash := datagen.GenRandomBtcdHash(r)
 	height := r.Uint32()
