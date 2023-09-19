@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v4"
-	"github.com/babylonchain/babylon/types"
 	bbntypes "github.com/babylonchain/babylon/types"
 	bcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
 	btclctypes "github.com/babylonchain/babylon/x/btclightclient/types"
@@ -292,6 +291,8 @@ type UndelegationData struct {
 type UndelegationInfo struct {
 	JuryUnbodningSignature      *schnorr.Signature
 	ValidatorUnbondingSignature *schnorr.Signature
+	UnbondingTransaction        *wire.MsgTx
+	UnbondingTransactionScript  []byte
 }
 
 type DelegationInfo struct {
@@ -671,7 +672,7 @@ func (bc *BabylonController) InsertBtcBlockHeaders(headers []*wire.BlockHeader) 
 // RegisterValidator registers a BTC validator via a MsgCreateBTCValidator to Babylon
 // it returns tx hash and error
 func (bc *BabylonController) RegisterValidator(
-	bbnPubKey *secp256k1.PubKey, btcPubKey *types.BIP340PubKey, commission *sdk.Dec,
+	bbnPubKey *secp256k1.PubKey, btcPubKey *bbntypes.BIP340PubKey, commission *sdk.Dec,
 	description *sttypes.Description, pop *btcstypes.ProofOfPossession) (*sdk.TxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateBTCValidator{
 		Signer:      bc.getTxSigner(),
@@ -727,9 +728,17 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 				validatorSig = vsig
 			}
 
+			tx, err := resp.UndelegationInfo.UnbondingTx.ToMsgTx()
+
+			if err != nil {
+				return retry.Unrecoverable(fmt.Errorf("malformed unbonding transaction: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
+			}
+
 			udi = &UndelegationInfo{
 				JuryUnbodningSignature:      jurySig,
 				ValidatorUnbondingSignature: validatorSig,
+				UnbondingTransaction:        tx,
+				UnbondingTransactionScript:  resp.UndelegationInfo.UnbondingTx.Script,
 			}
 		}
 
@@ -863,7 +872,7 @@ func (bc *BabylonController) QueryValidatorDelegations(validatorBtcPubKey *btcec
 
 	queryClient := btcstypes.NewQueryClient(clientCtx)
 
-	key := types.NewBIP340PubKeyFromBTCPK(validatorBtcPubKey)
+	key := bbntypes.NewBIP340PubKeyFromBTCPK(validatorBtcPubKey)
 
 	// query all the unsigned delegations
 	queryRequest := &btcstypes.QueryBTCValidatorDelegationsRequest{

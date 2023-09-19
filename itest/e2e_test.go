@@ -1046,3 +1046,78 @@ func TestStakingUnbonding(t *testing.T) {
 	go tm.mineNEmptyBlocks(t, staker.SpendStakeTxConfirmations, false)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SPENT_ON_BTC)
 }
+
+func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
+	// need to have at least 300 block on testnet as only then segwit is activated.
+	// Mature output is out which has 100 confirmations, which means 200mature outputs
+	// will generate 300 blocks
+	numMatureOutputs := uint32(200)
+	tm := StartManager(t, numMatureOutputs, 2, nil)
+	defer tm.Stop(t)
+	tm.insertAllMinedBlocksToBabylon(t)
+
+	cl := tm.Sa.BabylonController()
+	params, err := cl.Params()
+	require.NoError(t, err)
+	// large staking time
+	stakingTime := uint16(1000)
+	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 50000)
+
+	tm.createAndRegisterValidator(t, testStakingData)
+
+	txHash := tm.sendStakingTx(t, testStakingData)
+
+	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
+	require.NoError(t, err)
+
+	pend, err := tm.BabylonClient.QueryPendingBTCDelegations()
+	require.NoError(t, err)
+	require.Len(t, pend, 1)
+	// need to activate delegation to unbond
+	tm.insertJurySigForDelegation(t, pend[0])
+
+	feeRate := 2000
+	unbondResponse, err := tm.StakerClient.UnbondStaking(context.Background(), txHash.String(), &feeRate)
+	require.NoError(t, err)
+	unbondingTxHash, err := chainhash.NewHashFromStr(unbondResponse.UnbondingTxHash)
+	require.NoError(t, err)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_STARTED)
+
+	// restart app, tx we started unbonding, but we still did not receive signatures
+	// even though  we should reach tx being in mempool
+	tm.RestartApp(t)
+
+	validatorDelegations, err := tm.BabylonClient.QueryValidatorDelegations(
+		testStakingData.ValidatorBtcKey,
+	)
+	require.NoError(t, err)
+	require.Len(t, validatorDelegations, 1)
+	tm.insertUnbondingSignatures(t, validatorDelegations[0], testStakingData)
+
+	require.Eventually(t, func() bool {
+		tx, err := tm.MinerNode.Client.GetRawTransaction(unbondingTxHash)
+		if err != nil {
+			return false
+		}
+
+		if tx == nil {
+			return false
+
+		}
+
+		return true
+	}, 1*time.Minute, eventuallyPollTime)
+
+	// mine tx into the block
+	tx, err := tm.MinerNode.Client.GetRawTransaction(unbondingTxHash)
+	require.NoError(t, err)
+	block := mineBlockWithTxs(t, tm.MinerNode, []*btcutil.Tx{tx})
+	require.Equal(t, 2, len(block.Transactions))
+	require.Equal(t, block.Transactions[1].TxHash(), *unbondingTxHash)
+
+	// restart app one more time, whe should reach confirmed state after restart
+	tm.RestartApp(t)
+	go tm.mineNEmptyBlocks(t, staker.UnbondingTxConfirmations, false)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC)
+}
