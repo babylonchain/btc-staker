@@ -143,6 +143,8 @@ type unbondingSignaturesConfirmed struct {
 
 type unbondingConfirmedOnBtc struct {
 	stakingTxHash chainhash.Hash
+	blockHash     chainhash.Hash
+	blockHeight   uint32
 }
 
 type confirmationEvent struct {
@@ -523,7 +525,7 @@ func (app *StakerApp) handleBtcTxInfo(
 
 		if err := app.waitForStakingTransactionConfirmation(
 			stakingTxHash,
-			txInfo.BtcTx.TxOut[txInfo.StakingOutputIndex].PkScript,
+			txInfo.StakingTx.TxOut[txInfo.StakingOutputIndex].PkScript,
 			params.ConfirmationTimeBlocks,
 			currentBestBlockHeight,
 		); err != nil {
@@ -566,7 +568,7 @@ func (app *StakerApp) handleBtcTxInfo(
 				blockDepth:    params.ConfirmationTimeBlocks,
 				blockHash:     *btcTxInfo.BlockHash,
 				blockHeight:   btcTxInfo.BlockHeight,
-				tx:            txInfo.BtcTx,
+				tx:            txInfo.StakingTx,
 				inlusionBlock: btcTxInfo.Block,
 			}
 		} else {
@@ -578,7 +580,7 @@ func (app *StakerApp) handleBtcTxInfo(
 
 			if err := app.waitForStakingTransactionConfirmation(
 				stakingTxHash,
-				txInfo.BtcTx.TxOut[txInfo.StakingOutputIndex].PkScript,
+				txInfo.StakingTx.TxOut[txInfo.StakingOutputIndex].PkScript,
 				params.ConfirmationTimeBlocks,
 				currentBestBlockHeight,
 			); err != nil {
@@ -626,7 +628,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 		// TODO : We need to have another stare like UnstakeTransaction sent and store
 		// info about transaction sent (hash) to check wheter it was confirmed after staker
 		// restarts
-		stakingTxHash := tx.BtcTx.TxHash()
+		stakingTxHash := tx.StakingTx.TxHash()
 		switch tx.State {
 		case proto.TransactionState_SENT_TO_BTC:
 			transactionsSentToBtc = append(transactionsSentToBtc, &stakingTxHash)
@@ -675,7 +677,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 	for _, txHash := range transactionsSentToBtc {
 		stakingTxHash := txHash
 		tx, _ := app.mustGetTransactionAndStakerAddress(stakingTxHash)
-		details, status, err := app.wc.TxDetails(stakingTxHash, tx.BtcTx.TxOut[tx.StakingOutputIndex].PkScript)
+		details, status, err := app.wc.TxDetails(stakingTxHash, tx.StakingTx.TxOut[tx.StakingOutputIndex].PkScript)
 
 		if err != nil {
 			// we got some communication err, return error and kill app startup
@@ -712,7 +714,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			// get all necessary info and send it to babylon
 
 			tx, _ := app.mustGetTransactionAndStakerAddress(stakingTxHash)
-			details, status, err := app.wc.TxDetails(stakingTxHash, tx.BtcTx.TxOut[tx.StakingOutputIndex].PkScript)
+			details, status, err := app.wc.TxDetails(stakingTxHash, tx.StakingTx.TxOut[tx.StakingOutputIndex].PkScript)
 
 			if err != nil {
 				// we got some communication err, return error and kill app startup
@@ -948,7 +950,7 @@ func buildSlashingTxAndSig(
 ) (*wire.MsgTx, *schnorr.Signature, error) {
 
 	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
-		storedTx.BtcTx,
+		storedTx.StakingTx,
 		storedTx.StakingOutputIndex,
 		delegationData.slashingAddress,
 		int64(delegationData.slashingFee),
@@ -960,7 +962,7 @@ func buildSlashingTxAndSig(
 
 	slashingTxSignature, err := staking.SignTxWithOneScriptSpendInputFromScript(
 		slashingTx,
-		storedTx.BtcTx.TxOut[storedTx.StakingOutputIndex],
+		storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex],
 		delegationData.stakerPrivKey,
 		storedTx.TxScript,
 	)
@@ -989,7 +991,7 @@ func (app *StakerApp) buildDelegationData(
 	inclusionBlockHash := inclusionBlock.BlockHash()
 
 	dg := cl.DelegationData{
-		StakingTransaction:                   storedTx.BtcTx,
+		StakingTransaction:                   storedTx.StakingTx,
 		StakingTransactionIdx:                stakingTxIdx,
 		StakingTransactionScript:             storedTx.TxScript,
 		StakingTransactionInclusionProof:     proof,
@@ -1456,7 +1458,7 @@ func (app *StakerApp) sendUnbondingTxWithWitness(
 
 	stakerUnbondingSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
 		unbondingData.UnbondingTx,
-		storedTx.BtcTx.TxOut[storedTx.StakingOutputIndex],
+		storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex],
 		privkey,
 		storedTx.TxScript,
 	)
@@ -1590,6 +1592,8 @@ func (app *StakerApp) waitForUnbondingTxConfirmation(
 
 			req := &unbondingConfirmedOnBtc{
 				stakingTxHash: *stakingTxHash,
+				blockHash:     *conf.BlockHash,
+				blockHeight:   conf.BlockHeight,
 			}
 
 			PushOrQuit[*unbondingConfirmedOnBtc](
@@ -1718,7 +1722,11 @@ func (app *StakerApp) handleStaking() {
 			req.successChan <- &txHash
 
 		case confEvent := <-app.confirmationEventChan:
-			if err := app.txTracker.SetTxConfirmed(&confEvent.txHash); err != nil {
+			if err := app.txTracker.SetTxConfirmed(
+				&confEvent.txHash,
+				&confEvent.blockHash,
+				confEvent.blockHeight,
+			); err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
 				app.logger.Fatalf("Error setting state for tx %s: %s", confEvent.txHash, err)
@@ -1823,7 +1831,11 @@ func (app *StakerApp) handleStaking() {
 			)
 
 		case confOnBtc := <-app.unbondingConfirmedOnBtcChan:
-			if err := app.txTracker.SetTxUnbondingConfirmedOnBtc(&confOnBtc.stakingTxHash); err != nil {
+			if err := app.txTracker.SetTxUnbondingConfirmedOnBtc(
+				&confOnBtc.stakingTxHash,
+				&confOnBtc.blockHash,
+				confOnBtc.blockHeight,
+			); err != nil {
 				// TODO: handle this error somehow, it means we received spend stake confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
 				app.logger.Fatalf("Error setting state for tx %s: %s", confOnBtc.stakingTxHash, err)
@@ -2136,7 +2148,7 @@ func (app *StakerApp) GetAllDelegations() ([]*Delegation, error) {
 
 	for _, tx := range tracked {
 		delegations = append(delegations, &Delegation{
-			StakingTxHash: tx.BtcTx.TxHash().String(),
+			StakingTxHash: tx.StakingTx.TxHash().String(),
 			State:         tx.State,
 		})
 	}
@@ -2254,7 +2266,7 @@ func (app *StakerApp) buildSpendStakeTx(
 		// transaction is only in sent to babylon state we try to spend staking output directly
 		spendTx, calculatedFee, err := app.spendStakeTx(
 			destAddress,
-			storedtx.BtcTx,
+			storedtx.StakingTx,
 			stakingTxHash,
 			storedtx.TxScript,
 			storedtx.StakingOutputIndex,
@@ -2267,7 +2279,7 @@ func (app *StakerApp) buildSpendStakeTx(
 		return &spendStakeTxInfo{
 			spendStakeTx:        spendTx,
 			fundingOutputScript: storedtx.TxScript,
-			fundingOutput:       storedtx.BtcTx.TxOut[storedtx.StakingOutputIndex],
+			fundingOutput:       storedtx.StakingTx.TxOut[storedtx.StakingOutputIndex],
 			calculatedFee:       *calculatedFee,
 		}, nil
 	} else if storedtx.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC {
@@ -2428,7 +2440,7 @@ func (app *StakerApp) buildUnbondingAndSlashingTxFromStakingTx(
 	finalizationTimeBlocks uint16,
 	slashingFee btcutil.Amount,
 ) (*cl.UndelegationData, error) {
-	stakingTxHash := storedTx.BtcTx.TxHash()
+	stakingTxHash := storedTx.StakingTx.TxHash()
 
 	stakingScriptData, err := staking.ParseStakingTransactionScript(storedTx.TxScript)
 
@@ -2439,7 +2451,7 @@ func (app *StakerApp) buildUnbondingAndSlashingTxFromStakingTx(
 		}).Fatalf("Invalid staking transaction script in db")
 	}
 
-	stakingOutpout := storedTx.BtcTx.TxOut[storedTx.StakingOutputIndex]
+	stakingOutpout := storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex]
 
 	unbondingTxFee := txrules.FeeForSerializeSize(feeRatePerKb, slashingPathSpendTxVSize)
 

@@ -17,5 +17,5 @@ var (
 
 	ErrInvalidUnbondingDataUpdate = errors.New("invalid unbonding data update")
 
-	ErrUnbondingDataNotFound = errors.New("watched transaction data not found")
+	ErrUnbondingDataNotFound = errors.New("unbonding transaction data not found")
 )

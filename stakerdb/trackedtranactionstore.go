@@ -56,11 +56,17 @@ func NewProofOfPossession(
 	}
 }
 
+type BtcConfirmationInfo struct {
+	Height    uint32
+	BlockHash chainhash.Hash
+}
+
 type StoredTransaction struct {
-	BtcTx              *wire.MsgTx
-	StakingOutputIndex uint32
-	TxScript           []byte
-	Pop                *ProofOfPossession
+	StakingTx                 *wire.MsgTx
+	StakingOutputIndex        uint32
+	StakingTxConfirmationInfo *BtcConfirmationInfo
+	TxScript                  []byte
+	Pop                       *ProofOfPossession
 	// Returning address as string, to avoid having to know how to decode address
 	// which requires knowing the network we are on
 	StakerAddress   string
@@ -80,6 +86,7 @@ type UnbondingStoreData struct {
 	UnbondingTxScript             []byte
 	UnbondingTxValidatorSignature *schnorr.Signature
 	UnbondingTxJurySignature      *schnorr.Signature
+	UnbondingTxConfirmationInfo   *BtcConfirmationInfo
 }
 
 func newInitialUnbondingTxData(
@@ -105,6 +112,7 @@ func newInitialUnbondingTxData(
 		UnbondingTransactionScript:       unbondingTxScript,
 		UnbondingTransactionValidatorSig: nil,
 		UnbondingTransactionJurySig:      nil,
+		UnbondingTxBtcConfirmationInfo:   nil,
 	}
 
 	return unbondingData, nil
@@ -127,6 +135,7 @@ func newUnbondingSignaturesUpdate(
 		UnbondingTransactionScript:       nil,
 		UnbondingTransactionValidatorSig: unbondingTxValidatorSignature.Serialize(),
 		UnbondingTransactionJurySig:      unbondingTxJurySignature.Serialize(),
+		UnbondingTxBtcConfirmationInfo:   nil,
 	}
 
 	return unbondingData, nil
@@ -186,6 +195,24 @@ func (c *TrackedTransactionStore) initBuckets() error {
 	})
 }
 
+func protoBtcConfirmationInfoToBtcConfirmationInfo(ci *proto.BTCConfirmationInfo) (*BtcConfirmationInfo, error) {
+	if ci == nil {
+		return nil, nil
+	}
+
+	hash, err := chainhash.NewHash(ci.BlockHash)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &BtcConfirmationInfo{
+		Height:    ci.BlockHeight,
+		BlockHash: *hash,
+	}, nil
+
+}
+
 func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*UnbondingStoreData, error) {
 	// Unbodning txdata should always containt unbodning transaction and script
 	var unbondingTx wire.MsgTx
@@ -213,11 +240,18 @@ func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*Unbondi
 		}
 	}
 
+	unbondingTxConfirmationInfo, err := protoBtcConfirmationInfoToBtcConfirmationInfo(ud.UnbondingTxBtcConfirmationInfo)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &UnbondingStoreData{
 		UnbondingTx:                   &unbondingTx,
 		UnbondingTxScript:             ud.UnbondingTransactionScript,
 		UnbondingTxValidatorSignature: validatorSig,
 		UnbondingTxJurySignature:      jurySig,
+		UnbondingTxConfirmationInfo:   unbondingTxConfirmationInfo,
 	}, nil
 }
 
@@ -241,10 +275,17 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 		utd = unbondingData
 	}
 
+	stakingTxConfgInfo, err := protoBtcConfirmationInfoToBtcConfirmationInfo(ttx.StakingTxBtcConfirmationInfo)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &StoredTransaction{
-		BtcTx:              &stakingTx,
-		StakingOutputIndex: ttx.StakingOutputIdx,
-		TxScript:           ttx.StakingScript,
+		StakingTx:                 &stakingTx,
+		StakingOutputIndex:        ttx.StakingOutputIdx,
+		StakingTxConfirmationInfo: stakingTxConfgInfo,
+		TxScript:                  ttx.StakingScript,
 		Pop: &ProofOfPossession{
 			BtcSigType:           ttx.BtcSigType,
 			BabylonSigOverBtcPk:  ttx.BabylonSigBtcPk,
@@ -428,16 +469,17 @@ func (c *TrackedTransactionStore) AddTransaction(
 	}
 
 	msg := proto.TrackedTransaction{
-		StakingTransaction: serializedTx,
-		StakingScript:      txscript,
-		StakingOutputIdx:   stakingOutputIndex,
-		StakerAddress:      stakerAddress.EncodeAddress(),
-		BtcSigType:         pop.BtcSigType,
-		BabylonSigBtcPk:    pop.BabylonSigOverBtcPk,
-		BtcSigBabylonSig:   pop.BtcSigOverBabylonSig,
-		State:              proto.TransactionState_SENT_TO_BTC,
-		Watched:            false,
-		UnbondingTxData:    nil,
+		StakingTransaction:           serializedTx,
+		StakingScript:                txscript,
+		StakingOutputIdx:             stakingOutputIndex,
+		StakerAddress:                stakerAddress.EncodeAddress(),
+		StakingTxBtcConfirmationInfo: nil,
+		BtcSigType:                   pop.BtcSigType,
+		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
+		BtcSigBabylonSig:             pop.BtcSigOverBabylonSig,
+		State:                        proto.TransactionState_SENT_TO_BTC,
+		Watched:                      false,
+		UnbondingTxData:              nil,
 	}
 
 	return c.addTransactionInternal(
@@ -464,16 +506,17 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	}
 
 	msg := proto.TrackedTransaction{
-		StakingTransaction: serializedTx,
-		StakingScript:      txscript,
-		StakingOutputIdx:   stakingOutputIndex,
-		StakerAddress:      stakerAddress.EncodeAddress(),
-		BtcSigType:         pop.BtcSigType,
-		BabylonSigBtcPk:    pop.BabylonSigOverBtcPk,
-		BtcSigBabylonSig:   pop.BtcSigOverBabylonSig,
-		State:              proto.TransactionState_SENT_TO_BTC,
-		Watched:            true,
-		UnbondingTxData:    nil,
+		StakingTransaction:           serializedTx,
+		StakingScript:                txscript,
+		StakingOutputIdx:             stakingOutputIndex,
+		StakerAddress:                stakerAddress.EncodeAddress(),
+		StakingTxBtcConfirmationInfo: nil,
+		BtcSigType:                   pop.BtcSigType,
+		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
+		BtcSigBabylonSig:             pop.BtcSigOverBabylonSig,
+		State:                        proto.TransactionState_SENT_TO_BTC,
+		Watched:                      true,
+		UnbondingTxData:              nil,
 	}
 
 	serializedSlashingtx, err := utils.SerializeBtcTransaction(slashingTx)
@@ -544,9 +587,17 @@ func (c *TrackedTransactionStore) setTxState(
 	})
 }
 
-func (c *TrackedTransactionStore) SetTxConfirmed(txHash *chainhash.Hash) error {
+func (c *TrackedTransactionStore) SetTxConfirmed(
+	txHash *chainhash.Hash,
+	blockHash *chainhash.Hash,
+	blockHeight uint32,
+) error {
 	setTxConfirmed := func(tx *proto.TrackedTransaction) error {
 		tx.State = proto.TransactionState_CONFIRMED_ON_BTC
+		tx.StakingTxBtcConfirmationInfo = &proto.BTCConfirmationInfo{
+			BlockHash:   blockHash.CloneBytes(),
+			BlockHeight: blockHeight,
+		}
 		return nil
 	}
 
@@ -627,9 +678,19 @@ func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 
 func (c *TrackedTransactionStore) SetTxUnbondingConfirmedOnBtc(
 	txHash *chainhash.Hash,
+	blockHash *chainhash.Hash,
+	blockHeight uint32,
 ) error {
 	setUnbondingConfirmedOnBtc := func(tx *proto.TrackedTransaction) error {
+		if tx.UnbondingTxData == nil {
+			return fmt.Errorf("cannot set unbonding confirmed on btc, because unbonding tx data does not exist: %w", ErrUnbondingDataNotFound)
+		}
+
 		tx.State = proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC
+		tx.UnbondingTxData.UnbondingTxBtcConfirmationInfo = &proto.BTCConfirmationInfo{
+			BlockHash:   blockHash.CloneBytes(),
+			BlockHeight: blockHeight,
+		}
 		return nil
 	}
 
