@@ -589,6 +589,14 @@ func (app *StakerApp) handleBtcTxInfo(
 	return nil
 }
 
+func (app *StakerApp) waitForUnbondingTxConfirmationWithWg(
+	waitEv *notifier.ConfirmationEvent,
+	unbondingData *stakerdb.UnbondingStoreData,
+	stakingTxHash *chainhash.Hash) {
+	defer app.wg.Done()
+	app.waitForUnbondingTxConfirmation(waitEv, unbondingData, stakingTxHash)
+}
+
 // TODO: We should also handle case when btc node or babylon node lost data and start from scratch
 // i.e keep track what is last known block height on both chains and detect if after restart
 // for some reason they are behind staker
@@ -650,7 +658,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			})
 			return nil
 		case proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC:
-			// unbonding tx was send to babylon, received all signatures and was confirmed on btc, nothing to do here
+			// unbonding tx was sent to babylon, received all signatures and was confirmed on btc, nothing to do here
 			return nil
 		case proto.TransactionState_SPENT_ON_BTC:
 			// nothing to do, staking transaction is already spent
@@ -754,7 +762,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				app.logger.WithFields(logrus.Fields{
 					"stakingTxHash": localInfo.stakingTxHash,
 					"stakingState":  localInfo.stakingTxState,
-				}).Fatalf("Failed to get unbonding data for tx wit unbonding state")
+				}).Fatalf("Failed to get unbonding data for tx with unbonding state")
 			}
 
 			stored, address := app.mustGetTransactionAndStakerAddress(localInfo.stakingTxHash)
@@ -785,7 +793,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				var txHeightHint uint32
 
 				// At this point tx is either in mempool or in chain.
-				// If it is in chain, we set our height hint to inclusion block heigh
+				// If it is in chain, we set our height hint to inclusion block height
 				// if it is in mempool, we set our height hint to current best block height
 				if status == walletcontroller.TxInChain {
 					app.logger.WithFields(logrus.Fields{
@@ -818,14 +826,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				}
 
 				app.wg.Add(1)
-				go func(ev *notifier.ConfirmationEvent, unbondingData *stakerdb.UnbondingStoreData, stakingTxHash *chainhash.Hash) {
-					defer app.wg.Done()
-					app.waitForUnbondingTxConfirmation(
-						ev,
-						unbondingData,
-						stakingTxHash,
-					)
-				}(waitEv, ud, localInfo.stakingTxHash)
+				go app.waitForUnbondingTxConfirmationWithWg(waitEv, ud, localInfo.stakingTxHash)
 			}
 		} else if localInfo.stakingTxState == proto.TransactionState_UNBONDING_STARTED {
 			app.logger.WithFields(logrus.Fields{
