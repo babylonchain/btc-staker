@@ -102,6 +102,26 @@ func (c *StakerServiceJsonRpcClient) ListStakingTransactions(ctx context.Context
 	return result, nil
 }
 
+func (c *StakerServiceJsonRpcClient) WithdrawableTransactions(ctx context.Context, offset *int, limit *int) (*service.WithdrawableTransactionsResponse, error) {
+	result := new(service.WithdrawableTransactionsResponse)
+
+	params := make(map[string]interface{})
+
+	if limit != nil {
+		params["limit"] = limit
+	}
+
+	if offset != nil {
+		params["offset"] = offset
+	}
+
+	_, err := c.client.Call(ctx, "withdrawable_transactions", params, result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (c *StakerServiceJsonRpcClient) StakingDetails(ctx context.Context, txHash string) (*service.StakingDetails, error) {
 	result := new(service.StakingDetails)
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 
+	staking "github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -14,6 +15,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/walletdb"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+
 	pm "google.golang.org/protobuf/proto"
 
 	"github.com/lightningnetwork/lnd/kvdb"
@@ -142,20 +144,34 @@ func newUnbondingSignaturesUpdate(
 	return unbondingData, nil
 }
 
+type WithdrawableTransactionsFilter struct {
+	currentBestBlockHeight uint32
+}
 type StoredTransactionQuery struct {
 	IndexOffset uint64
 
 	NumMaxTransactions uint64
 
 	Reversed bool
+
+	withdrawableTransactionsFilter *WithdrawableTransactionsFilter
 }
 
 func DefaultStoredTransactionQuery() StoredTransactionQuery {
 	return StoredTransactionQuery{
-		IndexOffset:        0,
-		NumMaxTransactions: 50,
-		Reversed:           false,
+		IndexOffset:                    0,
+		NumMaxTransactions:             50,
+		Reversed:                       false,
+		withdrawableTransactionsFilter: nil,
 	}
+}
+
+func (q *StoredTransactionQuery) WithdrawableTransactionsFilter(currentBestBlock uint32) StoredTransactionQuery {
+	q.withdrawableTransactionsFilter = &WithdrawableTransactionsFilter{
+		currentBestBlockHeight: currentBestBlock,
+	}
+
+	return *q
 }
 
 type StoredTransactionQueryResult struct {
@@ -805,6 +821,22 @@ func (c *TrackedTransactionStore) GetAllStoredTransactions() ([]StoredTransactio
 	return resp.Transactions, nil
 }
 
+func mustRetriveLockTimeFromScript(script []byte) uint16 {
+	parsed, err := staking.ParseStakingTransactionScript(script)
+	if err != nil {
+		panic(fmt.Errorf("invalid script in staking transactions db: %w", err))
+	}
+
+	return parsed.StakingTime
+}
+
+func isTimeLockExpired(confirmationBlockHeight uint32, lockTime uint16, currentBestBlockHeight uint32) bool {
+	// transaction maybe included/executed only in next possible block
+	nexBlockHeight := int64(currentBestBlockHeight) + 1
+	pastLock := nexBlockHeight - int64(confirmationBlockHeight) - int64(lockTime)
+	return pastLock >= 0
+}
+
 func (c *TrackedTransactionStore) QueryStoredTransactions(q StoredTransactionQuery) (StoredTransactionQueryResult, error) {
 	var resp StoredTransactionQueryResult
 
@@ -847,10 +879,38 @@ func (c *TrackedTransactionStore) QueryStoredTransactions(q StoredTransactionQue
 				return false, err
 			}
 
-			// TODO: Add filtering by state ? (e.g. only confirmed transactions)
+			// we have query only for withdrawable transaction i.e transactions which
+			// either in SENT_TO_BABYLON or UNBONDING_CONFIRMED_ON_BTC state and which timelock has expired
+			if q.withdrawableTransactionsFilter != nil {
+				var confirmationHeight uint32
+				var scriptTimeLock uint16
 
-			resp.Transactions = append(resp.Transactions, *txFromDb)
-			return true, nil
+				if txFromDb.State == proto.TransactionState_SENT_TO_BABYLON {
+					scriptTimeLock = mustRetriveLockTimeFromScript(txFromDb.TxScript)
+					confirmationHeight = txFromDb.StakingTxConfirmationInfo.Height
+				} else if txFromDb.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC {
+					scriptTimeLock = mustRetriveLockTimeFromScript(txFromDb.UnbondingTxData.UnbondingTxScript)
+					confirmationHeight = txFromDb.UnbondingTxData.UnbondingTxConfirmationInfo.Height
+				} else {
+					return false, nil
+				}
+
+				timeLockExpired := isTimeLockExpired(
+					confirmationHeight,
+					scriptTimeLock,
+					q.withdrawableTransactionsFilter.currentBestBlockHeight,
+				)
+
+				if timeLockExpired {
+					resp.Transactions = append(resp.Transactions, *txFromDb)
+					return true, nil
+				} else {
+					return false, nil
+				}
+			} else {
+				resp.Transactions = append(resp.Transactions, *txFromDb)
+				return true, nil
+			}
 		}
 
 		if err := paginator.query(accumulateTransactions); err != nil {

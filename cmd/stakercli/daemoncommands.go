@@ -23,6 +23,7 @@ var daemonCommands = []cli.Command{
 			unstakeCmd,
 			stakingDetailsCmd,
 			listStakingTransactionsCmd,
+			withdrawableTransactionsCmd,
 			unbondCmd,
 		},
 	},
@@ -211,6 +212,30 @@ var listStakingTransactionsCmd = cli.Command{
 		},
 	},
 	Action: listStakingTransactions,
+}
+
+var withdrawableTransactionsCmd = cli.Command{
+	Name:      "withdrawable-transactions",
+	ShortName: "wt",
+	Usage:     "List current tranactions that can be withdrawn i.e funds can be transferred back to staker address",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+		cli.IntFlag{
+			Name:  offsetFlag,
+			Usage: "offset of the first transactions to return",
+			Value: 0,
+		},
+		cli.IntFlag{
+			Name:  limitFlag,
+			Usage: "maximum number of transactions to return",
+			Value: 100,
+		},
+	},
+	Action: withdrawableTransactions,
 }
 
 func checkHealth(ctx *cli.Context) error {
@@ -405,6 +430,38 @@ func listStakingTransactions(ctx *cli.Context) error {
 	}
 
 	transactions, err := client.ListStakingTransactions(sctx, &offset, &limit)
+
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(transactions)
+
+	return nil
+}
+
+func withdrawableTransactions(ctx *cli.Context) error {
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+
+	offset := ctx.Int(offsetFlag)
+
+	if offset < 0 {
+		return cli.NewExitError("Offset must be non-negative", 1)
+	}
+
+	limit := ctx.Int(limitFlag)
+
+	if limit < 0 {
+		return cli.NewExitError("Limit must be non-negative", 1)
+	}
+
+	transactions, err := client.WithdrawableTransactions(sctx, &offset, &limit)
 
 	if err != nil {
 		return err

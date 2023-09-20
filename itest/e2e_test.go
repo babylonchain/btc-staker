@@ -872,9 +872,24 @@ func TestSendingStakingTransaction(t *testing.T) {
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 
-	// just enough for time lock to expire
-	blockForStakingToExpire := uint32(testStakingData.StakingTime) - params.ConfirmationTimeBlocks - 1
+	//mine one block to low to spend staking tx
+	blockForStakingToExpire := uint32(testStakingData.StakingTime) - params.ConfirmationTimeBlocks - 2
 	tm.mineNEmptyBlocks(t, blockForStakingToExpire, false)
+
+	withdrawableTransactionsResp, err := tm.StakerClient.WithdrawableTransactions(context.Background(), nil, nil)
+	require.NoError(t, err)
+	require.Len(t, withdrawableTransactionsResp.Transactions, 0)
+	require.Equal(t, withdrawableTransactionsResp.TotalTransactionCount, "1")
+	require.Equal(t, withdrawableTransactionsResp.LastWithdrawableTransactionIndex, "0")
+
+	tm.mineNEmptyBlocks(t, 1, false)
+
+	// need to use eventually as we need to wait for information to flow from node to staker program
+	require.Eventually(t, func() bool {
+		withdrawableTransactionsResp, err = tm.StakerClient.WithdrawableTransactions(context.Background(), nil, nil)
+		require.NoError(t, err)
+		return len(withdrawableTransactionsResp.Transactions) > 0
+	}, eventuallyWaitTimeOut, eventuallyPollTime)
 
 	_, spendTxValue := tm.spendStakingTxWithHash(t, txHash)
 
@@ -1038,6 +1053,10 @@ func TestStakingUnbonding(t *testing.T) {
 	require.Equal(t, block.Transactions[1].TxHash(), *unbondingTxHash)
 	go tm.mineNEmptyBlocks(t, staker.UnbondingTxConfirmations, false)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC)
+
+	withdrawableTransactionsResp, err := tm.StakerClient.WithdrawableTransactions(context.Background(), nil, nil)
+	require.NoError(t, err)
+	require.Len(t, withdrawableTransactionsResp.Transactions, 1)
 
 	// We can spend unbonding tx immediately as in e2e test, finalization time is 4 blocks and we locked it
 	// finalization time + 1 i.e 5 blocks, but to consider unboning tx as confirmed we need to wait for 6 blocks

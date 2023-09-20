@@ -14,6 +14,7 @@ import (
 	"github.com/babylonchain/btc-staker/babylonclient"
 	str "github.com/babylonchain/btc-staker/staker"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
+	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -59,6 +60,17 @@ func NewStakerService(
 		logger:      l,
 		interceptor: sig,
 		db:          db,
+	}
+}
+
+func storedTxToStakingDetails(storedTx *stakerdb.StoredTransaction) StakingDetails {
+	return StakingDetails{
+		StakingTxHash:  storedTx.StakingTx.TxHash().String(),
+		StakerAddress:  storedTx.StakerAddress,
+		StakingScript:  hex.EncodeToString(storedTx.TxScript),
+		StakingState:   storedTx.State.String(),
+		Watched:        storedTx.Watched,
+		TransactionIdx: strconv.FormatUint(storedTx.StoredTransactionIdx, 10),
 	}
 }
 
@@ -129,12 +141,9 @@ func (s *StakerService) stakingDetails(_ *rpctypes.Context,
 		return nil, err
 	}
 
-	return &StakingDetails{
-		StakingTxHash: storedTx.StakingTx.TxHash().String(),
-		StakerAddress: storedTx.StakerAddress,
-		StakingScript: hex.EncodeToString(storedTx.TxScript),
-		StakingState:  storedTx.State.String(),
-	}, nil
+	details := storedTxToStakingDetails(storedTx)
+
+	return &details, nil
 }
 
 func (s *StakerService) spendStake(_ *rpctypes.Context,
@@ -254,12 +263,8 @@ func (s *StakerService) listStakingTransactions(_ *rpctypes.Context, offset, lim
 	var stakingDetails []StakingDetails
 
 	for _, tx := range txResult.Transactions {
-		stakingDetails = append(stakingDetails, StakingDetails{
-			StakingTxHash: tx.StakingTx.TxHash().String(),
-			StakerAddress: tx.StakerAddress,
-			StakingScript: hex.EncodeToString(tx.TxScript),
-			StakingState:  tx.State.String(),
-		})
+		tx := tx
+		stakingDetails = append(stakingDetails, storedTxToStakingDetails(&tx))
 	}
 
 	totalCount := strconv.FormatUint(txResult.Total, 10)
@@ -267,6 +272,39 @@ func (s *StakerService) listStakingTransactions(_ *rpctypes.Context, offset, lim
 	return &ListStakingTransactionsResponse{
 		Transactions:          stakingDetails,
 		TotalTransactionCount: totalCount,
+	}, nil
+}
+
+func (s *StakerService) withdrawableTransactions(_ *rpctypes.Context, offset, limit *int) (*WithdrawableTransactionsResponse, error) {
+	pageParams := getPageParams(offset, limit)
+
+	txResult, err := s.staker.WithdrawableTransactions(pageParams.Limit, pageParams.Offset)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var stakingDetails []StakingDetails
+
+	for _, tx := range txResult.Transactions {
+		tx := tx
+		stakingDetails = append(stakingDetails, storedTxToStakingDetails(&tx))
+	}
+
+	var lastIdx string = "0"
+	if len(stakingDetails) > 0 {
+		// this should ease up pagination i.e in case when whe have 1000 transactions, and we limit query to 50
+		// due to filetring we can retrun  response with 50 transactions when last one have index 400,
+		// then caller can specify offset=400 and get next withdrawable transactions.
+		lastIdx = stakingDetails[len(stakingDetails)-1].TransactionIdx
+	}
+
+	totalCount := strconv.FormatUint(txResult.Total, 10)
+
+	return &WithdrawableTransactionsResponse{
+		Transactions:                     stakingDetails,
+		LastWithdrawableTransactionIndex: lastIdx,
+		TotalTransactionCount:            totalCount,
 	}, nil
 }
 
@@ -429,6 +467,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
 		"unbond_staking":            rpc.NewRPCFunc(s.unbondStaking, "stakingTxHash,feeRate"),
+		"withdrawable_transactions": rpc.NewRPCFunc(s.withdrawableTransactions, "offset,limit"),
 
 		// watch api
 		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig,popType"),
