@@ -20,22 +20,37 @@ message WatchedTxData {
     bytes staker_babylon_pk = 3;
 }
 
+// Contains information about btc confirmation
+message BTCConfirmationInfo {
+    uint32 block_height = 1;
+    bytes block_hash = 2;
+}
+
 message UnbondingTxData {
     bytes unbonding_transaction = 1;
     bytes unbonding_transaction_script = 2;
     bytes unbonding_transaction_validator_sig = 3;
     bytes unbonding_transaction_jury_sig = 4;
+    // this data is only filed if tracked transactions state is >= UNBONDING_CONFIRMED_ON_BTC,
+    // and it is filled as last piece of information in unbonding process
+    BTCConfirmationInfo unbonding_tx_btc_confirmation_info = 5;
 }
 
 message TrackedTransaction {
-    bytes staking_transaction = 1;
-    bytes staking_script = 2;
-    uint32 staking_output_idx = 3;
-    string staker_address = 4;
-    uint32 btc_sig_type = 5;
-    bytes babylon_sig_btc_pk = 6;
-    bytes btc_sig_babylon_sig = 7;
-    TransactionState state = 8;
-    bool watched = 9;
+    // index of tracked transaction in database, first tracked transaction has index 1
+    uint64 tracked_transaction_idx = 1;
+    bytes staking_transaction = 2;
+    bytes staking_script = 3;
+    uint32 staking_output_idx = 4;
+    string staker_address = 5;
+    // this data is only filed if tracked transactions state is >= CONFIRMED_ON_BTC
+    BTCConfirmationInfo staking_tx_btc_confirmation_info = 6;
+    uint32 btc_sig_type = 7;
+    bytes babylon_sig_btc_pk = 8;
+    bytes btc_sig_babylon_sig = 9;
+    TransactionState state = 10;
+    bool watched = 11;
+    // this data is only filed if tracked transactions state is >= UNBONDING_STARTED
+    UnbondingTxData unbonding_tx_data = 12;
 }
 

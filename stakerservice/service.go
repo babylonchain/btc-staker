@@ -130,7 +130,7 @@ func (s *StakerService) stakingDetails(_ *rpctypes.Context,
 	}
 
 	return &StakingDetails{
-		StakingTxHash: storedTx.BtcTx.TxHash().String(),
+		StakingTxHash: storedTx.StakingTx.TxHash().String(),
 		StakerAddress: storedTx.StakerAddress,
 		StakingScript: hex.EncodeToString(storedTx.TxScript),
 		StakingState:  storedTx.State.String(),
@@ -255,7 +255,7 @@ func (s *StakerService) listStakingTransactions(_ *rpctypes.Context, offset, lim
 
 	for _, tx := range txResult.Transactions {
 		stakingDetails = append(stakingDetails, StakingDetails{
-			StakingTxHash: tx.BtcTx.TxHash().String(),
+			StakingTxHash: tx.StakingTx.TxHash().String(),
 			StakerAddress: tx.StakerAddress,
 			StakingScript: hex.EncodeToString(tx.TxScript),
 			StakingState:  tx.State.String(),
