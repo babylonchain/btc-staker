@@ -885,6 +885,12 @@ func (c *TrackedTransactionStore) QueryStoredTransactions(q StoredTransactionQue
 				var confirmationHeight uint32
 				var scriptTimeLock uint16
 
+				if txFromDb.Watched {
+					// cannot withdraw watched transaction directly through staker program
+					// at least for now.
+					return false, nil
+				}
+
 				if txFromDb.State == proto.TransactionState_SENT_TO_BABYLON {
 					scriptTimeLock = mustRetriveLockTimeFromScript(txFromDb.TxScript)
 					confirmationHeight = txFromDb.StakingTxConfirmationInfo.Height
