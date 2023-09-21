@@ -2170,6 +2170,20 @@ func (app *StakerApp) StoredTransactions(limit, offset uint64) (*stakerdb.Stored
 	return &resp, nil
 }
 
+func (app *StakerApp) WithdrawableTransactions(limit, offset uint64) (*stakerdb.StoredTransactionQueryResult, error) {
+	query := stakerdb.StoredTransactionQuery{
+		IndexOffset:        offset,
+		NumMaxTransactions: limit,
+		Reversed:           false,
+	}
+	resp, err := app.txTracker.QueryStoredTransactions(query.WithdrawableTransactionsFilter(app.currentBestBlockHeight.Load()))
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 func (app *StakerApp) GetStoredTransaction(txHash *chainhash.Hash) (*stakerdb.StoredTransaction, error) {
 	return app.txTracker.GetTransaction(txHash)
 }

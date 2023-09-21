@@ -7,10 +7,12 @@ type ResultStake struct {
 }
 
 type StakingDetails struct {
-	StakingTxHash string `json:"staking_tx_hash"`
-	StakerAddress string `json:"staker_address"`
-	StakingScript string `json:"staking_script"`
-	StakingState  string `json:"staking_state"`
+	StakingTxHash  string `json:"staking_tx_hash"`
+	StakerAddress  string `json:"staker_address"`
+	StakingScript  string `json:"staking_script"`
+	StakingState   string `json:"staking_state"`
+	Watched        bool   `json:"watched"`
+	TransactionIdx string `json:"transaction_idx"`
 }
 
 type OutputDetail struct {
@@ -45,4 +47,10 @@ type ListStakingTransactionsResponse struct {
 
 type UnbondingResponse struct {
 	UnbondingTxHash string `json:"unbonding_tx_hash"`
+}
+
+type WithdrawableTransactionsResponse struct {
+	Transactions                     []StakingDetails `json:"transactions"`
+	LastWithdrawableTransactionIndex string           `json:"last_transaction_index"`
+	TotalTransactionCount            string           `json:"total_transaction_count"`
 }
