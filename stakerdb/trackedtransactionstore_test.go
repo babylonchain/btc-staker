@@ -55,9 +55,6 @@ func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *st
 	require.NoError(t, err)
 	script, err := scriptData.BuildStakingScript()
 	require.NoError(t, err)
-
-	require.NoError(t, err)
-
 	btcAddress, err := btcutil.NewAddressWitnessScriptHash(datagen.GenRandomByteArray(r, 32), &chaincfg.MainNetParams)
 	require.NoError(t, err)
 
@@ -275,8 +272,10 @@ func FuzzQuerySpendableTx(f *testing.F) {
 	f.Fuzz(func(t *testing.T, seed int64) {
 		r := rand.New(rand.NewSource(seed))
 		s := MakeTestStore(t)
-		maxCreatedTx := 40
-		maxStakingTime := 200
+		// ganerate random transactions between 20 and 50
+		maxCreatedTx := int(r.Int31n(31) + 20)
+		// random staking time between 150 and 250 blocks
+		maxStakingTime := r.Int31n(101) + 150
 		stored := genNStoredTransactions(t, r, maxCreatedTx, uint16(maxStakingTime))
 		for _, storedTx := range stored {
 			address, err := btcutil.DecodeAddress(storedTx.StakerAddress, &chaincfg.MainNetParams)
@@ -292,10 +291,8 @@ func FuzzQuerySpendableTx(f *testing.F) {
 		}
 
 		query := stakerdb.DefaultStoredTransactionQuery()
-
 		// random confirmation block
 		confirmationBlock := uint32(r.Int31n(1000) + 1)
-
 		halfOfMaxStaking := int32(maxStakingTime / 2)
 		currentBestBlock := confirmationBlock + uint32(r.Int31n(halfOfMaxStaking)+1)
 		filteredQuery := query.WithdrawableTransactionsFilter(currentBestBlock)
@@ -331,6 +328,36 @@ func FuzzQuerySpendableTx(f *testing.F) {
 			require.NoError(t, err)
 		}
 
+		storedResult, err = s.QueryStoredTransactions(filteredQuery)
+		require.NoError(t, err)
+		require.Len(t, storedResult.Transactions, len(hashesWithExpiredTimeLock))
+		require.Equal(t, storedResult.Total, uint64(maxCreatedTx))
+
+		for _, storedTx := range stored {
+			txHash := storedTx.StakingTx.TxHash()
+			err := s.SetTxUnbondingStarted(
+				&txHash,
+				storedTx.StakingTx,
+				storedTx.TxScript,
+			)
+			require.NoError(t, err)
+		}
+
+		storedResult, err = s.QueryStoredTransactions(filteredQuery)
+		require.NoError(t, err)
+		require.Len(t, storedResult.Transactions, 0)
+
+		for _, storedTx := range stored {
+			txHash := storedTx.StakingTx.TxHash()
+			err := s.SetTxUnbondingConfirmedOnBtc(
+				&txHash,
+				&txHash,
+				confirmationBlock,
+			)
+			require.NoError(t, err)
+		}
+
+		// we should receive the same resuls as with staking confirmed transactions
 		storedResult, err = s.QueryStoredTransactions(filteredQuery)
 		require.NoError(t, err)
 		require.Len(t, storedResult.Transactions, len(hashesWithExpiredTimeLock))

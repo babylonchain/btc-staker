@@ -287,7 +287,6 @@ func (s *StakerService) withdrawableTransactions(_ *rpctypes.Context, offset, li
 	var stakingDetails []StakingDetails
 
 	for _, tx := range txResult.Transactions {
-		tx := tx
 		stakingDetails = append(stakingDetails, storedTxToStakingDetails(&tx))
 	}
 

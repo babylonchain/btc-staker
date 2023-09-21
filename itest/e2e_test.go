@@ -912,7 +912,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 
-	//mine one block to low to spend staking tx
+	// mine one block less than the amount needed to spend staking tx
 	blockForStakingToExpire := uint32(testStakingData.StakingTime) - params.ConfirmationTimeBlocks - 2
 	tm.mineNEmptyBlocks(t, blockForStakingToExpire, false)
 
