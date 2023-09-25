@@ -197,11 +197,6 @@ type stakingDbInfo struct {
 	stakingTxState proto.TransactionState
 }
 
-type Delegation struct {
-	StakingTxHash string
-	State         proto.TransactionState
-}
-
 const (
 	// Internal slashing fee to adjust to in case babylon provide too small fee
 	// Slashing tx is around 113 bytes (depending on output address which we need to chose), with fee 8sats/b
@@ -974,37 +969,6 @@ func buildSlashingTxAndSig(
 	return slashingTx, slashingTxSignature, nil
 }
 
-func (app *StakerApp) buildDelegationData(
-	inclusionBlock *wire.MsgBlock,
-	stakingTxIdx uint32,
-	storedTx *stakerdb.StoredTransaction,
-	slashingTx *wire.MsgTx,
-	slashingTxSignature *schnorr.Signature,
-	babylonPubKey *secp256k1.PubKey) (*cl.DelegationData, error) {
-
-	proof, err := cl.GenerateProof(inclusionBlock, stakingTxIdx)
-
-	if err != nil {
-		return nil, fmt.Errorf("genereting inclusiong proof failed: %w", err)
-	}
-
-	inclusionBlockHash := inclusionBlock.BlockHash()
-
-	dg := cl.DelegationData{
-		StakingTransaction:                   storedTx.StakingTx,
-		StakingTransactionIdx:                stakingTxIdx,
-		StakingTransactionScript:             storedTx.TxScript,
-		StakingTransactionInclusionProof:     proof,
-		StakingTransactionInclusionBlockHash: &inclusionBlockHash,
-		SlashingTransaction:                  slashingTx,
-		SlashingTransactionSig:               slashingTxSignature,
-		BabylonPk:                            babylonPubKey,
-		BabylonPop:                           storedTx.Pop,
-	}
-
-	return &dg, nil
-}
-
 // helper to retrieve transaction when we are sure it must be in the store
 func (app *StakerApp) mustGetTransactionAndStakerAddress(txHash *chainhash.Hash) (*stakerdb.StoredTransaction, btcutil.Address) {
 	ts, err := app.txTracker.GetTransaction(txHash)
@@ -1117,6 +1081,7 @@ func (app *StakerApp) buildOwnedDelegation(
 	req *sendDelegationRequest,
 	stakerAddress btcutil.Address,
 	storedTx *stakerdb.StoredTransaction,
+	stakingTxInclusionProof []byte,
 ) (*cl.DelegationData, error) {
 	delegationData, err := app.getDelegationData(stakerAddress)
 
@@ -1137,32 +1102,38 @@ func (app *StakerApp) buildOwnedDelegation(
 		}).Fatalf("Failed to build delegation data for already confirmed staking transaction")
 	}
 
-	dg, err := app.buildDelegationData(
+	dg := createDelegationData(
 		req.inlusionBlock,
 		req.txIndex,
 		storedTx,
 		slashingTx,
 		slashingTxSig,
 		delegationData.babylonPubKey,
+		stakingTxInclusionProof,
 	)
 
+	return dg, nil
+}
+
+func (app *StakerApp) mustBuildInclusionProof(req *sendDelegationRequest) []byte {
+	proof, err := cl.GenerateProof(req.inlusionBlock, req.txIndex)
+
 	if err != nil {
-		// This is truly unexpected, it actually means we failed to build inclusion proof
-		// for tx which should already be k-deep
 		app.logger.WithFields(logrus.Fields{
-			"btcTxHash":     req.txHash,
-			"stakerAddress": stakerAddress,
-			"err":           err,
-		}).Fatalf("Failed to build delegation data for already confirmed staking transaction")
+			"btcTxHash": req.txHash,
+			"err":       err,
+		}).Fatalf("Failed to build inclusion proof for already confirmed transaction")
 	}
 
-	return dg, nil
+	return proof
 }
 
 func (app *StakerApp) buildDelegation(
 	req *sendDelegationRequest,
 	stakerAddress btcutil.Address,
 	storedTx *stakerdb.StoredTransaction) (*cl.DelegationData, error) {
+
+	stakingTxInclusionProof := app.mustBuildInclusionProof(req)
 
 	if storedTx.Watched {
 		watchedData, err := app.txTracker.GetWatchedTransactionData(&req.txHash)
@@ -1177,31 +1148,22 @@ func (app *StakerApp) buildDelegation(
 			}).Fatalf("Failed to build delegation data for already confirmed staking transaction")
 		}
 
-		dg, err := app.buildDelegationData(
+		dg := createDelegationData(
 			req.inlusionBlock,
 			req.txIndex,
 			storedTx,
 			watchedData.SlashingTx,
 			watchedData.SlashingTxSig,
 			watchedData.StakerBabylonPubKey,
+			stakingTxInclusionProof,
 		)
-
-		if err != nil {
-			// This is truly unexpected, it actually means we failed to build inclusion proof
-			// for tx which should already be k-deep
-			app.logger.WithFields(logrus.Fields{
-				"btcTxHash":     req.txHash,
-				"stakerAddress": stakerAddress,
-				"err":           err,
-			}).Fatalf("Failed to build delegation data for already confirmed staking transaction")
-		}
-
 		return dg, nil
 	} else {
 		return app.buildOwnedDelegation(
 			req,
 			stakerAddress,
 			storedTx,
+			stakingTxInclusionProof,
 		)
 	}
 }
@@ -1669,7 +1631,7 @@ func (app *StakerApp) handleStaking() {
 					req.stakingTx,
 					req.stakingOutputIdx,
 					req.stakingTxScript,
-					BabylonPopToDbPop(req.pop),
+					babylonPopToDbPop(req.pop),
 					req.stakerAddress,
 					req.watchTxData.slashingTx,
 					req.watchTxData.slashingTxSig,
@@ -1693,7 +1655,7 @@ func (app *StakerApp) handleStaking() {
 					req.stakingTx,
 					req.stakingOutputIdx,
 					req.stakingTxScript,
-					BabylonPopToDbPop(req.pop),
+					babylonPopToDbPop(req.pop),
 					req.stakerAddress,
 				)
 
@@ -2135,25 +2097,6 @@ func (app *StakerApp) StakeFunds(
 	case <-app.quit:
 		return nil, nil
 	}
-}
-
-func (app *StakerApp) GetAllDelegations() ([]*Delegation, error) {
-	tracked, err := app.txTracker.GetAllStoredTransactions()
-
-	if err != nil {
-		return nil, err
-	}
-
-	var delegations []*Delegation
-
-	for _, tx := range tracked {
-		delegations = append(delegations, &Delegation{
-			StakingTxHash: tx.StakingTx.TxHash().String(),
-			State:         tx.State,
-		})
-	}
-
-	return delegations, nil
 }
 
 func (app *StakerApp) StoredTransactions(limit, offset uint64) (*stakerdb.StoredTransactionQueryResult, error) {
