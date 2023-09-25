@@ -25,7 +25,6 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
-	"github.com/btcsuite/btcwallet/wallet/txsizes"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	notifier "github.com/lightningnetwork/lnd/chainntnfs"
@@ -183,13 +182,6 @@ type externalDelegationData struct {
 	babylonPubKey *secp256k1.PubKey
 
 	slashingFee btcutil.Amount
-}
-
-type spendStakeTxInfo struct {
-	spendStakeTx        *wire.MsgTx
-	fundingOutput       *wire.TxOut
-	fundingOutputScript []byte
-	calculatedFee       btcutil.Amount
 }
 
 type stakingDbInfo struct {
@@ -986,6 +978,31 @@ func (app *StakerApp) mustGetTransactionAndStakerAddress(txHash *chainhash.Hash)
 	return ts, stakerAddress
 }
 
+func (app *StakerApp) mustBuildInclusionProof(req *sendDelegationRequest) []byte {
+	proof, err := cl.GenerateProof(req.inlusionBlock, req.txIndex)
+
+	if err != nil {
+		app.logger.WithFields(logrus.Fields{
+			"btcTxHash": req.txHash,
+			"err":       err,
+		}).Fatalf("Failed to build inclusion proof for already confirmed transaction")
+	}
+
+	return proof
+}
+
+func (app *StakerApp) mustParseScript(script []byte) *staking.StakingScriptData {
+	parsedScript, err := staking.ParseStakingTransactionScript(script)
+
+	if err != nil {
+		app.logger.WithFields(logrus.Fields{
+			"err": err,
+		}).Fatal("error parsing staking transaction script from db")
+	}
+
+	return parsedScript
+}
+
 func (app *StakerApp) getDelegationData(stakerAddress btcutil.Address) (*externalDelegationData, error) {
 	params, err := app.babylonClient.Params()
 
@@ -1113,19 +1130,6 @@ func (app *StakerApp) buildOwnedDelegation(
 	)
 
 	return dg, nil
-}
-
-func (app *StakerApp) mustBuildInclusionProof(req *sendDelegationRequest) []byte {
-	proof, err := cl.GenerateProof(req.inlusionBlock, req.txIndex)
-
-	if err != nil {
-		app.logger.WithFields(logrus.Fields{
-			"btcTxHash": req.txHash,
-			"err":       err,
-		}).Fatalf("Failed to build inclusion proof for already confirmed transaction")
-	}
-
-	return proof
 }
 
 func (app *StakerApp) buildDelegation(
@@ -2135,51 +2139,6 @@ func (app *StakerApp) ListUnspentOutputs() ([]walletcontroller.Utxo, error) {
 	return app.wc.ListOutputs(false)
 }
 
-func (app *StakerApp) spendStakeTx(
-	destAddress btcutil.Address,
-	fundingTx *wire.MsgTx,
-	fundingTxHash *chainhash.Hash,
-	fundingTxStakingScript []byte,
-	fundingTxStakingOutputIdx uint32,
-) (*wire.MsgTx, *btcutil.Amount, error) {
-	destAddressScript, err := txscript.PayToAddrScript(destAddress)
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot spend staking output. Cannot built destination script: %w", err)
-	}
-
-	script, err := staking.ParseStakingTransactionScript(fundingTxStakingScript)
-
-	if err != nil {
-		app.logger.WithFields(logrus.Fields{
-			"err": err,
-		}).Fatal("error parsing staking transaction script from db")
-	}
-
-	stakingOutput := fundingTx.TxOut[fundingTxStakingOutputIdx]
-	newOutput := wire.NewTxOut(stakingOutput.Value, destAddressScript)
-
-	stakingOutputOutpoint := wire.NewOutPoint(fundingTxHash, fundingTxStakingOutputIdx)
-	stakingOutputAsInput := wire.NewTxIn(stakingOutputOutpoint, nil, nil)
-	// need to set valid sequence to unlock tx.
-	stakingOutputAsInput.Sequence = uint32(script.StakingTime)
-
-	spendTx := wire.NewMsgTx(2)
-	spendTx.AddTxIn(stakingOutputAsInput)
-	spendTx.AddTxOut(newOutput)
-
-	feeRate := app.feeEstimator.EstimateFeePerKb()
-
-	// transaction have 1 P2TR input and does not have any change
-	txSize := txsizes.EstimateVirtualSize(0, 1, 0, 0, []*wire.TxOut{newOutput}, 0)
-
-	fee := txrules.FeeForSerializeSize(btcutil.Amount(feeRate), txSize)
-
-	spendTx.TxOut[0].Value = spendTx.TxOut[0].Value - int64(fee)
-
-	return spendTx, &fee, nil
-}
-
 func (app *StakerApp) waitForSpendConfirmation(stakingTxHash chainhash.Hash, ev *notifier.ConfirmationEvent) {
 	// check we are not shutting down
 	select {
@@ -2211,59 +2170,6 @@ func (app *StakerApp) waitForSpendConfirmation(stakingTxHash chainhash.Hash, ev 
 			ev.Cancel()
 			return
 		}
-	}
-}
-
-func (app *StakerApp) buildSpendStakeTx(
-	stakingTxHash *chainhash.Hash,
-	storedtx *stakerdb.StoredTransaction,
-	destAddress btcutil.Address,
-) (*spendStakeTxInfo, error) {
-	if storedtx.State == proto.TransactionState_SENT_TO_BABYLON {
-		// transaction is only in sent to babylon state we try to spend staking output directly
-		spendTx, calculatedFee, err := app.spendStakeTx(
-			destAddress,
-			storedtx.StakingTx,
-			stakingTxHash,
-			storedtx.TxScript,
-			storedtx.StakingOutputIndex,
-		)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return &spendStakeTxInfo{
-			spendStakeTx:        spendTx,
-			fundingOutputScript: storedtx.TxScript,
-			fundingOutput:       storedtx.StakingTx.TxOut[storedtx.StakingOutputIndex],
-			calculatedFee:       *calculatedFee,
-		}, nil
-	} else if storedtx.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC {
-		data := storedtx.UnbondingTxData
-
-		unbondingTxHash := data.UnbondingTx.TxHash()
-
-		spendTx, calculatedFee, err := app.spendStakeTx(
-			destAddress,
-			data.UnbondingTx,
-			&unbondingTxHash,
-			data.UnbondingTxScript,
-			// unbonding tx has only one output
-			0,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		return &spendStakeTxInfo{
-			spendStakeTx:        spendTx,
-			fundingOutput:       data.UnbondingTx.TxOut[0],
-			fundingOutputScript: data.UnbondingTxScript,
-			calculatedFee:       *calculatedFee,
-		}, nil
-	} else {
-		return nil, fmt.Errorf("cannot build spend stake transactions.Staking transaction is in invalid state: %s", storedtx.State)
 	}
 }
 
@@ -2308,10 +2214,18 @@ func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash
 		return nil, nil, fmt.Errorf("cannot spend staking output. Error decoding staker address: %w", err)
 	}
 
-	spendStakeTxInfo, err := app.buildSpendStakeTx(
-		stakingTxHash,
+	destAddressScript, err := txscript.PayToAddrScript(destAddress)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot spend staking output. Cannot built destination script: %w", err)
+	}
+
+	currentFeeRate := app.feeEstimator.EstimateFeePerKb()
+
+	spendStakeTxInfo, err := createSpendStakeTxFromStoredTx(
 		tx,
-		destAddress,
+		destAddressScript,
+		currentFeeRate,
 	)
 
 	if err != nil {
@@ -2399,14 +2313,7 @@ func (app *StakerApp) buildUnbondingAndSlashingTxFromStakingTx(
 ) (*cl.UndelegationData, error) {
 	stakingTxHash := storedTx.StakingTx.TxHash()
 
-	stakingScriptData, err := staking.ParseStakingTransactionScript(storedTx.TxScript)
-
-	if err != nil {
-		app.logger.WithFields(logrus.Fields{
-			"stakingTxHash": stakingTxHash,
-			"err":           err,
-		}).Fatalf("Invalid staking transaction script in db")
-	}
+	stakingScriptData := app.mustParseScript(storedTx.TxScript)
 
 	stakingOutpout := storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex]
 
