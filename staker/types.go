@@ -1,6 +1,7 @@
 package staker
 
 import (
+	"bytes"
 	"fmt"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
@@ -393,4 +394,84 @@ func createWitnessToSendUnbondingTx(
 	witnessStack[5] = stakerWitness[2]
 
 	return witnessStack, nil
+}
+
+func parseWatchStakingRequest(
+	stakingTx *wire.MsgTx,
+	stakingscript []byte,
+	slashingTx *wire.MsgTx,
+	slashingTxSig *schnorr.Signature,
+	stakerBabylonPk *secp256k1.PubKey,
+	stakerAddress btcutil.Address,
+	pop *cl.BabylonPop,
+	currentParams *cl.StakingParams,
+	network *chaincfg.Params,
+) (*stakingRequest, *staking.StakingScriptData, error) {
+	// 1. Check script matches transaction
+	stakingOutputIdx, err := staking.GetIdxOutputCommitingToScript(
+		stakingTx,
+		stakingscript,
+		network,
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to watch staking tx due to script not matchin script: %w", err)
+	}
+
+	// 2. Check wheter slashing tx match staking tx
+	scriptData, err := staking.CheckTransactions(
+		slashingTx,
+		stakingTx,
+		int64(currentParams.MinSlashingTxFeeSat),
+		currentParams.SlashingAddress,
+		stakingscript,
+		network,
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid transactions: %w", err)
+	}
+
+	// 3.Check jury key in script
+	if !bytes.Equal(
+		schnorr.SerializePubKey(scriptData.StakingScriptData.JuryKey),
+		schnorr.SerializePubKey(&currentParams.JuryPk),
+	) {
+		return nil, nil, fmt.Errorf("failed to watch staking tx. Script jury key do not match current node params")
+	}
+
+	// 4. Check slashig tx sig is good. It implicitly verify staker pubkey, as script
+	// contain it.
+	err = staking.VerifyTransactionSigWithOutputData(
+		slashingTx,
+		stakingTx.TxOut[stakingOutputIdx].PkScript,
+		stakingTx.TxOut[stakingOutputIdx].Value,
+		stakingscript,
+		scriptData.StakingScriptData.StakerKey,
+		slashingTxSig.Serialize(),
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx sig: %w", err)
+	}
+
+	// 5. Validate pop
+	if err = pop.ValidatePop(stakerBabylonPk, scriptData.StakingScriptData.StakerKey, network); err != nil {
+		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid pop: %w", err)
+	}
+
+	req := newWatchedStakingRequest(
+		stakerAddress,
+		stakingTx,
+		uint32(stakingOutputIdx),
+		stakingTx.TxOut[stakingOutputIdx].PkScript,
+		stakingscript,
+		currentParams.ConfirmationTimeBlocks,
+		pop,
+		slashingTx,
+		slashingTxSig,
+		stakerBabylonPk,
+	)
+
+	return req, scriptData.StakingScriptData, nil
 }

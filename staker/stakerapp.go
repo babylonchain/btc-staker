@@ -1,7 +1,6 @@
 package staker
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -1763,100 +1762,50 @@ func (app *StakerApp) WatchStaking(
 	stakerAddress btcutil.Address,
 	pop *cl.BabylonPop,
 ) (*chainhash.Hash, error) {
-	// 1. Check script matches transaction
-	stakingOutputIdx, err := staking.GetIdxOutputCommitingToScript(
-		stakingTx,
-		stakingscript,
-		app.network,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to watch staking tx due to script not matchin script: %w", err)
-	}
-
 	currentParams, err := app.babylonClient.Params()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to watch staking tx. Failed to get params: %w", err)
 	}
 
-	// 2. Check wheter slashing tx match staking tx
-	scriptData, err := staking.CheckTransactions(
-		slashingTx,
+	watchedRequest, scriptData, err := parseWatchStakingRequest(
 		stakingTx,
-		int64(currentParams.MinSlashingTxFeeSat),
-		currentParams.SlashingAddress,
 		stakingscript,
+		slashingTx,
+		slashingTxSig,
+		stakerBabylonPk,
+		stakerAddress,
+		pop,
+		currentParams,
 		app.network,
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to watch staking tx. Invalid transactions: %w", err)
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid request: %w", err)
 	}
 
-	// 3.Check jury key in script
-	if !bytes.Equal(
-		schnorr.SerializePubKey(scriptData.StakingScriptData.JuryKey),
-		schnorr.SerializePubKey(&currentParams.JuryPk),
-	) {
-		return nil, fmt.Errorf("failed to watch staking tx. Script jury key do not match current node params")
-	}
-
-	// 4.Check validator exsits
-	if err := app.validatorExists(scriptData.StakingScriptData.ValidatorKey); err != nil {
+	// we have valid request, check whether validator exists on babylon
+	if err := app.validatorExists(scriptData.ValidatorKey); err != nil {
 		return nil, err
-	}
-
-	// 5. Check slashig tx sig is good. It implicitly verify staker pubkey, as script
-	// contain it.
-	err = staking.VerifyTransactionSigWithOutputData(
-		slashingTx,
-		stakingTx.TxOut[stakingOutputIdx].PkScript,
-		stakingTx.TxOut[stakingOutputIdx].Value,
-		stakingscript,
-		scriptData.StakingScriptData.StakerKey,
-		slashingTxSig.Serialize(),
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx sig: %w", err)
-	}
-
-	// 6. Validate pop
-	if err = pop.ValidatePop(stakerBabylonPk, scriptData.StakingScriptData.StakerKey, app.network); err != nil {
-		return nil, fmt.Errorf("failed to watch staking tx. Invalid pop: %w", err)
 	}
 
 	app.logger.WithFields(logrus.Fields{
 		"stakerAddress": stakerAddress,
-		"stakingAmount": stakingTx.TxOut[stakingOutputIdx].Value,
+		"stakingAmount": watchedRequest.stakingTx.TxOut[watchedRequest.stakingOutputIdx].Value,
 		"btxTxHash":     stakingTx.TxHash(),
 	}).Info("Received valid staking tx to watch")
 
-	req := newWatchedStakingRequest(
-		stakerAddress,
-		stakingTx,
-		uint32(stakingOutputIdx),
-		stakingTx.TxOut[stakingOutputIdx].PkScript,
-		stakingscript,
-		currentParams.ConfirmationTimeBlocks,
-		pop,
-		slashingTx,
-		slashingTxSig,
-		stakerBabylonPk,
-	)
-
-	app.stakingRequestChan <- req
+	app.stakingRequestChan <- watchedRequest
 
 	select {
-	case reqErr := <-req.errChan:
+	case reqErr := <-watchedRequest.errChan:
 		app.logger.WithFields(logrus.Fields{
 			"stakerAddress": stakerAddress,
 			"err":           reqErr,
 		}).Debugf("Sending staking tx failed")
 
 		return nil, reqErr
-	case hash := <-req.successChan:
+	case hash := <-watchedRequest.successChan:
 		return hash, nil
 	case <-app.quit:
 		return nil, nil
