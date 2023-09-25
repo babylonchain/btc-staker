@@ -8,8 +8,10 @@ import (
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/stakerdb"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
@@ -160,4 +162,84 @@ func createSpendStakeTxFromStoredTx(
 	} else {
 		return nil, fmt.Errorf("cannot build spend stake transactions.Staking transaction is in invalid state: %s", storedtx.State)
 	}
+}
+
+func createUndelegationData(
+	storedTx *stakerdb.StoredTransaction,
+	stakerPrivKey *btcec.PrivateKey,
+	juryPubKey *btcec.PublicKey,
+	slashingAddress btcutil.Address,
+	feeRatePerKb btcutil.Amount,
+	finalizationTimeBlocks uint16,
+	slashingFee btcutil.Amount,
+	stakingScriptData *staking.StakingScriptData,
+	btcNetwork *chaincfg.Params,
+) (*cl.UndelegationData, error) {
+	stakingTxHash := storedTx.StakingTx.TxHash()
+
+	stakingOutpout := storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex]
+
+	unbondingTxFee := txrules.FeeForSerializeSize(feeRatePerKb, slashingPathSpendTxVSize)
+
+	unbondingOutputValue := stakingOutpout.Value - int64(unbondingTxFee)
+
+	if unbondingOutputValue <= 0 {
+		return nil, fmt.Errorf(
+			"too large fee rate %d sats/kb. Staking output value:%d sats. Unbonding tx fee:%d sats", int64(feeRatePerKb), stakingOutpout.Value, int64(unbondingTxFee),
+		)
+	}
+
+	if unbondingOutputValue <= int64(slashingFee) {
+		return nil, fmt.Errorf(
+			"too large fee rate %d sats/kb. Unbonding output value %d sats. Slashing tx fee: %d sats", int64(feeRatePerKb), unbondingOutputValue, int64(slashingFee),
+		)
+	}
+
+	// unbonding output script is the same as staking output (usually it will have lower staking time)
+	unbondingOutput, unbondingScript, err := staking.BuildStakingOutput(
+		stakingScriptData.StakerKey,
+		stakingScriptData.ValidatorKey,
+		juryPubKey,
+		finalizationTimeBlocks+1,
+		btcutil.Amount(unbondingOutputValue),
+		btcNetwork,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build unbonding output: %w", err)
+	}
+
+	unbondingTx := wire.NewMsgTx(2)
+	unbondingTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&stakingTxHash, storedTx.StakingOutputIndex), nil, nil))
+	unbondingTx.AddTxOut(unbondingOutput)
+
+	slashUnbondingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
+		unbondingTx,
+		0,
+		slashingAddress,
+		int64(slashingFee),
+		unbondingScript,
+		btcNetwork,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build unbonding data: failed to build slashing tx: %w", err)
+	}
+
+	slashUnbondingTxSignature, err := staking.SignTxWithOneScriptSpendInputFromScript(
+		slashUnbondingTx,
+		unbondingOutput,
+		stakerPrivKey, unbondingScript,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build unbonding data: failed to sign slashing tx: %w", err)
+	}
+
+	return &cl.UndelegationData{
+		UnbondingTransaction:         unbondingTx,
+		UnbondingTransactionScript:   unbondingScript,
+		SlashUnbondingTransaction:    slashUnbondingTx,
+		SlashUnbondingTransactionSig: slashUnbondingTxSignature,
+	}, nil
 }

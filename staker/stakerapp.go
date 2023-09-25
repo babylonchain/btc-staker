@@ -2302,94 +2302,6 @@ func (app *StakerApp) ListActiveValidators(limit uint64, offset uint64) (*cl.Val
 	return app.babylonClient.QueryValidators(limit, offset)
 }
 
-func (app *StakerApp) buildUnbondingAndSlashingTxFromStakingTx(
-	storedTx *stakerdb.StoredTransaction,
-	stakerPrivKey *btcec.PrivateKey,
-	juryPubKey *btcec.PublicKey,
-	slashingAddress btcutil.Address,
-	feeRatePerKb btcutil.Amount,
-	finalizationTimeBlocks uint16,
-	slashingFee btcutil.Amount,
-) (*cl.UndelegationData, error) {
-	stakingTxHash := storedTx.StakingTx.TxHash()
-
-	stakingScriptData := app.mustParseScript(storedTx.TxScript)
-
-	stakingOutpout := storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex]
-
-	unbondingTxFee := txrules.FeeForSerializeSize(feeRatePerKb, slashingPathSpendTxVSize)
-
-	unbondingOutputValue := stakingOutpout.Value - int64(unbondingTxFee)
-
-	if unbondingOutputValue <= 0 {
-		return nil, fmt.Errorf(
-			"too large fee rate %d sats/kb. Staking output value:%d sats. Unbonding tx fee:%d sats", int64(feeRatePerKb), stakingOutpout.Value, int64(unbondingTxFee),
-		)
-	}
-
-	if unbondingOutputValue <= int64(slashingFee) {
-		return nil, fmt.Errorf(
-			"too large fee rate %d sats/kb. Unbonding output value %d sats. Slashing tx fee: %d sats", int64(feeRatePerKb), unbondingOutputValue, int64(slashingFee),
-		)
-	}
-
-	// unbonding output script is the same as staking output (usually it will have lower staking time)
-	unbondingOutput, unbondingScript, err := staking.BuildStakingOutput(
-		stakingScriptData.StakerKey,
-		stakingScriptData.ValidatorKey,
-		juryPubKey,
-		finalizationTimeBlocks+1,
-		btcutil.Amount(unbondingOutputValue),
-		app.network,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to build unbonding output: %w", err)
-	}
-
-	unbondingTx := wire.NewMsgTx(2)
-	unbondingTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&stakingTxHash, storedTx.StakingOutputIndex), nil, nil))
-	unbondingTx.AddTxOut(unbondingOutput)
-
-	slashUnbondingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
-		unbondingTx,
-		0,
-		slashingAddress,
-		int64(slashingFee),
-		unbondingScript,
-		app.network,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to build unbonding data: failed to build slashing tx: %w", err)
-	}
-
-	slashUnbondingTxSignature, err := staking.SignTxWithOneScriptSpendInputFromScript(
-		slashUnbondingTx,
-		unbondingOutput,
-		stakerPrivKey, unbondingScript,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to build unbonding data: failed to sign slashing tx: %w", err)
-	}
-
-	app.logger.WithFields(logrus.Fields{
-		"stakingTxHash":        stakingTxHash,
-		"unbondingTxHash":      unbondingTx.TxHash(),
-		"unbondingTxFeeRate":   int64(feeRatePerKb),
-		"unbondingTxFee":       int64(unbondingTxFee),
-		"unbondingOutputValue": unbondingOutputValue,
-	}).Debug("Successfully built unbonding data")
-
-	return &cl.UndelegationData{
-		UnbondingTransaction:         unbondingTx,
-		UnbondingTransactionScript:   unbondingScript,
-		SlashUnbondingTransaction:    slashUnbondingTx,
-		SlashUnbondingTransactionSig: slashUnbondingTxSignature,
-	}, nil
-}
-
 // Initiates whole unbonding process. Whole process looks like this:
 // 1. Unbonding data is build based on exsitng staking transaction data
 // 2. Unbonding data is sent to babylon as part of undelegete request
@@ -2464,7 +2376,9 @@ func (app *StakerApp) UnbondStaking(
 		return nil, fmt.Errorf("cannot unbond: failed to retrieve private key.: %w", err)
 	}
 
-	unbondingData, err := app.buildUnbondingAndSlashingTxFromStakingTx(
+	stakingScriptData := app.mustParseScript(tx.TxScript)
+
+	undelegationData, err := createUndelegationData(
 		tx,
 		stakerPrivKey,
 		&currentParams.JuryPk,
@@ -2472,13 +2386,21 @@ func (app *StakerApp) UnbondStaking(
 		unbondingTxFeeRatePerKb,
 		uint16(currentParams.FinalizationTimeoutBlocks),
 		app.getSlashingFee(currentParams),
+		stakingScriptData,
+		app.network,
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	req := newUnbondingRequest(stakingTxHash, unbondingData)
+	app.logger.WithFields(logrus.Fields{
+		"stakingTxHash":      stakingTxHash,
+		"unbondingTxHash":    undelegationData.UnbondingTransaction.TxHash(),
+		"unbondingTxFeeRate": int64(unbondingTxFeeRatePerKb),
+	}).Debug("Successfully created undelegation data")
+
+	req := newUnbondingRequest(stakingTxHash, undelegationData)
 
 	app.sendUnbondingRequestChan <- req
 
