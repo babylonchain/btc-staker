@@ -853,14 +853,8 @@ func (app *StakerApp) mustParseScript(script []byte) *staking.StakingScriptData 
 	return parsedScript
 }
 
-func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Address) (*externalDelegationData, error) {
-	params, err := app.babylonClient.Params()
-
-	if err != nil {
-		return nil, err
-	}
-
-	err = app.wc.UnlockWallet(defaultWalletUnlockTimeout)
+func (app *StakerApp) stakerPrivateKey(stakerAddress btcutil.Address) (*btcec.PrivateKey, error) {
+	err := app.wc.UnlockWallet(defaultWalletUnlockTimeout)
 
 	if err != nil {
 		return nil, err
@@ -872,10 +866,26 @@ func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Addre
 		return nil, err
 	}
 
+	return privkey, nil
+}
+
+func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Address) (*externalDelegationData, error) {
+	params, err := app.babylonClient.Params()
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakerPrivKey, err := app.stakerPrivateKey(stakerAddress)
+
+	if err != nil {
+		return nil, err
+	}
+
 	slashingFee := app.getSlashingFee(params)
 
 	return &externalDelegationData{
-		stakerPrivKey:   privkey,
+		stakerPrivKey:   stakerPrivKey,
 		slashingAddress: params.SlashingAddress,
 		babylonPubKey:   app.babylonClient.GetPubKey(),
 		slashingFee:     slashingFee,
@@ -888,15 +898,7 @@ func (app *StakerApp) sendUnbondingTxToBtcWithWitness(
 	storedTx *stakerdb.StoredTransaction,
 	unbondingData *stakerdb.UnbondingStoreData,
 ) error {
-	if err := app.wc.UnlockWallet(defaultWalletUnlockTimeout); err != nil {
-		app.logger.WithFields(logrus.Fields{
-			"stakingTxHash": stakingTxHash,
-			"err":           err,
-		}).Error("Failed to unlock btc wallet to send unbonding tx to btc")
-		return err
-	}
-
-	privkey, err := app.wc.DumpPrivateKey(stakerAddress)
+	privkey, err := app.stakerPrivateKey(stakerAddress)
 
 	if err != nil {
 		app.logger.WithFields(logrus.Fields{
@@ -1634,13 +1636,7 @@ func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash
 		return nil, nil, err
 	}
 
-	err = app.wc.UnlockWallet(defaultWalletUnlockTimeout)
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot spend staking output. Error unlocking wallet: %w", err)
-	}
-
-	privKey, err := app.wc.DumpPrivateKey(destAddress)
+	privKey, err := app.stakerPrivateKey(destAddress)
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot spend staking output. Error getting private key: %w", err)
@@ -1759,12 +1755,6 @@ func (app *StakerApp) UnbondStaking(
 		return nil, fmt.Errorf("cannot unbond: %w", err)
 	}
 
-	err = app.wc.UnlockWallet(defaultWalletUnlockTimeout)
-
-	if err != nil {
-		return nil, fmt.Errorf("cannot unbond: btc wallet error: %w", err)
-	}
-
 	// this can happen if we started staker on wrong network
 	stakerAddress, err := btcutil.DecodeAddress(tx.StakerAddress, app.network)
 
@@ -1772,7 +1762,7 @@ func (app *StakerApp) UnbondStaking(
 		return nil, fmt.Errorf("cannot unbond: failed decode staker address.: %w", err)
 	}
 
-	stakerPrivKey, err := app.wc.DumpPrivateKey(stakerAddress)
+	stakerPrivKey, err := app.stakerPrivateKey(stakerAddress)
 
 	if err != nil {
 		return nil, fmt.Errorf("cannot unbond: failed to retrieve private key.: %w", err)

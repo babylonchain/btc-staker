@@ -15,6 +15,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// TODO: All functions and types declared in this file should be moved to separate package
+// and be part of new module which will be responsible for communication with babylon chain i.e
+// retrieving data from babylon chain, sending data to babylon chain, queuing data to be send etc.
+
 type unbondingRequest struct {
 	stakingTxHash chainhash.Hash
 	unbondingData *cl.UndelegationData
