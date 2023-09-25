@@ -27,6 +27,78 @@ type spendStakeTxInfo struct {
 	calculatedFee       btcutil.Amount
 }
 
+type stakingRequest struct {
+	stakerAddress           btcutil.Address
+	stakingTx               *wire.MsgTx
+	stakingOutputIdx        uint32
+	stakingOutputPkScript   []byte
+	stakingTxScript         []byte
+	requiredDepthOnBtcChain uint32
+	pop                     *cl.BabylonPop
+	watchTxData             *watchTxData
+	errChan                 chan error
+	successChan             chan *chainhash.Hash
+}
+
+func newOwnedStakingRequest(
+	stakerAddress btcutil.Address,
+	stakingTx *wire.MsgTx,
+	stakingOutputIdx uint32,
+	stakingOutputPkScript []byte,
+	stakingScript []byte,
+	confirmationTimeBlocks uint32,
+	pop *cl.BabylonPop,
+) *stakingRequest {
+	return &stakingRequest{
+		stakerAddress:           stakerAddress,
+		stakingTx:               stakingTx,
+		stakingOutputIdx:        stakingOutputIdx,
+		stakingOutputPkScript:   stakingOutputPkScript,
+		stakingTxScript:         stakingScript,
+		requiredDepthOnBtcChain: confirmationTimeBlocks,
+		pop:                     pop,
+		watchTxData:             nil,
+		errChan:                 make(chan error, 1),
+		successChan:             make(chan *chainhash.Hash, 1),
+	}
+}
+
+type watchTxData struct {
+	slashingTx          *wire.MsgTx
+	slashingTxSig       *schnorr.Signature
+	stakerBabylonPubKey *secp256k1.PubKey
+}
+
+func newWatchedStakingRequest(
+	stakerAddress btcutil.Address,
+	stakingTx *wire.MsgTx,
+	stakingOutputIdx uint32,
+	stakingOutputPkScript []byte,
+	stakingScript []byte,
+	confirmationTimeBlocks uint32,
+	pop *cl.BabylonPop,
+	slashingTx *wire.MsgTx,
+	slashingTxSignature *schnorr.Signature,
+	stakerBabylonPubKey *secp256k1.PubKey,
+) *stakingRequest {
+	return &stakingRequest{
+		stakerAddress:           stakerAddress,
+		stakingTx:               stakingTx,
+		stakingOutputIdx:        stakingOutputIdx,
+		stakingOutputPkScript:   stakingOutputPkScript,
+		stakingTxScript:         stakingScript,
+		requiredDepthOnBtcChain: confirmationTimeBlocks,
+		pop:                     pop,
+		watchTxData: &watchTxData{
+			slashingTx:          slashingTx,
+			slashingTxSig:       slashingTxSignature,
+			stakerBabylonPubKey: stakerBabylonPubKey,
+		},
+		errChan:     make(chan error, 1),
+		successChan: make(chan *chainhash.Hash, 1),
+	}
+}
+
 // babylonPopToDbPop receives already validated pop from external sources and converts it to database representation
 func babylonPopToDbPop(pop *cl.BabylonPop) *stakerdb.ProofOfPossession {
 	return &stakerdb.ProofOfPossession{
@@ -34,6 +106,36 @@ func babylonPopToDbPop(pop *cl.BabylonPop) *stakerdb.ProofOfPossession {
 		BabylonSigOverBtcPk:  pop.BabylonEcdsaSigOverBtcPk,
 		BtcSigOverBabylonSig: pop.BtcSig,
 	}
+}
+
+func buildSlashingTxAndSig(
+	delegationData *externalDelegationData,
+	storedTx *stakerdb.StoredTransaction,
+) (*wire.MsgTx, *schnorr.Signature, error) {
+
+	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
+		storedTx.StakingTx,
+		storedTx.StakingOutputIndex,
+		delegationData.slashingAddress,
+		int64(delegationData.slashingFee),
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("buidling slashing transaction failed: %w", err)
+	}
+
+	slashingTxSignature, err := staking.SignTxWithOneScriptSpendInputFromScript(
+		slashingTx,
+		storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex],
+		delegationData.stakerPrivKey,
+		storedTx.TxScript,
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("signing slashing transaction failed: %w", err)
+	}
+
+	return slashingTx, slashingTxSignature, nil
 }
 
 func createDelegationData(
@@ -242,4 +344,53 @@ func createUndelegationData(
 		SlashUnbondingTransaction:    slashUnbondingTx,
 		SlashUnbondingTransactionSig: slashUnbondingTxSignature,
 	}, nil
+}
+
+func createWitnessToSendUnbondingTx(
+	stakerPrivKey *btcec.PrivateKey,
+	storedTx *stakerdb.StoredTransaction,
+	unbondingData *stakerdb.UnbondingStoreData,
+) (wire.TxWitness, error) {
+	if storedTx.State < proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED {
+		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Staking transaction is in invalid state: %s", storedTx.State)
+	}
+
+	if unbondingData.UnbondingTx == nil {
+		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain unbonding transaction")
+	}
+
+	if unbondingData.UnbondingTxJurySignature == nil || unbondingData.UnbondingTxValidatorSignature == nil {
+		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain all necessary signatures")
+	}
+
+	stakerUnbondingSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
+		unbondingData.UnbondingTx,
+		storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex],
+		stakerPrivKey,
+		storedTx.TxScript,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakerWitness, err := staking.NewWitnessFromStakingScriptAndSignature(
+		storedTx.TxScript,
+		stakerUnbondingSig,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Build valid wittness for spending staking output with all signatures
+	witnessStack := wire.TxWitness(make([][]byte, 6))
+	witnessStack[0] = unbondingData.UnbondingTxJurySignature.Serialize()
+	witnessStack[1] = unbondingData.UnbondingTxValidatorSignature.Serialize()
+	witnessStack[2] = stakerWitness[0]
+	witnessStack[3] = []byte{}
+	witnessStack[4] = stakerWitness[1]
+	witnessStack[5] = stakerWitness[2]
+
+	return witnessStack, nil
 }

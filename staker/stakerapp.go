@@ -33,78 +33,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type watchTxData struct {
-	slashingTx          *wire.MsgTx
-	slashingTxSig       *schnorr.Signature
-	stakerBabylonPubKey *secp256k1.PubKey
-}
-
-type stakingRequest struct {
-	stakerAddress           btcutil.Address
-	stakingTx               *wire.MsgTx
-	stakingOutputIdx        uint32
-	stakingOutputPkScript   []byte
-	stakingTxScript         []byte
-	requiredDepthOnBtcChain uint32
-	pop                     *cl.BabylonPop
-	watchTxData             *watchTxData
-	errChan                 chan error
-	successChan             chan *chainhash.Hash
-}
-
-func newOwnedStakingRequest(
-	stakerAddress btcutil.Address,
-	stakingTx *wire.MsgTx,
-	stakingOutputIdx uint32,
-	stakingOutputPkScript []byte,
-	stakingScript []byte,
-	confirmationTimeBlocks uint32,
-	pop *cl.BabylonPop,
-) *stakingRequest {
-	return &stakingRequest{
-		stakerAddress:           stakerAddress,
-		stakingTx:               stakingTx,
-		stakingOutputIdx:        stakingOutputIdx,
-		stakingOutputPkScript:   stakingOutputPkScript,
-		stakingTxScript:         stakingScript,
-		requiredDepthOnBtcChain: confirmationTimeBlocks,
-		pop:                     pop,
-		watchTxData:             nil,
-		errChan:                 make(chan error, 1),
-		successChan:             make(chan *chainhash.Hash, 1),
-	}
-}
-
-func newWatchedStakingRequest(
-	stakerAddress btcutil.Address,
-	stakingTx *wire.MsgTx,
-	stakingOutputIdx uint32,
-	stakingOutputPkScript []byte,
-	stakingScript []byte,
-	confirmationTimeBlocks uint32,
-	pop *cl.BabylonPop,
-	slashingTx *wire.MsgTx,
-	slashingTxSignature *schnorr.Signature,
-	stakerBabylonPubKey *secp256k1.PubKey,
-) *stakingRequest {
-	return &stakingRequest{
-		stakerAddress:           stakerAddress,
-		stakingTx:               stakingTx,
-		stakingOutputIdx:        stakingOutputIdx,
-		stakingOutputPkScript:   stakingOutputPkScript,
-		stakingTxScript:         stakingScript,
-		requiredDepthOnBtcChain: confirmationTimeBlocks,
-		pop:                     pop,
-		watchTxData: &watchTxData{
-			slashingTx:          slashingTx,
-			slashingTxSig:       slashingTxSignature,
-			stakerBabylonPubKey: stakerBabylonPubKey,
-		},
-		errChan:     make(chan error, 1),
-		successChan: make(chan *chainhash.Hash, 1),
-	}
-}
-
 type unbondingRequest struct {
 	stakingTxHash chainhash.Hash
 	unbondingData *cl.UndelegationData
@@ -931,36 +859,6 @@ func (app *StakerApp) getSlashingFee(p *cl.StakingParams) btcutil.Amount {
 	return feeFromBabylon
 }
 
-func buildSlashingTxAndSig(
-	delegationData *externalDelegationData,
-	storedTx *stakerdb.StoredTransaction,
-) (*wire.MsgTx, *schnorr.Signature, error) {
-
-	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
-		storedTx.StakingTx,
-		storedTx.StakingOutputIndex,
-		delegationData.slashingAddress,
-		int64(delegationData.slashingFee),
-	)
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("buidling slashing transaction failed: %w", err)
-	}
-
-	slashingTxSignature, err := staking.SignTxWithOneScriptSpendInputFromScript(
-		slashingTx,
-		storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex],
-		delegationData.stakerPrivKey,
-		storedTx.TxScript,
-	)
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("signing slashing transaction failed: %w", err)
-	}
-
-	return slashingTx, slashingTxSignature, nil
-}
-
 // helper to retrieve transaction when we are sure it must be in the store
 func (app *StakerApp) mustGetTransactionAndStakerAddress(txHash *chainhash.Hash) (*stakerdb.StoredTransaction, btcutil.Address) {
 	ts, err := app.txTracker.GetTransaction(txHash)
@@ -1003,7 +901,7 @@ func (app *StakerApp) mustParseScript(script []byte) *staking.StakingScriptData 
 	return parsedScript
 }
 
-func (app *StakerApp) getDelegationData(stakerAddress btcutil.Address) (*externalDelegationData, error) {
+func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Address) (*externalDelegationData, error) {
 	params, err := app.babylonClient.Params()
 
 	if err != nil {
@@ -1100,7 +998,7 @@ func (app *StakerApp) buildOwnedDelegation(
 	storedTx *stakerdb.StoredTransaction,
 	stakingTxInclusionProof []byte,
 ) (*cl.DelegationData, error) {
-	delegationData, err := app.getDelegationData(stakerAddress)
+	delegationData, err := app.retrieveExternalDelegationData(stakerAddress)
 
 	if err != nil {
 		return nil, err
@@ -1422,45 +1320,23 @@ func (app *StakerApp) sendUnbondingTxWithWitness(
 		return err
 	}
 
-	stakerUnbondingSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
-		unbondingData.UnbondingTx,
-		storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex],
+	witness, err := createWitnessToSendUnbondingTx(
 		privkey,
-		storedTx.TxScript,
+		storedTx,
+		unbondingData,
 	)
 
 	if err != nil {
-		// Critical err we should always be able to sign unbonding tx
+		// we panic here, as our data should be correct at this point
 		app.logger.WithFields(logrus.Fields{
 			"stakingTxHash": stakingTxHash,
 			"err":           err,
-		}).Fatalf("Failed to sign unbonding tx with staker signature")
+		}).Fatalf("Failed to create witness to send unbonding tx to btc")
 	}
-
-	stakerWitness, err := staking.NewWitnessFromStakingScriptAndSignature(
-		storedTx.TxScript,
-		stakerUnbondingSig,
-	)
-
-	if err != nil {
-		// Critical err we should always be able to sign unbonding tx
-		app.logger.WithFields(logrus.Fields{
-			"stakingTxHash": stakingTxHash,
-			"err":           err,
-		}).Fatalf("Failed to sign unbonding tx with staker signature")
-	}
-
-	// Build valid wittness for spending staking output with all signatures
-	witnessStack := wire.TxWitness(make([][]byte, 6))
-	witnessStack[0] = unbondingData.UnbondingTxJurySignature.Serialize()
-	witnessStack[1] = unbondingData.UnbondingTxValidatorSignature.Serialize()
-	witnessStack[2] = stakerWitness[0]
-	witnessStack[3] = []byte{}
-	witnessStack[4] = stakerWitness[1]
-	witnessStack[5] = stakerWitness[2]
 
 	unbondingTx := unbondingData.UnbondingTx
-	unbondingTx.TxIn[0].Witness = witnessStack
+
+	unbondingTx.TxIn[0].Witness = witness
 
 	_, err = app.wc.SendRawTransaction(unbondingTx, true)
 
