@@ -41,6 +41,10 @@ type stakingRequest struct {
 	successChan             chan *chainhash.Hash
 }
 
+func (req *stakingRequest) isWatched() bool {
+	return req.watchTxData != nil
+}
+
 func newOwnedStakingRequest(
 	stakerAddress btcutil.Address,
 	stakingTx *wire.MsgTx,
