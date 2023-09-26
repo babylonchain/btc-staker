@@ -53,7 +53,7 @@ type unbondingSignaturesConfirmed struct {
 type sendDelegationRequest struct {
 	txHash                      chainhash.Hash
 	txIndex                     uint32
-	inlusionBlock               *wire.MsgBlock
+	inclusionBlock              *wire.MsgBlock
 	requiredInclusionBlockDepth uint64
 }
 
@@ -74,7 +74,7 @@ func (app *StakerApp) scheduleSendDelegationToBabylonAfter(timeout time.Duration
 
 // isBabylonBtcLcReady checks if Babylon BTC light client is ready to receive delegation
 func (app *StakerApp) isBabylonBtcLcReady(req *sendDelegationRequest) (bool, error) {
-	blockHash := req.inlusionBlock.BlockHash()
+	blockHash := req.inclusionBlock.BlockHash()
 
 	depth, err := app.babylonClient.QueryHeaderDepth(&blockHash)
 
@@ -83,7 +83,7 @@ func (app *StakerApp) isBabylonBtcLcReady(req *sendDelegationRequest) (bool, err
 			"btcTxHash":    req.txHash,
 			"btcBlockHash": blockHash,
 			"err":          err,
-		}).Error("Error getting btc header depth on babylon btc light client")
+		}).Error("failed to get btc header depth on babylon btc light client")
 
 		// If header is not known to babylon, or it is on LCFork, then most probably
 		// lc is not up to date. We should retry sending delegation after some time.
@@ -150,7 +150,7 @@ func (app *StakerApp) buildOwnedDelegation(
 	}
 
 	dg := createDelegationData(
-		req.inlusionBlock,
+		req.inclusionBlock,
 		req.txIndex,
 		storedTx,
 		slashingTx,
@@ -183,7 +183,7 @@ func (app *StakerApp) buildDelegation(
 		}
 
 		dg := createDelegationData(
-			req.inlusionBlock,
+			req.inclusionBlock,
 			req.txIndex,
 			storedTx,
 			watchedData.SlashingTx,

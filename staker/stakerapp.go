@@ -605,7 +605,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			req := &sendDelegationRequest{
 				txHash:                      *stakingTxHash,
 				txIndex:                     details.TxIndex,
-				inlusionBlock:               details.Block,
+				inclusionBlock:              details.Block,
 				requiredInclusionBlockDepth: uint64(stakingParams.ConfirmationTimeBlocks),
 			}
 
@@ -829,7 +829,7 @@ func (app *StakerApp) mustGetTransactionAndStakerAddress(txHash *chainhash.Hash)
 }
 
 func (app *StakerApp) mustBuildInclusionProof(req *sendDelegationRequest) []byte {
-	proof, err := cl.GenerateProof(req.inlusionBlock, req.txIndex)
+	proof, err := cl.GenerateProof(req.inclusionBlock, req.txIndex)
 
 	if err != nil {
 		app.logger.WithFields(logrus.Fields{
@@ -1171,7 +1171,7 @@ func (app *StakerApp) handleStaking() {
 			req := &sendDelegationRequest{
 				txHash:                      confEvent.txHash,
 				txIndex:                     confEvent.txIndex,
-				inlusionBlock:               confEvent.inlusionBlock,
+				inclusionBlock:              confEvent.inlusionBlock,
 				requiredInclusionBlockDepth: uint64(confEvent.blockDepth),
 			}
 
