@@ -594,7 +594,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				app.logger.WithFields(logrus.Fields{
 					"btcTxHash": stakingTxHash,
 				}).Error("Already confirmed transaction not found on btc chain.")
-				return nil
+				continue
 			}
 
 			app.logger.WithFields(logrus.Fields{
@@ -610,8 +610,6 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			}
 
 			app.sendDelegationWithTxToBabylon(req)
-
-			return nil
 		}
 	}
 
