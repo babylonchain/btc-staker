@@ -229,6 +229,12 @@ func (td *testStakingData) withStakingTime(time uint16) *testStakingData {
 	return &tdCopy
 }
 
+func (td *testStakingData) withStakingAmout(amout int64) *testStakingData {
+	tdCopy := *td
+	tdCopy.StakingAmount = int64(amout)
+	return &tdCopy
+}
+
 func initBtcWalletClient(
 	t *testing.T,
 	client walletcontroller.WalletController,
@@ -1074,14 +1080,23 @@ func TestRestartingTxNotOnBabylon(t *testing.T) {
 	params, err := cl.Params()
 	require.NoError(t, err)
 	stakingTime := uint16(staker.GetMinStakingTime(params))
-	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
-	tm.createAndRegisterValidator(t, testStakingData)
-	txHash := tm.sendStakingTx(t, testStakingData)
+	testStakingData1 := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+	testStakingData2 := testStakingData1.withStakingAmout(11000)
+
+	tm.createAndRegisterValidator(t, testStakingData1)
+
+	txHashes := tm.sendMultipleStakingTx(t, []*testStakingData{
+		testStakingData1,
+		testStakingData2,
+	})
 
 	// Confirm tx on btc
 	minedBlocks := tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, false)
-	tm.waitForStakingTxState(t, txHash, proto.TransactionState_CONFIRMED_ON_BTC)
+
+	for _, txHash := range txHashes {
+		tm.waitForStakingTxState(t, txHash, proto.TransactionState_CONFIRMED_ON_BTC)
+	}
 
 	// restart app, tx is confirmed but not delivered to babylon
 	tm.RestartApp(t)
@@ -1089,7 +1104,9 @@ func TestRestartingTxNotOnBabylon(t *testing.T) {
 	// send headers to babylon, so that we can send delegation tx
 	go tm.sendHeadersToBabylon(t, minedBlocks)
 
-	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
+	for _, txHash := range txHashes {
+		tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
+	}
 }
 
 func TestStakingUnbonding(t *testing.T) {
