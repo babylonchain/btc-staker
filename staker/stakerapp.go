@@ -417,7 +417,7 @@ func (app *StakerApp) handleBtcTxInfo(
 
 			// block is deep enough to init sent to babylon
 			app.stakingTxBtcConfirmedEvChan <- &stakingTxBtcConfirmedEvent{
-				txHash:        *stakingTxHash,
+				stakingTxHash: *stakingTxHash,
 				txIndex:       btcTxInfo.TxIndex,
 				blockDepth:    params.ConfirmationTimeBlocks,
 				blockHash:     *btcTxInfo.BlockHash,
@@ -560,8 +560,8 @@ func (app *StakerApp) checkTransactionsStatus() error {
 
 			// transaction is already on babylon, treat it as succesful delegation.
 			app.delegationSubmissionResultEvChan <- &delegationSubmissionResultEvent{
-				txHash: stakingTxHash,
-				err:    nil,
+				stakingTxHash: *stakingTxHash,
+				err:           nil,
 			}
 		} else {
 			// transaction which is not on babylon, is already confirmed on btc chain
@@ -760,7 +760,7 @@ func (app *StakerApp) waitForStakingTxConfirmation(
 		select {
 		case conf := <-ev.Confirmed:
 			app.stakingTxBtcConfirmedEvChan <- &stakingTxBtcConfirmedEvent{
-				txHash:        conf.Tx.TxHash(),
+				stakingTxHash: conf.Tx.TxHash(),
 				txIndex:       conf.TxIndex,
 				blockDepth:    depthOnBtcChain,
 				blockHash:     *conf.BlockHash,
@@ -1133,13 +1133,14 @@ func (app *StakerApp) sendToDelegationToBabylonTask(
 				"attempt":      n + 1,
 				"max_attempts": RtyAttNum,
 				"error":        err,
+				"txHash":       req.txHash,
 			}).Error("Failed to deliver delegation to babylon")
 		}),
 	)
 
 	var response = &delegationSubmissionResultEvent{
-		txHash: &req.txHash,
-		err:    nil,
+		stakingTxHash: req.txHash,
+		err:           nil,
 	}
 
 	if err != nil {
@@ -1160,13 +1161,9 @@ func (app *StakerApp) handleStakingEvents() {
 	for {
 		select {
 		case ev := <-app.stakingRequestedEvChan:
-			txHash := ev.stakingTx.TxHash()
-			bestBlockHeight := app.currentBestBlockHeight.Load()
+			app.logStakingEventReceived(ev)
 
-			app.logger.WithFields(logrus.Fields{
-				"btcTxHash":              txHash,
-				"currentBestBlockHeight": bestBlockHeight,
-			}).Infof("Received new staking request")
+			bestBlockHeight := app.currentBestBlockHeight.Load()
 
 			if ev.isWatched() {
 				err := app.txTracker.AddWatchedTransaction(
@@ -1207,7 +1204,7 @@ func (app *StakerApp) handleStakingEvents() {
 			}
 
 			if err := app.waitForStakingTransactionConfirmation(
-				&txHash,
+				&ev.stakingTxHash,
 				ev.stakingOutputPkScript,
 				ev.requiredDepthOnBtcChain,
 				uint32(bestBlockHeight),
@@ -1216,47 +1213,40 @@ func (app *StakerApp) handleStakingEvents() {
 				continue
 			}
 
-			app.logger.WithFields(logrus.Fields{
-				"btcTxHash": &txHash,
-				"confLeft":  ev.requiredDepthOnBtcChain,
-				"watched":   ev.isWatched(),
-			}).Infof("Staking transaction successfully registred")
-
-			ev.successChan <- &txHash
+			ev.successChan <- &ev.stakingTxHash
+			app.logStakingEventProcessed(ev)
 
 		case ev := <-app.stakingTxBtcConfirmedEvChan:
+			app.logStakingEventReceived(ev)
+
 			if err := app.txTracker.SetTxConfirmed(
-				&ev.txHash,
+				&ev.stakingTxHash,
 				&ev.blockHash,
 				ev.blockHeight,
 			); err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
-				app.logger.Fatalf("Error setting state for tx %s: %s", ev.txHash, err)
+				app.logger.Fatalf("Error setting state for tx %s: %s", ev.stakingTxHash, err)
 			}
 
-			app.logger.WithFields(logrus.Fields{
-				"btcTxHash":   ev.txHash,
-				"blockHash":   ev.blockHash,
-				"blockHeight": ev.blockHeight,
-			}).Infof("BTC transaction has been confirmed")
-
 			req := &sendDelegationRequest{
-				txHash:                      ev.txHash,
+				txHash:                      ev.stakingTxHash,
 				txIndex:                     ev.txIndex,
 				inclusionBlock:              ev.inlusionBlock,
 				requiredInclusionBlockDepth: uint64(ev.blockDepth),
 			}
 
-			storedTx, stakerAddress := app.mustGetTransactionAndStakerAddress(&ev.txHash)
+			storedTx, stakerAddress := app.mustGetTransactionAndStakerAddress(&ev.stakingTxHash)
 
 			// TODO: Introduce max number of sendToDelegationToBabylonTasks. It should be tied to
 			// accepting new staking delegations i.e we will hit it we should stop accepting new stakingrequests
 			// as either babylon node is not healthy or we are constructing invalid delegations
 			app.wg.Add(1)
 			go app.sendToDelegationToBabylonTask(req, stakerAddress, storedTx)
+			app.logStakingEventProcessed(ev)
 
 		case ev := <-app.delegationSubmissionResultEvChan:
+			app.logStakingEventReceived(ev)
 			if ev.err != nil {
 				// TODO: For now we just kill the app, in case comms with babylon failed.
 				// Ultimately we probably should:
@@ -1273,17 +1263,15 @@ func (app *StakerApp) handleStakingEvents() {
 				}).Fatalf("Error sending delegation to babylon")
 			}
 
-			if err := app.txTracker.SetTxSentToBabylon(ev.txHash); err != nil {
+			if err := app.txTracker.SetTxSentToBabylon(&ev.stakingTxHash); err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
-				app.logger.Fatalf("Error setting state for tx %s: %s", ev.txHash, err)
+				app.logger.Fatalf("Error setting state for tx %s: %s", ev.stakingTxHash, err)
 			}
-
-			app.logger.WithFields(logrus.Fields{
-				"btcTxHash": ev.txHash,
-			}).Infof("BTC transaction successfully sent to babylon as part of delegation")
+			app.logStakingEventProcessed(ev)
 
 		case ev := <-app.undelegationSubmittedToBabylonEvChan:
+			app.logStakingEventReceived(ev)
 			if err := app.txTracker.SetTxUnbondingStarted(
 				&ev.stakingTxHash,
 				ev.unbondingTransaction,
@@ -1292,9 +1280,6 @@ func (app *StakerApp) handleStakingEvents() {
 				// TODO: handle this error somehow, it means we possilbly make invalid state transition
 				app.logger.Fatalf("Error setting state for tx %s: %s", &ev.stakingTxHash, err)
 			}
-			app.logger.WithFields(logrus.Fields{
-				"btcTxHash": ev.stakingTxHash,
-			}).Debug("Unbonding request successfully sent to babylon, waiting for signatures")
 
 			// start checking for signatures
 			app.wg.Add(1)
@@ -1303,8 +1288,11 @@ func (app *StakerApp) handleStakingEvents() {
 			unbondingTxHash := ev.unbondingTransaction.TxHash()
 			// return registered unbonding tx hash to caller
 			ev.successChan <- &unbondingTxHash
+			app.logStakingEventProcessed(ev)
 
 		case ev := <-app.unbondingTxSignaturesConfirmedOnBabylonEvChan:
+			app.logStakingEventReceived(ev)
+
 			if err := app.txTracker.SetTxUnbondingSignaturesReceived(
 				&ev.stakingTxHash,
 				ev.validatorUnbondingSignature,
@@ -1315,11 +1303,6 @@ func (app *StakerApp) handleStakingEvents() {
 			}
 
 			storedTx, stakerAddress := app.mustGetTransactionAndStakerAddress(&ev.stakingTxHash)
-
-			app.logger.WithFields(logrus.Fields{
-				"stakingTxHash": &ev.stakingTxHash,
-			}).Debug("Initiate sending btc unbonding tx to btc network and waiting for confirmation")
-
 			app.wg.Add(1)
 			go app.sendUnbondingTxToBtcAndWaitForConfirmation(
 				&ev.stakingTxHash,
@@ -1327,8 +1310,10 @@ func (app *StakerApp) handleStakingEvents() {
 				storedTx,
 				storedTx.UnbondingTxData,
 			)
+			app.logStakingEventProcessed(ev)
 
 		case ev := <-app.unbondingTxConfirmedOnBtcEvChan:
+			app.logStakingEventReceived(ev)
 			if err := app.txTracker.SetTxUnbondingConfirmedOnBtc(
 				&ev.stakingTxHash,
 				&ev.blockHash,
@@ -1338,17 +1323,16 @@ func (app *StakerApp) handleStakingEvents() {
 				// which is seems like programming error. Maybe panic?
 				app.logger.Fatalf("Error setting state for tx %s: %s", ev.stakingTxHash, err)
 			}
+			app.logStakingEventProcessed(ev)
 
 		case ev := <-app.spendStakeTxConfirmedOnBtcEvChan:
+			app.logStakingEventReceived(ev)
 			if err := app.txTracker.SetTxSpentOnBtc(&ev.stakingTxHash); err != nil {
 				// TODO: handle this error somehow, it means we received spend stake confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
 				app.logger.Fatalf("Error setting state for tx %s: %s", ev.stakingTxHash, err)
 			}
-
-			app.logger.WithFields(logrus.Fields{
-				"btcTxHash": ev.stakingTxHash,
-			}).Infof("BTC Staking transaction successfully spent and confirmed on BTC network")
+			app.logStakingEventProcessed(ev)
 
 		case <-app.quit:
 			return
@@ -1884,6 +1868,8 @@ func (app *StakerApp) UnbondStaking(
 		successChan:                make(chan *chainhash.Hash, 1),
 	}
 
+
+	
 	app.undelegationSubmittedToBabylonEvChan <- &unbondingRequestConfirmEvent
 
 	select {
