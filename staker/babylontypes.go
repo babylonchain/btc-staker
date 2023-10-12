@@ -9,7 +9,6 @@ import (
 	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
@@ -20,29 +19,11 @@ import (
 // and be part of new module which will be responsible for communication with babylon chain i.e
 // retrieving data from babylon chain, sending data to babylon chain, queuing data to be send etc.
 
-type unbondingRequestConfirm struct {
-	stakingTxHash              chainhash.Hash
-	unbondingTransaction       *wire.MsgTx
-	unbondingTransactionScript []byte
-	successChan                chan *chainhash.Hash
-}
-
-type unbondingSignaturesConfirmed struct {
-	stakingTxHash               chainhash.Hash
-	juryUnbondingSignature      *schnorr.Signature
-	validatorUnbondingSignature *schnorr.Signature
-}
-
 type sendDelegationRequest struct {
 	txHash                      chainhash.Hash
 	txIndex                     uint32
 	inclusionBlock              *wire.MsgBlock
 	requiredInclusionBlockDepth uint64
-}
-
-type sendDelegationResponse struct {
-	txHash *chainhash.Hash
-	err    error
 }
 
 func (app *StakerApp) buildOwnedDelegation(
@@ -173,14 +154,14 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 
 				// first push signatures to the channel, this will block until signatures pushed on this channel
 				// as channel is unbuffered
-				req := &unbondingSignaturesConfirmed{
+				req := &unbondingTxSignaturesConfirmedOnBabylonEvent{
 					stakingTxHash:               *stakingTxHash,
 					juryUnbondingSignature:      di.UndelegationInfo.JuryUnbodningSignature,
 					validatorUnbondingSignature: di.UndelegationInfo.ValidatorUnbondingSignature,
 				}
 
-				utils.PushOrQuit[*unbondingSignaturesConfirmed](
-					app.unbondingSignaturesConfirmedChan,
+				utils.PushOrQuit[*unbondingTxSignaturesConfirmedOnBabylonEvent](
+					app.unbondingTxSignaturesConfirmedOnBabylonEvChan,
 					req,
 					app.quit,
 				)
