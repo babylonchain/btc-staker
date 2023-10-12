@@ -416,7 +416,7 @@ func (app *StakerApp) handleBtcTxInfo(
 			}).Debug("Transaction deep enough in btc chain to be sent to Babylon")
 
 			// block is deep enough to init sent to babylon
-			app.stakingTxBtcConfirmedEvChan <- &stakingTxBtcConfirmedEvent{
+			ev := &stakingTxBtcConfirmedEvent{
 				stakingTxHash: *stakingTxHash,
 				txIndex:       btcTxInfo.TxIndex,
 				blockDepth:    params.ConfirmationTimeBlocks,
@@ -425,6 +425,13 @@ func (app *StakerApp) handleBtcTxInfo(
 				tx:            txInfo.StakingTx,
 				inlusionBlock: btcTxInfo.Block,
 			}
+
+			utils.PushOrQuit[*stakingTxBtcConfirmedEvent](
+				app.stakingTxBtcConfirmedEvChan,
+				ev,
+				app.quit,
+			)
+
 		} else {
 			app.logger.WithFields(logrus.Fields{
 				"btcTxHash":              stakingTxHash,
@@ -558,11 +565,16 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				"btcTxHash": stakingTxHash,
 			}).Debug("Already confirmed transaction found on Babylon as part of delegation. Fix db state")
 
-			// transaction is already on babylon, treat it as succesful delegation.
-			app.delegationSubmissionResultEvChan <- &delegationSubmissionResultEvent{
+			ev := &delegationSubmissionResultEvent{
 				stakingTxHash: *stakingTxHash,
 				err:           nil,
 			}
+
+			utils.PushOrQuit[*delegationSubmissionResultEvent](
+				app.delegationSubmissionResultEvChan,
+				ev,
+				app.quit,
+			)
 		} else {
 			// transaction which is not on babylon, is already confirmed on btc chain
 			// get all necessary info and send it to babylon
@@ -759,7 +771,7 @@ func (app *StakerApp) waitForStakingTxConfirmation(
 		// transaction have beer reorged out of the chain
 		select {
 		case conf := <-ev.Confirmed:
-			app.stakingTxBtcConfirmedEvChan <- &stakingTxBtcConfirmedEvent{
+			stakingEvent := &stakingTxBtcConfirmedEvent{
 				stakingTxHash: conf.Tx.TxHash(),
 				txIndex:       conf.TxIndex,
 				blockDepth:    depthOnBtcChain,
@@ -768,6 +780,12 @@ func (app *StakerApp) waitForStakingTxConfirmation(
 				tx:            conf.Tx,
 				inlusionBlock: conf.Block,
 			}
+
+			utils.PushOrQuit[*stakingTxBtcConfirmedEvent](
+				app.stakingTxBtcConfirmedEvChan,
+				stakingEvent,
+				app.quit,
+			)
 			ev.Cancel()
 			return
 		case u := <-ev.Updates:
@@ -1437,7 +1455,11 @@ func (app *StakerApp) WatchStaking(
 		"btxTxHash":     stakingTx.TxHash(),
 	}).Info("Received valid staking tx to watch")
 
-	app.stakingRequestedEvChan <- watchedRequest
+	utils.PushOrQuit[*stakingRequestedEvent](
+		app.stakingRequestedEvChan,
+		watchedRequest,
+		app.quit,
+	)
 
 	select {
 	case reqErr := <-watchedRequest.errChan:
@@ -1553,7 +1575,11 @@ func (app *StakerApp) StakeFunds(
 		pop,
 	)
 
-	app.stakingRequestedEvChan <- req
+	utils.PushOrQuit[*stakingRequestedEvent](
+		app.stakingRequestedEvChan,
+		req,
+		app.quit,
+	)
 
 	select {
 	case reqErr := <-req.errChan:
@@ -1621,11 +1647,18 @@ func (app *StakerApp) waitForSpendConfirmation(stakingTxHash chainhash.Hash, ev 
 	for {
 		select {
 		case <-ev.Confirmed:
-			// transaction which spends staking transaction is confirmed on BTC inform
-			// main loop about it
-			app.spendStakeTxConfirmedOnBtcEvChan <- &spendStakeTxConfirmedOnBtcEvent{
+			stakingEvent := &spendStakeTxConfirmedOnBtcEvent{
 				stakingTxHash,
 			}
+
+			// transaction which spends staking transaction is confirmed on BTC inform
+			// main loop about it
+			utils.PushOrQuit[*spendStakeTxConfirmedOnBtcEvent](
+				app.spendStakeTxConfirmedOnBtcEvChan,
+				stakingEvent,
+				app.quit,
+			)
+
 			ev.Cancel()
 			return
 		case <-ctx.Done():
@@ -1868,9 +1901,11 @@ func (app *StakerApp) UnbondStaking(
 		successChan:                make(chan *chainhash.Hash, 1),
 	}
 
-
-	
-	app.undelegationSubmittedToBabylonEvChan <- &unbondingRequestConfirmEvent
+	utils.PushOrQuit[*undelegationSubmittedToBabylonEvent](
+		app.undelegationSubmittedToBabylonEvChan,
+		&unbondingRequestConfirmEvent,
+		app.quit,
+	)
 
 	select {
 	case hash := <-unbondingRequestConfirmEvent.successChan:
