@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/sirupsen/logrus"
@@ -14,20 +15,8 @@ var (
 	ErrBabylonBtcLightClientNotReady = errors.New("babylon btc light client is not ready to receive delegation")
 )
 
-type externalRequest[A any] struct {
-	successChan chan A
-	errChan     chan error
-}
-
-func newExternalRequest[A any]() externalRequest[A] {
-	return externalRequest[A]{
-		successChan: make(chan A, 1),
-		errChan:     make(chan error, 1),
-	}
-}
-
 type sendDelegationRequest struct {
-	externalRequest[*sdk.TxResponse]
+	utils.Request[*sdk.TxResponse]
 	dg                          *DelegationData
 	requiredInclusionBlockDepth uint64
 }
@@ -37,14 +26,14 @@ func newSendDelegationRequest(
 	requiredInclusionBlockDepth uint64,
 ) sendDelegationRequest {
 	return sendDelegationRequest{
-		externalRequest:             newExternalRequest[*sdk.TxResponse](),
+		Request:                     utils.NewRequest[*sdk.TxResponse](),
 		dg:                          dg,
 		requiredInclusionBlockDepth: requiredInclusionBlockDepth,
 	}
 }
 
 type sendUndelegationRequest struct {
-	externalRequest[*sdk.TxResponse]
+	utils.Request[*sdk.TxResponse]
 	stakingTxHash *chainhash.Hash
 	ud            *UndelegationData
 }
@@ -54,9 +43,9 @@ func newSendUndelegationRequest(
 	stakingTxHash *chainhash.Hash,
 ) sendUndelegationRequest {
 	return sendUndelegationRequest{
-		externalRequest: newExternalRequest[*sdk.TxResponse](),
-		ud:              ud,
-		stakingTxHash:   stakingTxHash,
+		Request:       utils.NewRequest[*sdk.TxResponse](),
+		ud:            ud,
+		stakingTxHash: stakingTxHash,
 	}
 }
 
@@ -148,7 +137,7 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 					"err":       err,
 				}).Error("Cannot send delegation request to babylon")
 
-				req.errChan <- err
+				req.ErrorChan() <- err
 				continue
 			}
 
@@ -170,26 +159,26 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 					"err":       err,
 				}).Error("Error while sending delegation data to babylon")
 
-				req.errChan <- fmt.Errorf("failed to send delegation for tx with hash:%s:%w", stakingTxHash.String(), err)
+				req.ErrorChan() <- fmt.Errorf("failed to send delegation for tx with hash:%s:%w", stakingTxHash.String(), err)
 			}
 
-			req.successChan <- txResp
+			req.ResultChan() <- txResp
 
 		case req := <-m.sendUndelegationRequestChan:
 			di, err := m.cl.QueryDelegationInfo(req.stakingTxHash)
 
 			if err != nil {
-				req.errChan <- fmt.Errorf("failed to retrieve delegation info for staking tx with hash: %s : %w", req.stakingTxHash.String(), err)
+				req.ErrorChan() <- fmt.Errorf("failed to retrieve delegation info for staking tx with hash: %s : %w", req.stakingTxHash.String(), err)
 				continue
 			}
 
 			if !di.Active {
-				req.errChan <- fmt.Errorf("cannot sent unbonding request for staking tx with hash: %s, as delegation is not active", req.stakingTxHash.String())
+				req.ErrorChan() <- fmt.Errorf("cannot sent unbonding request for staking tx with hash: %s, as delegation is not active", req.stakingTxHash.String())
 				continue
 			}
 
 			if di.UndelegationInfo != nil {
-				req.errChan <- fmt.Errorf("cannot sent unbonding request for staking tx with hash: %s, as unbonding request was already sent", req.stakingTxHash.String())
+				req.ErrorChan() <- fmt.Errorf("cannot sent unbonding request for staking tx with hash: %s, as unbonding request was already sent", req.stakingTxHash.String())
 				continue
 			}
 
@@ -208,11 +197,11 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 					}).Error("Invalid delegation data sent to babylon")
 				}
 
-				req.errChan <- fmt.Errorf("failed to send unbonding for delegation with staking hash:%s:%w", req.stakingTxHash.String(), err)
+				req.ErrorChan() <- fmt.Errorf("failed to send unbonding for delegation with staking hash:%s:%w", req.stakingTxHash.String(), err)
 				continue
 			}
 
-			req.successChan <- txResp
+			req.ResultChan() <- txResp
 
 		case <-m.quit:
 			return
@@ -226,16 +215,12 @@ func (m *BabylonMsgSender) SendDelegation(
 ) (*sdk.TxResponse, error) {
 	req := newSendDelegationRequest(dg, requiredInclusionBlockDepth)
 
-	m.sendDelegationRequestChan <- &req
+	return utils.SendRequestAndWaitForResponseOrQuit[*sdk.TxResponse, *sendDelegationRequest](
+		&req,
+		m.sendDelegationRequestChan,
+		m.quit,
+	)
 
-	select {
-	case <-m.quit:
-		return nil, fmt.Errorf("babylon msg sender quiting")
-	case err := <-req.errChan:
-		return nil, err
-	case txResp := <-req.successChan:
-		return txResp, nil
-	}
 }
 
 func (m *BabylonMsgSender) SendUndelegation(
@@ -244,14 +229,9 @@ func (m *BabylonMsgSender) SendUndelegation(
 ) (*sdk.TxResponse, error) {
 	req := newSendUndelegationRequest(ud, stakingTxHash)
 
-	m.sendUndelegationRequestChan <- &req
-
-	select {
-	case <-m.quit:
-		return nil, fmt.Errorf("babylon msg sender quiting")
-	case err := <-req.errChan:
-		return nil, err
-	case txResp := <-req.successChan:
-		return txResp, nil
-	}
+	return utils.SendRequestAndWaitForResponseOrQuit[*sdk.TxResponse, *sendUndelegationRequest](
+		&req,
+		m.sendUndelegationRequestChan,
+		m.quit,
+	)
 }
