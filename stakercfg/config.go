@@ -123,7 +123,7 @@ type StakerConfig struct {
 
 func DefaultStakerConfig() StakerConfig {
 	return StakerConfig{
-		BabylonStallingInterval:  2 * time.Minute,
+		BabylonStallingInterval:  1 * time.Minute,
 		UnbondingTxCheckInterval: 30 * time.Second,
 	}
 }

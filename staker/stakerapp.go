@@ -8,12 +8,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/avast/retry-go/v4"
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/babylonchain/btc-staker/types"
+	"github.com/babylonchain/btc-staker/utils"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -26,6 +28,7 @@ import (
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	notifier "github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/kvdb"
@@ -69,15 +72,17 @@ type stakingDbInfo struct {
 	stakingTxState proto.TransactionState
 }
 
+var (
+	RtyAttNum              = uint(30)
+	DelegationSendAttempts = retry.Attempts(RtyAttNum)
+	RtyErr                 = retry.LastErrorOnly(true)
+)
+
 const (
 	// Internal slashing fee to adjust to in case babylon provide too small fee
 	// Slashing tx is around 113 bytes (depending on output address which we need to chose), with fee 8sats/b
 	// this gives us 904 satoshi fee. Lets round it 1000 satoshi
 	minSlashingFee = btcutil.Amount(1000)
-
-	// maximum number of delegations that can be pending (waiting to be sent to babylon)
-	// at the same time
-	maxNumPendingDelegations = 100
 
 	// after this many confirmations we consider transaction which spends staking tx as
 	// confirmed on btc
@@ -122,24 +127,25 @@ type StakerApp struct {
 	wg        sync.WaitGroup
 	quit      chan struct{}
 
-	babylonClient                    cl.BabylonClient
-	wc                               walletcontroller.WalletController
-	notifier                         notifier.ChainNotifier
-	feeEstimator                     FeeEstimator
-	network                          *chaincfg.Params
-	config                           *scfg.Config
-	logger                           *logrus.Logger
-	txTracker                        *stakerdb.TrackedTransactionStore
+	babylonClient    cl.BabylonClient
+	wc               walletcontroller.WalletController
+	notifier         notifier.ChainNotifier
+	feeEstimator     FeeEstimator
+	network          *chaincfg.Params
+	config           *scfg.Config
+	logger           *logrus.Logger
+	txTracker        *stakerdb.TrackedTransactionStore
+	babylonMsgSender *cl.BabylonMsgSender
+
 	stakingRequestChan               chan *stakingRequest
 	confirmationEventChan            chan *stakingTxBtcConfirmation
-	sendDelegationRequestChan        chan *sendDelegationRequest
 	sendDelegationResponseChan       chan *sendDelegationResponse
 	spendTxConfirmationChan          chan *spendStakeTxBtcConfirmation
-	sendUnbondingRequestChan         chan *unbondingRequest
 	sendUnbondingRequestConfirmChan  chan *unbondingRequestConfirm
 	unbondingSignaturesConfirmedChan chan *unbondingSignaturesConfirmed
 	unbondingConfirmedOnBtcChan      chan *unbondingTxBtcConfirmation
-	currentBestBlockHeight           atomic.Uint32
+
+	currentBestBlockHeight atomic.Uint32
 }
 
 func NewStakerAppFromConfig(
@@ -160,7 +166,7 @@ func NewStakerAppFromConfig(
 		return nil, err
 	}
 
-	cl, err := cl.NewBabylonController(config.BabylonConfig, &config.ActiveNetParams, logger)
+	babylonClient, err := cl.NewBabylonController(config.BabylonConfig, &config.ActiveNetParams, logger)
 
 	if err != nil {
 		return nil, err
@@ -196,14 +202,17 @@ func NewStakerAppFromConfig(
 		return nil, fmt.Errorf("unknown fee estimation mode: %d", config.BtcNodeBackendConfig.EstimationMode)
 	}
 
+	babylonMsgSender := cl.NewBabylonMsgSender(babylonClient, logger)
+
 	return NewStakerAppFromDeps(
 		config,
 		logger,
-		cl,
+		babylonClient,
 		walletClient,
 		nodeNotifier,
 		feeEstimator,
 		tracker,
+		babylonMsgSender,
 	)
 }
 
@@ -215,6 +224,7 @@ func NewStakerAppFromDeps(
 	nodeNotifier notifier.ChainNotifier,
 	feeEestimator FeeEstimator,
 	tracker *stakerdb.TrackedTransactionStore,
+	babylonMsgSender *cl.BabylonMsgSender,
 ) (*StakerApp, error) {
 	return &StakerApp{
 		babylonClient:      cl,
@@ -223,25 +233,19 @@ func NewStakerAppFromDeps(
 		feeEstimator:       feeEestimator,
 		network:            &config.ActiveNetParams,
 		txTracker:          tracker,
+		babylonMsgSender:   babylonMsgSender,
 		config:             config,
 		logger:             logger,
 		quit:               make(chan struct{}),
 		stakingRequestChan: make(chan *stakingRequest),
 		// event for when transaction is confirmed on BTC
 		confirmationEventChan: make(chan *stakingTxBtcConfirmation),
-		// Buffered channels so we do not block receiving confirmations if there is backlog of
-		// requests to send to babylon
-		sendDelegationRequestChan: make(chan *sendDelegationRequest, maxNumPendingDelegations),
 
 		// event for when delegation is sent to babylon and included in babylon
 		sendDelegationResponseChan: make(chan *sendDelegationResponse),
 
 		// event emitted upon transaction which spends staking transaction is confirmed on BTC
 		spendTxConfirmationChan: make(chan *spendStakeTxBtcConfirmation),
-
-		// channel for unbonding requests, received from user. Non-buffer so we process
-		// at most one request at a time
-		sendUnbondingRequestChan: make(chan *unbondingRequest),
 
 		// channel which confirms that unbonding request was sent to babylon, and update
 		// correct db state
@@ -292,9 +296,10 @@ func (app *StakerApp) Start() error {
 
 		app.logger.Infof("Initial btc best block height is: %d", app.currentBestBlockHeight.Load())
 
-		app.wg.Add(3)
+		app.babylonMsgSender.Start()
+
+		app.wg.Add(2)
 		go app.handleNewBlocks(blockEventNotifier)
-		go app.handleSentToBabylon()
 		go app.handleStaking()
 
 		if err := app.checkTransactionsStatus(); err != nil {
@@ -333,6 +338,8 @@ func (app *StakerApp) Stop() error {
 		app.logger.Infof("Stopping StakerApp")
 		close(app.quit)
 		app.wg.Wait()
+
+		app.babylonMsgSender.Stop()
 
 		err := app.notifier.Stop()
 		if err != nil {
@@ -580,7 +587,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			// transaction which is not on babylon, is already confirmed on btc chain
 			// get all necessary info and send it to babylon
 
-			tx, _ := app.mustGetTransactionAndStakerAddress(stakingTxHash)
+			tx, stakerAddress := app.mustGetTransactionAndStakerAddress(stakingTxHash)
 			details, status, err := app.wc.TxDetails(stakingTxHash, tx.StakingTx.TxOut[tx.StakingOutputIndex].PkScript)
 
 			if err != nil {
@@ -609,7 +616,8 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				requiredInclusionBlockDepth: uint64(stakingParams.ConfirmationTimeBlocks),
 			}
 
-			app.sendDelegationWithTxToBabylon(req)
+			app.wg.Add(1)
+			go app.sendToDelegationToBabylonTask(req, stakerAddress, tx)
 		}
 	}
 
@@ -739,7 +747,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				successChan:                make(chan *chainhash.Hash, 1),
 			}
 
-			PushOrQuit[*unbondingRequestConfirm](
+			utils.PushOrQuit[*unbondingRequestConfirm](
 				app.sendUnbondingRequestConfirmChan,
 				confirmation,
 				app.quit,
@@ -1024,7 +1032,7 @@ func (app *StakerApp) waitForUnbondingTxConfirmation(
 				blockHeight:   conf.BlockHeight,
 			}
 
-			PushOrQuit[*unbondingTxBtcConfirmation](
+			utils.PushOrQuit[*unbondingTxBtcConfirmation](
 				app.unbondingConfirmedOnBtcChan,
 				req,
 				app.quit,
@@ -1077,6 +1085,94 @@ func (app *StakerApp) sendUnbondingTxToBtcAndWaitForConfirmation(
 	)
 }
 
+// context which will be cancelled when app is shutting down
+func (app *StakerApp) appQuitContext() (context.Context, func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	app.wg.Add(1)
+	go func() {
+		defer cancel()
+		defer app.wg.Done()
+
+		select {
+		case <-app.quit:
+
+		case <-ctx.Done():
+		}
+	}()
+
+	return ctx, cancel
+}
+
+func (app *StakerApp) buildAndSendDelegation(
+	req *sendDelegationRequest,
+	stakerAddress btcutil.Address,
+	storedTx *stakerdb.StoredTransaction,
+) (*sdk.TxResponse, error) {
+	delegation, err := app.buildDelegation(req, stakerAddress, storedTx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return app.babylonMsgSender.SendDelegation(delegation, req.requiredInclusionBlockDepth)
+}
+
+func (app *StakerApp) sendToDelegationToBabylonTask(
+	req *sendDelegationRequest,
+	stakerAddress btcutil.Address,
+	storedTx *stakerdb.StoredTransaction,
+) {
+	defer app.wg.Done()
+
+	// using app quit context to cancel retrying when app is shutting down
+	ctx, cancel := app.appQuitContext()
+	defer cancel()
+
+	err := retry.Do(func() error {
+		_, err := app.buildAndSendDelegation(req, stakerAddress, storedTx)
+
+		if err != nil {
+			if errors.Is(err, cl.ErrInvalidBabylonExecution) {
+				// TODO We treat invalid execution as unrecoverable error, which will lead to app shutdown.
+				return retry.Unrecoverable(err)
+			}
+			return err
+		}
+
+		return nil
+	},
+		retry.Context(ctx),
+		// no need to do exponential backoff here, BnabylonStallingInterval should be pretty large interval (around 1.min)
+		// this means we will retry for around 30min or until we hit ErrInvalidBabylonExecution error
+		retry.DelayType(retry.FixedDelay),
+		DelegationSendAttempts,
+		retry.Delay(app.config.StakerConfig.BabylonStallingInterval),
+		RtyErr,
+		retry.OnRetry(func(n uint, err error) {
+			app.logger.WithFields(logrus.Fields{
+				"attempt":      n + 1,
+				"max_attempts": RtyAttNum,
+				"error":        err,
+			}).Error("Failed to deliver delegation to babylon")
+		}),
+	)
+
+	var response = &sendDelegationResponse{
+		txHash: &req.txHash,
+		err:    nil,
+	}
+
+	if err != nil {
+		response.err = err
+	}
+
+	utils.PushOrQuit[*sendDelegationResponse](
+		app.sendDelegationResponseChan,
+		response,
+		app.quit,
+	)
+}
+
 // main event loop for the staker app
 func (app *StakerApp) handleStaking() {
 	defer app.wg.Done()
@@ -1108,7 +1204,6 @@ func (app *StakerApp) handleStaking() {
 					req.errChan <- err
 					continue
 				}
-
 			} else {
 				// in case of owend transaction we need to send it, and then add to our tracking db.
 				_, err := app.wc.SendRawTransaction(req.stakingTx, true)
@@ -1173,7 +1268,13 @@ func (app *StakerApp) handleStaking() {
 				requiredInclusionBlockDepth: uint64(confEvent.blockDepth),
 			}
 
-			app.sendDelegationWithTxToBabylon(req)
+			storedTx, stakerAddress := app.mustGetTransactionAndStakerAddress(&confEvent.txHash)
+
+			// TODO: Introduce max number of sendToDelegationToBabylonTasks. It should be tied to
+			// accepting new staking delegations i.e we will hit it we should stop accepting new stakingrequests
+			// as either babylon node is not healthy or we are constructing invalid delegations
+			app.wg.Add(1)
+			go app.sendToDelegationToBabylonTask(req, stakerAddress, storedTx)
 
 		case sendToBabylonConf := <-app.sendDelegationResponseChan:
 			if sendToBabylonConf.err != nil {
@@ -1790,18 +1891,23 @@ func (app *StakerApp) UnbondStaking(
 		"unbondingTxFeeRate": int64(unbondingTxFeeRatePerKb),
 	}).Debug("Successfully created undelegation data")
 
-	req := newUnbondingRequest(stakingTxHash, undelegationData)
+	_, err = app.babylonMsgSender.SendUndelegation(undelegationData, &stakingTxHash)
 
-	app.sendUnbondingRequestChan <- req
+	if err != nil {
+		return nil, err
+	}
+
+	unbondingRequestConfirmEvent := unbondingRequestConfirm{
+		stakingTxHash:              stakingTxHash,
+		unbondingTransaction:       undelegationData.UnbondingTransaction,
+		unbondingTransactionScript: undelegationData.UnbondingTransactionScript,
+		successChan:                make(chan *chainhash.Hash, 1),
+	}
+
+	app.sendUnbondingRequestConfirmChan <- &unbondingRequestConfirmEvent
 
 	select {
-	case reqErr := <-req.errChan:
-		app.logger.WithFields(logrus.Fields{
-			"err": reqErr,
-		}).Debugf("Sending unbonding request failed")
-
-		return nil, reqErr
-	case hash := <-req.successChan:
+	case hash := <-unbondingRequestConfirmEvent.successChan:
 		// return unbonding tx hash to caller
 		return hash, nil
 	case <-app.quit:
