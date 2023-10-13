@@ -51,7 +51,7 @@ func newSendUndelegationRequest(
 
 // BabylonMsgSender is responsible for sending delegation and undelegation requests to babylon
 // It makes sure:
-// - that babylon is ready for either delgetion of undelegation
+// - that babylon is ready for either delgetion or undelegation
 // - only one messegae is sent to babylon at a time
 type BabylonMsgSender struct {
 	startOnce sync.Once
@@ -94,7 +94,6 @@ func (b *BabylonMsgSender) Stop() {
 
 // isBabylonBtcLcReady checks if Babylon BTC light client is ready to receive delegation
 func (b *BabylonMsgSender) isBabylonBtcLcReady(
-	stakingTxHash *chainhash.Hash,
 	requiredInclusionBlockDepth uint64,
 	req *DelegationData,
 ) error {
@@ -108,11 +107,11 @@ func (b *BabylonMsgSender) isBabylonBtcLcReady(
 		}
 
 		// got some unknown error, return it to the caller
-		return fmt.Errorf("error while getting delegation data for tx with hash %s: %w", stakingTxHash.String(), err)
+		return fmt.Errorf("error while getting delegation data: %w", err)
 	}
 
 	if depth < requiredInclusionBlockDepth {
-		return fmt.Errorf("staking tx hash: %s, required depth: %d, current depth: %d: %w", stakingTxHash.String(), requiredInclusionBlockDepth, depth, ErrBabylonBtcLightClientNotReady)
+		return fmt.Errorf("btc lc not ready, required depth: %d, current depth: %d: %w", requiredInclusionBlockDepth, depth, ErrBabylonBtcLightClientNotReady)
 	}
 
 	return nil
@@ -126,7 +125,6 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 			stakingTxHash := req.dg.StakingTransaction.TxHash()
 
 			err := m.isBabylonBtcLcReady(
-				&stakingTxHash,
 				req.requiredInclusionBlockDepth,
 				req.dg,
 			)
@@ -159,7 +157,7 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 					"err":       err,
 				}).Error("Error while sending delegation data to babylon")
 
-				req.ErrorChan() <- fmt.Errorf("failed to send delegation for tx with hash:%s:%w", stakingTxHash.String(), err)
+				req.ErrorChan() <- fmt.Errorf("failed to send delegation for tx with hash: %s: %w", stakingTxHash.String(), err)
 			}
 
 			req.ResultChan() <- txResp
@@ -168,7 +166,7 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 			di, err := m.cl.QueryDelegationInfo(req.stakingTxHash)
 
 			if err != nil {
-				req.ErrorChan() <- fmt.Errorf("failed to retrieve delegation info for staking tx with hash: %s : %w", req.stakingTxHash.String(), err)
+				req.ErrorChan() <- fmt.Errorf("failed to retrieve delegation info for staking tx with hash: %s: %w", req.stakingTxHash.String(), err)
 				continue
 			}
 
@@ -196,6 +194,11 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 						"babylonLog":         txResp.RawLog,
 					}).Error("Invalid delegation data sent to babylon")
 				}
+
+				m.logger.WithFields(logrus.Fields{
+					"btcTxHash": req.stakingTxHash,
+					"err":       err,
+				}).Error("Error while sending undelegation data to babylon")
 
 				req.ErrorChan() <- fmt.Errorf("failed to send unbonding for delegation with staking hash:%s:%w", req.stakingTxHash.String(), err)
 				continue

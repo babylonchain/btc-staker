@@ -609,7 +609,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			}
 
 			app.wg.Add(1)
-			go app.sendToDelegationToBabylonTask(req, stakerAddress, tx)
+			go app.sendDelegationToBabylonTask(req, stakerAddress, tx)
 		}
 	}
 
@@ -1115,7 +1115,7 @@ func (app *StakerApp) buildAndSendDelegation(
 	return app.babylonMsgSender.SendDelegation(delegation, req.requiredInclusionBlockDepth)
 }
 
-func (app *StakerApp) sendToDelegationToBabylonTask(
+func (app *StakerApp) sendDelegationToBabylonTask(
 	req *sendDelegationRequest,
 	stakerAddress btcutil.Address,
 	storedTx *stakerdb.StoredTransaction,
@@ -1140,7 +1140,7 @@ func (app *StakerApp) sendToDelegationToBabylonTask(
 		return nil
 	},
 		retry.Context(ctx),
-		// no need to do exponential backoff here, BnabylonStallingInterval should be pretty large interval (around 1.min)
+		// no need to do exponential backoff here, BabylonStallingInterval should be pretty large interval (around 1 min)
 		// this means we will retry for around 30min or until we hit ErrInvalidBabylonExecution error
 		retry.DelayType(retry.FixedDelay),
 		DelegationSendAttempts,
@@ -1260,7 +1260,7 @@ func (app *StakerApp) handleStakingEvents() {
 			// accepting new staking delegations i.e we will hit it we should stop accepting new stakingrequests
 			// as either babylon node is not healthy or we are constructing invalid delegations
 			app.wg.Add(1)
-			go app.sendToDelegationToBabylonTask(req, stakerAddress, storedTx)
+			go app.sendDelegationToBabylonTask(req, stakerAddress, storedTx)
 			app.logStakingEventProcessed(ev)
 
 		case ev := <-app.delegationSubmissionResultEvChan:
