@@ -52,11 +52,35 @@ type stakingDbInfo struct {
 	stakingTxState proto.TransactionState
 }
 
+// TODO: stop-gap solution for long running retry operations. Ultimately we need to
+// bound number of total pending bonding/unboning operation.
 var (
-	RtyAttNum              = uint(30)
-	DelegationSendAttempts = retry.Attempts(RtyAttNum)
-	RtyErr                 = retry.LastErrorOnly(true)
+	longRetryNum      = uint(30)
+	longRetryAttempts = retry.Attempts(longRetryNum)
+	RtyErr            = retry.LastErrorOnly(true)
 )
+
+func longRetryOps(ctx context.Context, fixedDelay time.Duration, onRetryFn retry.OnRetryFunc) []retry.Option {
+	return []retry.Option{
+		retry.Context(ctx),
+		retry.DelayType(retry.FixedDelay),
+		retry.Delay(fixedDelay),
+		longRetryAttempts,
+		retry.OnRetry(onRetryFn),
+		RtyErr,
+	}
+}
+
+func (app *StakerApp) onLongRetryFunc(stakingTxHash *chainhash.Hash, msg string) retry.OnRetryFunc {
+	return func(n uint, err error) {
+		app.logger.WithFields(logrus.Fields{
+			"attempt":      n + 1,
+			"max_attempts": longRetryNum,
+			"error":        err,
+			"txHash":       stakingTxHash,
+		}).Error(msg)
+	}
+}
 
 const (
 	// Internal slashing fee to adjust to in case babylon provide too small fee
@@ -93,7 +117,7 @@ const (
 	MinFeePerKb = txrules.DefaultRelayFeePerKb
 
 	// If we fail to send unbonding tx to btc for any reason we will retry in this time
-	unbondingSendRetryTimeout = 30 * time.Second
+	unbondingSendRetryTimeout = 1 * time.Minute
 
 	// after this many confirmations we treat unbonding transaction as confirmed on btc
 	// TODO: needs to consolidate what is safe confirmation for different types of transaction
@@ -119,13 +143,13 @@ type StakerApp struct {
 
 	stakingRequestedEvChan                        chan *stakingRequestedEvent
 	stakingTxBtcConfirmedEvChan                   chan *stakingTxBtcConfirmedEvent
-	delegationSubmissionResultEvChan              chan *delegationSubmissionResultEvent
+	delegationSubmittedToBabylonEvChan            chan *delegationSubmittedToBabylonEvent
 	undelegationSubmittedToBabylonEvChan          chan *undelegationSubmittedToBabylonEvent
 	unbondingTxSignaturesConfirmedOnBabylonEvChan chan *unbondingTxSignaturesConfirmedOnBabylonEvent
 	unbondingTxConfirmedOnBtcEvChan               chan *unbondingTxConfirmedOnBtcEvent
 	spendStakeTxConfirmedOnBtcEvChan              chan *spendStakeTxConfirmedOnBtcEvent
-
-	currentBestBlockHeight atomic.Uint32
+	criticalErrorEvChan                           chan *criticalErrorEvent
+	currentBestBlockHeight                        atomic.Uint32
 }
 
 func NewStakerAppFromConfig(
@@ -222,7 +246,7 @@ func NewStakerAppFromDeps(
 		stakingTxBtcConfirmedEvChan: make(chan *stakingTxBtcConfirmedEvent),
 
 		// event for when delegation is sent to babylon and included in babylon
-		delegationSubmissionResultEvChan: make(chan *delegationSubmissionResultEvent),
+		delegationSubmittedToBabylonEvChan: make(chan *delegationSubmittedToBabylonEvent),
 
 		// event emitted upon transaction which spends staking transaction is confirmed on BTC
 		spendStakeTxConfirmedOnBtcEvChan: make(chan *spendStakeTxConfirmedOnBtcEvent),
@@ -237,6 +261,11 @@ func NewStakerAppFromDeps(
 
 		// channel which receives confirmation that unbonding transaction was confirmed on BTC
 		unbondingTxConfirmedOnBtcEvChan: make(chan *unbondingTxConfirmedOnBtcEvent),
+
+		// channel which receives critical errors, critical errors are errors which we do not know
+		// how to handle, so we just log them. It is up to user to investigate, what had happend
+		// and report the situation
+		criticalErrorEvChan: make(chan *criticalErrorEvent),
 	}, nil
 }
 
@@ -328,6 +357,24 @@ func (app *StakerApp) Stop() error {
 		}
 	})
 	return stopErr
+}
+
+func (app *StakerApp) reportCriticialError(
+	stakingTxHash chainhash.Hash,
+	err error,
+	additionalContext string,
+) {
+	ev := &criticalErrorEvent{
+		stakingTxHash:     stakingTxHash,
+		err:               err,
+		additionalContext: additionalContext,
+	}
+
+	utils.PushOrQuit[*criticalErrorEvent](
+		app.criticalErrorEvChan,
+		ev,
+		app.quit,
+	)
 }
 
 func (app *StakerApp) waitForStakingTransactionConfirmation(
@@ -565,13 +612,12 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				"btcTxHash": stakingTxHash,
 			}).Debug("Already confirmed transaction found on Babylon as part of delegation. Fix db state")
 
-			ev := &delegationSubmissionResultEvent{
+			ev := &delegationSubmittedToBabylonEvent{
 				stakingTxHash: *stakingTxHash,
-				err:           nil,
 			}
 
-			utils.PushOrQuit[*delegationSubmissionResultEvent](
-				app.delegationSubmissionResultEvChan,
+			utils.PushOrQuit[*delegationSubmittedToBabylonEvent](
+				app.delegationSubmittedToBabylonEvChan,
 				ev,
 				app.quit,
 			)
@@ -640,7 +686,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				}).Debug("Unbonding transaction not found on btc chain. Sending it again")
 
 				app.wg.Add(1)
-				go app.sendUnbondingTxToBtcAndWaitForConfirmation(
+				go app.sendUnbondingTxToBtcTask(
 					localInfo.stakingTxHash,
 					address,
 					stored,
@@ -943,67 +989,60 @@ func (app *StakerApp) sendUnbondingTxToBtcWithWitness(
 // It retries until it successfully sends unbonding tx to btc and registers for notification.or until program finishes
 // TODO: Investigate wheter some of the errors should be treated as fatal and abort whole process
 func (app *StakerApp) sendUnbondingTxToBtc(
+	ctx context.Context,
 	stakingTxHash *chainhash.Hash,
 	stakerAddress btcutil.Address,
 	storedTx *stakerdb.StoredTransaction,
-	unbondingData *stakerdb.UnbondingStoreData) *notifier.ConfirmationEvent {
-	for {
-		err := app.sendUnbondingTxToBtcWithWitness(
+	unbondingData *stakerdb.UnbondingStoreData) (*notifier.ConfirmationEvent, error) {
+
+	err := retry.Do(func() error {
+		return app.sendUnbondingTxToBtcWithWitness(
 			stakingTxHash,
 			stakerAddress,
 			storedTx,
 			unbondingData,
 		)
+	},
+		longRetryOps(
+			ctx,
+			unbondingSendRetryTimeout,
+			app.onLongRetryFunc(stakingTxHash, "failed to send unbonding tx to btc"),
+		)...,
+	)
 
-		if err == nil {
-			app.logger.WithFields(logrus.Fields{
-				"stakingTxHash":   stakingTxHash,
-				"unbondingTxHash": unbondingData.UnbondingTx.TxHash(),
-			}).Info("Unbonding transaction successfully sent to btc")
-			// we can break the loop as we successfully sent unbonding tx to btc
-			break
-		}
-
-		app.logger.WithFields(logrus.Fields{
-			"stakingTxHash":   stakingTxHash,
-			"unbondingTxHash": unbondingData.UnbondingTx.TxHash(),
-			"err":             err,
-		}).Error("Failed to send unbodning tx to btc. Retrying...")
-
-		select {
-		case <-time.After(unbondingSendRetryTimeout):
-		case <-app.quit:
-			return nil
-		}
+	if err != nil {
+		return nil, err
 	}
 
-	// at this moment we successfully sent unbonding tx to btc, register waiting for notification
+	bestBlockAfterSend := app.currentBestBlockHeight.Load()
 	unbondingTxHash := unbondingData.UnbondingTx.TxHash()
-	for {
-		notificationEv, err := app.notifier.RegisterConfirmationsNtfn(
+
+	var notificationEv *notifier.ConfirmationEvent
+	err = retry.Do(func() error {
+		ev, err := app.notifier.RegisterConfirmationsNtfn(
 			&unbondingTxHash,
 			unbondingData.UnbondingTx.TxOut[0].PkScript,
 			UnbondingTxConfirmations,
-			app.currentBestBlockHeight.Load(),
+			bestBlockAfterSend,
 		)
 
-		// TODO: Check when this error can happen, maybe this is critical error which
-		// should not be retried
-		if err == nil {
-			app.logger.WithFields(logrus.Fields{
-				"stakingTxHash":   stakingTxHash,
-				"unbondingTxHash": unbondingData.UnbondingTx.TxHash(),
-			}).Debug("Notification event for unbonding tx created")
-			// we can break the loop as we successfully sent unbonding tx to btc
-			return notificationEv
+		if err != nil {
+			return err
 		}
+		notificationEv = ev
+		return nil
+	},
+		longRetryOps(
+			ctx,
+			unbondingSendRetryTimeout,
+			app.onLongRetryFunc(stakingTxHash, "failed to register for unbonding tx confirmation notification"),
+		)...,
+	)
 
-		select {
-		case <-time.After(unbondingSendRetryTimeout):
-		case <-app.quit:
-			return nil
-		}
+	if err != nil {
+		return nil, err
 	}
+	return notificationEv, nil
 }
 
 func (app *StakerApp) waitForUnbondingTxConfirmation(
@@ -1048,31 +1087,27 @@ func (app *StakerApp) waitForUnbondingTxConfirmation(
 	}
 }
 
-// sendUnbondingTxToBtcAndWaitForConfirmation tries to send unbonding tx to btc and register for confirmation notification.
+// sendUnbondingTxToBtcTask tries to send unbonding tx to btc and register for confirmation notification.
 // it should be run in separate go routine.
-func (app *StakerApp) sendUnbondingTxToBtcAndWaitForConfirmation(
+func (app *StakerApp) sendUnbondingTxToBtcTask(
 	stakingTxHash *chainhash.Hash,
 	stakerAddress btcutil.Address,
 	storedTx *stakerdb.StoredTransaction,
 	unbondingData *stakerdb.UnbondingStoreData) {
-
 	defer app.wg.Done()
-	// check we are not quitting before we start whole process
-	select {
-	case <-app.quit:
-		return
-	default:
-	}
+	quitCtx, cancel := app.appQuitContext()
+	defer cancel()
 
-	waitEv := app.sendUnbondingTxToBtc(
+	waitEv, err := app.sendUnbondingTxToBtc(
+		quitCtx,
 		stakingTxHash,
 		stakerAddress,
 		storedTx,
 		unbondingData,
 	)
 
-	if waitEv == nil {
-		// this can be nil only when we are shutting down, just return it that case
+	if err != nil {
+		app.reportCriticialError(*stakingTxHash, err, "Failed failed to send unbonding tx to btc")
 		return
 	}
 
@@ -1131,7 +1166,6 @@ func (app *StakerApp) sendDelegationToBabylonTask(
 
 		if err != nil {
 			if errors.Is(err, cl.ErrInvalidBabylonExecution) {
-				// TODO We treat invalid execution as unrecoverable error, which will lead to app shutdown.
 				return retry.Unrecoverable(err)
 			}
 			return err
@@ -1139,37 +1173,30 @@ func (app *StakerApp) sendDelegationToBabylonTask(
 
 		return nil
 	},
-		retry.Context(ctx),
-		// no need to do exponential backoff here, BabylonStallingInterval should be pretty large interval (around 1 min)
-		// this means we will retry for around 30min or until we hit ErrInvalidBabylonExecution error
-		retry.DelayType(retry.FixedDelay),
-		DelegationSendAttempts,
-		retry.Delay(app.config.StakerConfig.BabylonStallingInterval),
-		RtyErr,
-		retry.OnRetry(func(n uint, err error) {
-			app.logger.WithFields(logrus.Fields{
-				"attempt":      n + 1,
-				"max_attempts": RtyAttNum,
-				"error":        err,
-				"txHash":       req.txHash,
-			}).Error("Failed to deliver delegation to babylon")
-		}),
+		longRetryOps(
+			ctx,
+			app.config.StakerConfig.BabylonStallingInterval,
+			app.onLongRetryFunc(&req.txHash, "Failed to deliver delegation to babylon due to error."),
+		)...,
 	)
-
-	var response = &delegationSubmissionResultEvent{
-		stakingTxHash: req.txHash,
-		err:           nil,
-	}
 
 	if err != nil {
-		response.err = err
-	}
+		app.reportCriticialError(
+			req.txHash,
+			err,
+			"Failed to deliver delegation to babylon due to error.",
+		)
+	} else {
+		ev := &delegationSubmittedToBabylonEvent{
+			stakingTxHash: req.txHash,
+		}
 
-	utils.PushOrQuit[*delegationSubmissionResultEvent](
-		app.delegationSubmissionResultEvChan,
-		response,
-		app.quit,
-	)
+		utils.PushOrQuit[*delegationSubmittedToBabylonEvent](
+			app.delegationSubmittedToBabylonEvChan,
+			ev,
+			app.quit,
+		)
+	}
 }
 
 // main event loop for the staker app
@@ -1263,24 +1290,8 @@ func (app *StakerApp) handleStakingEvents() {
 			go app.sendDelegationToBabylonTask(req, stakerAddress, storedTx)
 			app.logStakingEventProcessed(ev)
 
-		case ev := <-app.delegationSubmissionResultEvChan:
+		case ev := <-app.delegationSubmittedToBabylonEvChan:
 			app.logStakingEventReceived(ev)
-			if ev.err != nil {
-				// TODO: For now we just kill the app, in case comms with babylon failed.
-				// Ultimately we probably should:
-				// 1. Add additional state in db - failedToSendToBabylon. So that after app restart
-				// we can retry sending delegation which were failed
-				// 2. Have some retry counter in sendToBabylonRequest which counts how many times
-				// each request was already retried
-				// 3. If some request was retried too many times we can:
-				// a. kill the app - maybe there is no point in continuing if we cannot communicate with babylon
-				// b. have some recovery mode - which diallow sending new delegations, and occasionaly
-				// retry sending oldes failed delegations
-				app.logger.WithFields(logrus.Fields{
-					"err": ev.err,
-				}).Fatalf("Error sending delegation to babylon")
-			}
-
 			if err := app.txTracker.SetTxSentToBabylon(&ev.stakingTxHash); err != nil {
 				// TODO: handle this error somehow, it means we received confirmation for tx which we do not store
 				// which is seems like programming error. Maybe panic?
@@ -1322,7 +1333,7 @@ func (app *StakerApp) handleStakingEvents() {
 
 			storedTx, stakerAddress := app.mustGetTransactionAndStakerAddress(&ev.stakingTxHash)
 			app.wg.Add(1)
-			go app.sendUnbondingTxToBtcAndWaitForConfirmation(
+			go app.sendUnbondingTxToBtcTask(
 				&ev.stakingTxHash,
 				stakerAddress,
 				storedTx,
@@ -1350,6 +1361,35 @@ func (app *StakerApp) handleStakingEvents() {
 				// which is seems like programming error. Maybe panic?
 				app.logger.Fatalf("Error setting state for tx %s: %s", ev.stakingTxHash, err)
 			}
+			app.logStakingEventProcessed(ev)
+
+		case ev := <-app.criticalErrorEvChan:
+			// if error is context.Canceled, it means one of started child go-routines
+			// received quit signal and is shutting down. We just ignore it.
+			if errors.Is(ev.err, context.Canceled) {
+				continue
+			}
+
+			// if app is configured to fail on critical error, just kill it, user then
+			// can investigate and restart it, and delegation process should continue
+			// from correct state
+			if app.config.StakerConfig.ExitOnCriticalError {
+				app.logger.WithFields(logrus.Fields{
+					"stakingTxHash": ev.stakingTxHash,
+					"err":           ev.err,
+					"info":          ev.additionalContext,
+				}).Fatalf("Critical error received. Exiting...")
+			}
+
+			app.logStakingEventReceived(ev)
+			// TODO for now we just log it and continue, another options would be to
+			// save error info to db, and additional api to restart delegation/undelegation
+			// procsess from latest state
+			app.logger.WithFields(logrus.Fields{
+				"stakingTxHash": ev.stakingTxHash,
+				"err":           ev.err,
+				"info":          ev.additionalContext,
+			}).Error("Critical error received")
 			app.logStakingEventProcessed(ev)
 
 		case <-app.quit:
