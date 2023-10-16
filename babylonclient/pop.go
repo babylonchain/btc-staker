@@ -12,6 +12,7 @@ import (
 
 type BtcSigType int
 
+// TODO: Add support for ecdsa sig type
 const (
 	SchnorrType BtcSigType = iota
 	Bip322Type
@@ -75,7 +76,7 @@ func (pop *BabylonPop) ToBtcStakingPop() (*btcstypes.ProofOfPossession, error) {
 	case Bip322Type:
 		popType = btcstypes.BTCSigType_BIP322
 	default:
-		return nil, fmt.Errorf("Unknown pop type")
+		return nil, fmt.Errorf("unknown pop type")
 	}
 
 	return &btcstypes.ProofOfPossession{
@@ -91,7 +92,7 @@ func (pop *BabylonPop) ValidatePop(
 	net *chaincfg.Params,
 ) error {
 	if babylonPk == nil || btcPk == nil || net == nil {
-		return fmt.Errorf("Cannot validate pop with nil parameters")
+		return fmt.Errorf("cannot validate pop with nil parameters")
 	}
 
 	bPop, err := pop.ToBtcStakingPop()
@@ -108,11 +109,11 @@ func (pop *BabylonPop) ValidatePop(
 			return err
 		}
 	case btcstypes.BTCSigType_BIP340:
-		if err := bPop.Verify(babylonPk, btcPkBabylonFormat); err != nil {
+		if err := bPop.Verify(babylonPk, btcPkBabylonFormat, net); err != nil {
 			return err
 		}
 	default:
-		return fmt.Errorf("Unknown pop type")
+		return fmt.Errorf("unknown pop type")
 	}
 
 	return nil
