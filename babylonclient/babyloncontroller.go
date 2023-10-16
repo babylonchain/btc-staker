@@ -699,7 +699,7 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 			StakingTxHashHex: stakingTxHash.String(),
 		})
 		if err != nil {
-			if strings.Contains(err.Error(), btcstypes.ErrBTCDelNotFound.Error()) {
+			if strings.Contains(err.Error(), btcstypes.ErrBTCDelegationNotFound.Error()) {
 				// delegation is not found on babylon, do not retry further
 				return retry.Unrecoverable(ErrDelegationNotFound)
 			}
@@ -835,28 +835,11 @@ func (bc *BabylonController) QueryPendingBTCDelegations() ([]*btcstypes.BTCDeleg
 	queryClient := btcstypes.NewQueryClient(clientCtx)
 
 	// query all the unsigned delegations
-	queryRequest := &btcstypes.QueryPendingBTCDelegationsRequest{}
-	res, err := queryClient.PendingBTCDelegations(ctx, queryRequest)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query BTC delegations: %v", err)
+	queryRequest := btcstypes.QueryBTCDelegationsRequest{
+		Status: btcstypes.BTCDelegationStatus_PENDING,
 	}
 
-	return res.BtcDelegations, nil
-}
-
-// QueryUnbondingBTCDelegations queries BTC delegations that need a Jury sig for unbodning
-// it is only used when the program is running in Jury mode
-func (bc *BabylonController) QueryUnbondingBTCDelegations() ([]*btcstypes.BTCDelegation, error) {
-	ctx, cancel := getQueryContext(bc.cfg.Timeout)
-	defer cancel()
-
-	clientCtx := client.Context{Client: bc.QueryClient.RPCClient}
-
-	queryClient := btcstypes.NewQueryClient(clientCtx)
-
-	// query all the unsigned delegations
-	queryRequest := &btcstypes.QueryUnbondingBTCDelegationsRequest{}
-	res, err := queryClient.UnbondingBTCDelegations(ctx, queryRequest)
+	res, err := queryClient.BTCDelegations(ctx, &queryRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query BTC delegations: %v", err)
 	}
