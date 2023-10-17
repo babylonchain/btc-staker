@@ -28,11 +28,10 @@ type spendStakeTxInfo struct {
 	calculatedFee       btcutil.Amount
 }
 
-
 // babylonPopToDbPop receives already validated pop from external sources and converts it to database representation
 func babylonPopToDbPop(pop *cl.BabylonPop) *stakerdb.ProofOfPossession {
 	return &stakerdb.ProofOfPossession{
-		BtcSigType:           uint32(pop.BtcSigType),
+		BtcSigType:           pop.PopTypeNum(),
 		BabylonSigOverBtcPk:  pop.BabylonEcdsaSigOverBtcPk,
 		BtcSigOverBabylonSig: pop.BtcSig,
 	}
