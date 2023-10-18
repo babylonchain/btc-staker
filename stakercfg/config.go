@@ -119,12 +119,14 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 type StakerConfig struct {
 	BabylonStallingInterval  time.Duration `long:"babylonstallinginterval" description:"The interval for babylon node btc light client to catch up with real chain, before re-sending delegation request"`
 	UnbondingTxCheckInterval time.Duration `long:"unbondingtxcheckinterval" description:"The interval for staker wheter unbonding tx received validator and jury signatures"`
+	ExitOnCriticalError      bool          `long:"exitoncriticalerror" description:"Exit stakerd on critical error"`
 }
 
 func DefaultStakerConfig() StakerConfig {
 	return StakerConfig{
 		BabylonStallingInterval:  1 * time.Minute,
 		UnbondingTxCheckInterval: 30 * time.Second,
+		ExitOnCriticalError:      true,
 	}
 }
 

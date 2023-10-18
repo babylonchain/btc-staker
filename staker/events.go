@@ -18,11 +18,12 @@ type StakingEvent interface {
 
 var _ StakingEvent = (*stakingRequestedEvent)(nil)
 var _ StakingEvent = (*stakingTxBtcConfirmedEvent)(nil)
-var _ StakingEvent = (*delegationSubmissionResultEvent)(nil)
+var _ StakingEvent = (*delegationSubmittedToBabylonEvent)(nil)
 var _ StakingEvent = (*undelegationSubmittedToBabylonEvent)(nil)
 var _ StakingEvent = (*unbondingTxSignaturesConfirmedOnBabylonEvent)(nil)
 var _ StakingEvent = (*unbondingTxConfirmedOnBtcEvent)(nil)
 var _ StakingEvent = (*spendStakeTxConfirmedOnBtcEvent)(nil)
+var _ StakingEvent = (*criticalErrorEvent)(nil)
 
 type stakingRequestedEvent struct {
 	stakerAddress           btcutil.Address
@@ -129,17 +130,16 @@ func (event *stakingTxBtcConfirmedEvent) EventDesc() string {
 	return "STAKING_TX_BTC_CONFIRMED"
 }
 
-type delegationSubmissionResultEvent struct {
+type delegationSubmittedToBabylonEvent struct {
 	stakingTxHash chainhash.Hash
-	err           error
 }
 
-func (event *delegationSubmissionResultEvent) EventId() chainhash.Hash {
+func (event *delegationSubmittedToBabylonEvent) EventId() chainhash.Hash {
 	return event.stakingTxHash
 }
 
-func (event *delegationSubmissionResultEvent) EventDesc() string {
-	return "DELEGATION_SUBMISSION_RESULT"
+func (event *delegationSubmittedToBabylonEvent) EventDesc() string {
+	return "DELEGATION_SUBMITTED_TO_BABYLON"
 }
 
 type undelegationSubmittedToBabylonEvent struct {
@@ -195,6 +195,20 @@ func (event *spendStakeTxConfirmedOnBtcEvent) EventId() chainhash.Hash {
 
 func (event *spendStakeTxConfirmedOnBtcEvent) EventDesc() string {
 	return "SPEND_STAKE_TX_CONFIRMED_ON_BTC"
+}
+
+type criticalErrorEvent struct {
+	stakingTxHash     chainhash.Hash
+	err               error
+	additionalContext string
+}
+
+func (event *criticalErrorEvent) EventId() chainhash.Hash {
+	return event.stakingTxHash
+}
+
+func (event *criticalErrorEvent) EventDesc() string {
+	return "CRITICAL_ERROR"
 }
 
 func (app *StakerApp) logStakingEventReceived(event StakingEvent) {
