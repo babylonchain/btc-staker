@@ -36,7 +36,7 @@ func NewBabylonPop(t BabylonBtcPopType, babylonSig []byte, btcSig []byte) (*Baby
 	}, nil
 }
 
-func BabylonPopTypeToSigType(t BabylonBtcPopType) (btcstypes.BTCSigType, error) {
+func NewBTCSigType(t BabylonBtcPopType) (btcstypes.BTCSigType, error) {
 	switch t {
 	case SchnorrType:
 		return btcstypes.BTCSigType_BIP340, nil
@@ -67,7 +67,7 @@ func (pop *BabylonPop) PopTypeNum() uint32 {
 }
 
 func (pop *BabylonPop) ToBtcStakingPop() (*btcstypes.ProofOfPossession, error) {
-	popType, err := BabylonPopTypeToSigType(pop.popType)
+	popType, err := NewBTCSigType(pop.popType)
 
 	if err != nil {
 		return nil, err
