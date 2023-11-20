@@ -639,10 +639,6 @@ func (bc *BabylonController) QueryHeaderDepth(headerHash *chainhash.Hash) (uint6
 			return 0, fmt.Errorf("%s: %w", err.Error(), ErrHeaderNotKnownToBabylon)
 		}
 
-		if strings.Contains(err.Error(), btclctypes.ErrHeaderOnFork.Error()) {
-			return 0, fmt.Errorf("%s: %w", err.Error(), ErrHeaderOnBabylonLCFork)
-		}
-
 		// got unexpected error, return it
 		return 0, err
 	}
@@ -653,19 +649,18 @@ func (bc *BabylonController) QueryHeaderDepth(headerHash *chainhash.Hash) (uint6
 
 // Insert BTC block header using rpc client
 func (bc *BabylonController) InsertBtcBlockHeaders(headers []*wire.BlockHeader) (*sdk.TxResponse, error) {
-	// convert to []sdk.Msg type
-	imsgs := []sdk.Msg{}
+	headerBytesSlice := make([]bbntypes.BTCHeaderBytes, len(headers))
 	for _, h := range headers {
 		headerBytes := bbntypes.NewBTCHeaderBytesFromBlockHeader(h)
-		msg := btclctypes.MsgInsertHeader{
-			Header: &headerBytes,
-			Signer: bc.getTxSigner(),
-		}
-
-		imsgs = append(imsgs, &msg)
+		headerBytesSlice = append(headerBytesSlice, headerBytes)
 	}
 
-	return bc.reliablySendMsgs(imsgs, "Failed to send block headers to babylon node")
+	msg := &btclctypes.MsgInsertHeaders{
+		Headers: headerBytesSlice,
+		Signer:  bc.getTxSigner(),
+	}
+
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "Failed to send block headers to babylon node")
 }
 
 // RegisterValidator registers a BTC validator via a MsgCreateBTCValidator to Babylon
@@ -710,8 +705,8 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 
 		if resp.UndelegationInfo != nil {
 			var jurySig *schnorr.Signature = nil
-			if resp.UndelegationInfo.JuryUnbondingSig != nil {
-				jsig, err := resp.UndelegationInfo.JuryUnbondingSig.ToBTCSig()
+			if resp.UndelegationInfo.CovenantUnbondingSig != nil {
+				jsig, err := resp.UndelegationInfo.CovenantUnbondingSig.ToBTCSig()
 				if err != nil {
 					return retry.Unrecoverable(fmt.Errorf("malformed jury sig: %s : %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
 				}
@@ -779,7 +774,7 @@ func (bc *BabylonController) SubmitJurySig(
 	delPubKey *bbntypes.BIP340PubKey,
 	stakingTxHash string,
 	sig *bbntypes.BIP340Signature) (*sdk.TxResponse, error) {
-	msg := &btcstypes.MsgAddJurySig{
+	msg := &btcstypes.MsgAddCovenantSig{
 		Signer:        bc.getTxSigner(),
 		ValPk:         btcPubKey,
 		DelPk:         delPubKey,
@@ -797,7 +792,7 @@ func (bc *BabylonController) SubmitJuryUnbondingSigs(
 	unbondingSig *bbntypes.BIP340Signature,
 	slashUnbondingSig *bbntypes.BIP340Signature,
 ) (*sdk.TxResponse, error) {
-	msg := &btcstypes.MsgAddJuryUnbondingSigs{
+	msg := &btcstypes.MsgAddCovenantUnbondingSigs{
 		Signer:                 bc.getTxSigner(),
 		ValPk:                  btcPubKey,
 		DelPk:                  delPubKey,
