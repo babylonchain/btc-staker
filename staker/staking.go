@@ -43,7 +43,7 @@ func ParseStakingTime(stakingTime uint64) (uint16, error) {
 func ParseStakingScriptData(
 	stakerPk string,
 	delegatorPk string,
-	juryPk string,
+	covenantPk string,
 	stakingTime uint64) (*staking.StakingScriptData, error) {
 
 	stakerKey, err := ParseSchnorrPk(stakerPk)
@@ -57,7 +57,7 @@ func ParseStakingScriptData(
 		return nil, err
 	}
 
-	juryKey, err := ParseSchnorrPk(juryPk)
+	covenantKey, err := ParseSchnorrPk(covenantPk)
 
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func ParseStakingScriptData(
 	return staking.NewStakingScriptData(
 		stakerKey,
 		delegatorKey,
-		juryKey,
+		covenantKey,
 		stakingTimeParsed,
 	)
 }
@@ -81,14 +81,14 @@ func ParseStakingScriptData(
 func GenerateStakingScriptAndAddress(
 	stakerPk string,
 	delegatorPk string,
-	juryPk string,
+	covenantPk string,
 	stakingTime uint64,
 	net *chaincfg.Params) (*GenerateScriptResponse, error) {
 
 	scriptData, err := ParseStakingScriptData(
 		stakerPk,
 		delegatorPk,
-		juryPk,
+		covenantPk,
 		stakingTime,
 	)
 	if err != nil {

@@ -30,7 +30,7 @@ message UnbondingTxData {
     bytes unbonding_transaction = 1;
     bytes unbonding_transaction_script = 2;
     bytes unbonding_transaction_validator_sig = 3;
-    bytes unbonding_transaction_jury_sig = 4;
+    bytes unbonding_transaction_covenant_sig = 4;
     // this data is only filed if tracked transactions state is >= UNBONDING_CONFIRMED_ON_BTC,
     // and it is filled as last piece of information in unbonding process
     BTCConfirmationInfo unbonding_tx_btc_confirmation_info = 5;

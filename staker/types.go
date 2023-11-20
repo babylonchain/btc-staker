@@ -292,7 +292,7 @@ func createWitnessToSendUnbondingTx(
 		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain unbonding transaction")
 	}
 
-	if unbondingData.UnbondingTxJurySignature == nil || unbondingData.UnbondingTxValidatorSignature == nil {
+	if unbondingData.UnbondingTxCovenantSignature == nil || unbondingData.UnbondingTxValidatorSignature == nil {
 		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain all necessary signatures")
 	}
 
@@ -318,7 +318,7 @@ func createWitnessToSendUnbondingTx(
 
 	// Build valid wittness for spending staking output with all signatures
 	witnessStack := wire.TxWitness(make([][]byte, 6))
-	witnessStack[0] = unbondingData.UnbondingTxJurySignature.Serialize()
+	witnessStack[0] = unbondingData.UnbondingTxCovenantSignature.Serialize()
 	witnessStack[1] = unbondingData.UnbondingTxValidatorSignature.Serialize()
 	witnessStack[2] = stakerWitness[0]
 	witnessStack[3] = []byte{}

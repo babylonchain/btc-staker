@@ -89,7 +89,7 @@ type UnbondingStoreData struct {
 	UnbondingTx                   *wire.MsgTx
 	UnbondingTxScript             []byte
 	UnbondingTxValidatorSignature *schnorr.Signature
-	UnbondingTxJurySignature      *schnorr.Signature
+	UnbondingTxCovenantSignature  *schnorr.Signature
 	UnbondingTxConfirmationInfo   *BtcConfirmationInfo
 }
 
@@ -115,7 +115,7 @@ func newInitialUnbondingTxData(
 		UnbondingTransaction:             serializedTx,
 		UnbondingTransactionScript:       unbondingTxScript,
 		UnbondingTransactionValidatorSig: nil,
-		UnbondingTransactionJurySig:      nil,
+		UnbondingTransactionCovenantSig:  nil,
 		UnbondingTxBtcConfirmationInfo:   nil,
 	}
 
@@ -124,13 +124,13 @@ func newInitialUnbondingTxData(
 
 func newUnbondingSignaturesUpdate(
 	unbondingTxValidatorSignature *schnorr.Signature,
-	unbondingTxJurySignature *schnorr.Signature,
+	unbondingTxCovenantSignature *schnorr.Signature,
 ) (*proto.UnbondingTxData, error) {
 	if unbondingTxValidatorSignature == nil {
 		return nil, fmt.Errorf("cannot create unbonding tx data without validator signature")
 	}
 
-	if unbondingTxJurySignature == nil {
+	if unbondingTxCovenantSignature == nil {
 		return nil, fmt.Errorf("cannot create unbonding tx data without jury signature")
 	}
 
@@ -138,7 +138,7 @@ func newUnbondingSignaturesUpdate(
 		UnbondingTransaction:             nil,
 		UnbondingTransactionScript:       nil,
 		UnbondingTransactionValidatorSig: unbondingTxValidatorSignature.Serialize(),
-		UnbondingTransactionJurySig:      unbondingTxJurySignature.Serialize(),
+		UnbondingTransactionCovenantSig:  unbondingTxCovenantSignature.Serialize(),
 		UnbondingTxBtcConfirmationInfo:   nil,
 	}
 
@@ -250,8 +250,8 @@ func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*Unbondi
 	}
 
 	var jurySig *schnorr.Signature
-	if ud.UnbondingTransactionJurySig != nil {
-		jurySig, err = schnorr.ParseSignature(ud.UnbondingTransactionJurySig)
+	if ud.UnbondingTransactionCovenantSig != nil {
+		jurySig, err = schnorr.ParseSignature(ud.UnbondingTransactionCovenantSig)
 
 		if err != nil {
 			return nil, err
@@ -268,7 +268,7 @@ func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*Unbondi
 		UnbondingTx:                   &unbondingTx,
 		UnbondingTxScript:             ud.UnbondingTransactionScript,
 		UnbondingTxValidatorSignature: validatorSig,
-		UnbondingTxJurySignature:      jurySig,
+		UnbondingTxCovenantSignature:  jurySig,
 		UnbondingTxConfirmationInfo:   unbondingTxConfirmationInfo,
 	}, nil
 }
@@ -688,12 +688,12 @@ func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 			return fmt.Errorf("cannot set unbonding signatures received, because unbonding tx data does not exist: %w", ErrUnbondingDataNotFound)
 		}
 
-		if tx.UnbondingTxData.UnbondingTransactionJurySig != nil || tx.UnbondingTxData.UnbondingTransactionValidatorSig != nil {
+		if tx.UnbondingTxData.UnbondingTransactionCovenantSig != nil || tx.UnbondingTxData.UnbondingTransactionValidatorSig != nil {
 			return fmt.Errorf("cannot set unbonding signatures received, because unbonding signatures already exist: %w", ErrInvalidUnbondingDataUpdate)
 		}
 
 		tx.State = proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED
-		tx.UnbondingTxData.UnbondingTransactionJurySig = update.UnbondingTransactionJurySig
+		tx.UnbondingTxData.UnbondingTransactionCovenantSig = update.UnbondingTransactionCovenantSig
 		tx.UnbondingTxData.UnbondingTransactionValidatorSig = update.UnbondingTransactionValidatorSig
 		return nil
 	}

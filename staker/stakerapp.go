@@ -111,7 +111,7 @@ const (
 	// address types.
 	// Transaction is quite big as witness to spend is composed of:
 	// 1. StakerSig
-	// 2. JurySig
+	// 2. CovenantSig
 	// 3. ValidatorSig
 	// 4. StakingScript
 	// 5. Taproot control block

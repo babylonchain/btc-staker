@@ -136,18 +136,16 @@ func (m *MockBabylonClient) Undelegate(ud *UndelegationData) (*sdk.TxResponse, e
 }
 
 func GetMockClient() *MockBabylonClient {
-	juryPk, err := btcec.NewPrivateKey()
-
+	covenantPk, err := btcec.NewPrivateKey()
 	if err != nil {
 		panic(err)
 	}
 
 	priv := secp256k1.GenPrivKey()
 
-	slashingAddress, _ := btcutil.NewAddressPubKey(juryPk.PubKey().SerializeCompressed(), &chaincfg.SimNetParams)
+	slashingAddress, _ := btcutil.NewAddressPubKey(covenantPk.PubKey().SerializeCompressed(), &chaincfg.SimNetParams)
 
 	validatorBtcPrivKey, err := btcec.NewPrivateKey()
-
 	if err != nil {
 		panic(err)
 	}
@@ -165,7 +163,7 @@ func GetMockClient() *MockBabylonClient {
 			ConfirmationTimeBlocks:    2,
 			FinalizationTimeoutBlocks: 5,
 			MinSlashingTxFeeSat:       btcutil.Amount(1000),
-			CovenantPk:                *juryPk.PubKey(),
+			CovenantPk:                *covenantPk.PubKey(),
 			SlashingAddress:           slashingAddress,
 			SlashingRate:              math.LegacyNewDecWithPrec(1, 1), // 1 * 10^{-1} = 0.1
 		},
