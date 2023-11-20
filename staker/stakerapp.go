@@ -1590,7 +1590,7 @@ func (app *StakerApp) StakeFunds(
 	output, script, err := staking.BuildStakingOutput(
 		stakerPrivKey.PubKey(),
 		validatorPk,
-		&params.JuryPk,
+		&params.CovenantPk,
 		stakingTimeBlocks,
 		stakingAmount,
 		app.network,
@@ -1922,7 +1922,7 @@ func (app *StakerApp) UnbondStaking(
 	undelegationData, err := createUndelegationData(
 		tx,
 		stakerPrivKey,
-		&currentParams.JuryPk,
+		&currentParams.CovenantPk,
 		currentParams.SlashingAddress, changeAddress,
 		unbondingTxFeeRatePerKb,
 		uint16(currentParams.FinalizationTimeoutBlocks),

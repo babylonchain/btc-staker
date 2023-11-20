@@ -168,8 +168,8 @@ type TestManager struct {
 	wg               *sync.WaitGroup
 	serviceAddress   string
 	StakerClient     *dc.StakerServiceJsonRpcClient
-	JuryPrivKey      *btcec.PrivateKey
-	JuryPubKey       *btcec.PublicKey
+	CovenantPrivKey  *btcec.PrivateKey
+	CovenantPubKey   *btcec.PublicKey
 }
 
 type testStakingData struct {
@@ -196,7 +196,7 @@ func (tm *TestManager) getTestStakingData(
 	stakingData, err := staking.NewStakingScriptData(
 		stakerKey,
 		delegatarPrivKey.PubKey(),
-		tm.JuryPubKey,
+		tm.CovenantPubKey,
 		stakingTime,
 	)
 
@@ -292,11 +292,11 @@ func StartManager(
 	err = wh.Start()
 	require.NoError(t, err)
 
-	juryPrivKey, err := btcec.NewPrivateKey()
+	covenantPrivKey, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
-	juryPubKey := juryPrivKey.PubKey()
+	covenantPubKey := covenantPrivKey.PubKey()
 
-	bh, err := NewBabylonNodeHandler(juryPubKey)
+	bh, err := NewBabylonNodeHandler(covenantPubKey)
 	require.NoError(t, err)
 
 	err = bh.Start()
@@ -390,8 +390,8 @@ func StartManager(
 		wg:               &wg,
 		serviceAddress:   addressString,
 		StakerClient:     stakerClient,
-		JuryPrivKey:      juryPrivKey,
-		JuryPubKey:       juryPubKey,
+		CovenantPrivKey:  covenantPrivKey,
+		CovenantPubKey:   covenantPubKey,
 	}
 }
 
@@ -661,7 +661,7 @@ func (tm *TestManager) sendWatchedStakingTx(
 	stakingOutput, script, err := staking.BuildStakingOutput(
 		testStakingData.StakerKey,
 		testStakingData.ValidatorBtcKey,
-		&params.JuryPk,
+		&params.CovenantPk,
 		testStakingData.StakingTime,
 		btcutil.Amount(testStakingData.StakingAmount),
 		simnetParams,
@@ -826,7 +826,7 @@ func (tm *TestManager) insertJurySigForDelegation(t *testing.T, btcDel *btcstype
 	jurySig, err := slashingTx.Sign(
 		stakingMsgTx,
 		stakingTx.Script,
-		tm.JuryPrivKey,
+		tm.CovenantPrivKey,
 		&tm.Config.ActiveNetParams,
 	)
 	require.NoError(t, err)
@@ -863,7 +863,7 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	juryUnbondingSig, err := unbondingTx.Sign(
 		stakingMsgTx,
 		stakingTx.Script,
-		tm.JuryPrivKey,
+		tm.CovenantPrivKey,
 		simnetParams,
 	)
 
@@ -875,7 +875,7 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	jurySlashingSig, err := btcDel.BtcUndelegation.SlashingTx.Sign(
 		unbondingTxMsg,
 		unbondingTx.Script,
-		tm.JuryPrivKey,
+		tm.CovenantPrivKey,
 		simnetParams,
 	)
 	require.NoError(t, err)
@@ -908,7 +908,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	hashed, err := chainhash.NewHash(datagen.GenRandomByteArray(r, 32))
 	require.NoError(t, err)
-	scr, err := txscript.PayToTaprootScript(tm.JuryPubKey)
+	scr, err := txscript.PayToTaprootScript(tm.CovenantPubKey)
 	require.NoError(t, err)
 	_, st, erro := tm.Sa.Wallet().TxDetails(hashed, scr)
 	// query for exsisting tx is not an error, proper state should be returned

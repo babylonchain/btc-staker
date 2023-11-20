@@ -130,7 +130,7 @@ func NewBabylonController(
 type StakingTrackerResponse struct {
 	SlashingAddress btcutil.Address
 	SlashingRate    sdk.Dec
-	JuryPk          btcec.PublicKey
+	CovenantPk      btcec.PublicKey
 	MinSlashingFee  btcutil.Amount
 }
 
@@ -199,8 +199,9 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 		ConfirmationTimeBlocks:    uint32(bccParams.BtcConfirmationDepth),
 		FinalizationTimeoutBlocks: uint32(bccParams.CheckpointFinalizationTimeout),
 		SlashingAddress:           stakingTrackerParams.SlashingAddress,
-		JuryPk:                    stakingTrackerParams.JuryPk,
+		CovenantPk:                stakingTrackerParams.CovenantPk,
 		MinSlashingTxFeeSat:       stakingTrackerParams.MinSlashingFee,
+		SlashingRate:              stakingTrackerParams.SlashingRate,
 	}, nil
 }
 
@@ -475,7 +476,7 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 		return nil, err
 	}
 
-	juryPk, err := response.Params.CovenantPk.ToBTCPK()
+	covenantPk, err := response.Params.CovenantPk.ToBTCPK()
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +484,7 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 	return &StakingTrackerResponse{
 		SlashingAddress: slashingAddress,
 		SlashingRate:    response.Params.SlashingRate,
-		JuryPk:          *juryPk,
+		CovenantPk:      *covenantPk,
 		MinSlashingFee:  btcutil.Amount(response.Params.MinSlashingTxFeeSat),
 	}, nil
 }
@@ -649,18 +650,20 @@ func (bc *BabylonController) QueryHeaderDepth(headerHash *chainhash.Hash) (uint6
 
 // Insert BTC block header using rpc client
 func (bc *BabylonController) InsertBtcBlockHeaders(headers []*wire.BlockHeader) (*sdk.TxResponse, error) {
-	headerBytesSlice := make([]bbntypes.BTCHeaderBytes, len(headers))
-	for _, h := range headers {
-		headerBytes := bbntypes.NewBTCHeaderBytesFromBlockHeader(h)
-		headerBytesSlice = append(headerBytesSlice, headerBytes)
-	}
-
 	msg := &btclctypes.MsgInsertHeaders{
-		Headers: headerBytesSlice,
 		Signer:  bc.getTxSigner(),
+		Headers: chainToChainBytes(headers),
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{msg}, "Failed to send block headers to babylon node")
+}
+
+func chainToChainBytes(chain []*wire.BlockHeader) []bbntypes.BTCHeaderBytes {
+	chainBytes := make([]bbntypes.BTCHeaderBytes, len(chain))
+	for i, header := range chain {
+		chainBytes[i] = bbntypes.NewBTCHeaderBytesFromBlockHeader(header)
+	}
+	return chainBytes
 }
 
 // RegisterValidator registers a BTC validator via a MsgCreateBTCValidator to Babylon

@@ -368,7 +368,7 @@ func parseWatchStakingRequest(
 	// 3.Check jury key in script
 	if !bytes.Equal(
 		schnorr.SerializePubKey(scriptData.StakingScriptData.CovenantKey),
-		schnorr.SerializePubKey(&currentParams.JuryPk),
+		schnorr.SerializePubKey(&currentParams.CovenantPk),
 	) {
 		return nil, nil, fmt.Errorf("failed to watch staking tx. Script jury key do not match current node params")
 	}

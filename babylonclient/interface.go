@@ -3,6 +3,7 @@ package babylonclient
 import (
 	"fmt"
 
+	"cosmossdk.io/math"
 	"github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
@@ -22,7 +23,7 @@ type StakingParams struct {
 	MinSlashingTxFeeSat btcutil.Amount
 
 	// Bitcoin public key of the current jury
-	JuryPk btcec.PublicKey
+	CovenantPk btcec.PublicKey
 
 	// Address to which slashing transactions are sent
 	SlashingAddress btcutil.Address
@@ -164,8 +165,9 @@ func GetMockClient() *MockBabylonClient {
 			ConfirmationTimeBlocks:    2,
 			FinalizationTimeoutBlocks: 5,
 			MinSlashingTxFeeSat:       btcutil.Amount(1000),
-			JuryPk:                    *juryPk.PubKey(),
+			CovenantPk:                *juryPk.PubKey(),
 			SlashingAddress:           slashingAddress,
+			SlashingRate:              math.LegacyNewDecWithPrec(1, 1), // 1 * 10^{-1} = 0.1
 		},
 		babylonKey:      priv,
 		SentMessages:    make(chan *types.MsgCreateBTCDelegation),
