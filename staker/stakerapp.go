@@ -938,6 +938,9 @@ func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Addre
 	slashingFee := app.getSlashingFee(params)
 
 	changeAddress, err := btcutil.DecodeAddress(changeAddressStr, app.network)
+	if err != nil {
+		return nil, err
+	}
 
 	return &externalDelegationData{
 		stakerPrivKey:   stakerPrivKey,
