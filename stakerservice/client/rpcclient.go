@@ -63,6 +63,7 @@ func (c *StakerServiceJsonRpcClient) BabylonValidators(ctx context.Context, offs
 
 func (c *StakerServiceJsonRpcClient) Stake(ctx context.Context,
 	stakerAddress string,
+	changeAddress string,
 	stakingAmount int64,
 	validatorPk string,
 	stakingTimeBlocks int64,
@@ -71,6 +72,7 @@ func (c *StakerServiceJsonRpcClient) Stake(ctx context.Context,
 
 	params := make(map[string]interface{})
 	params["stakerAddress"] = stakerAddress
+	params["changeAddress"] = changeAddress
 	params["stakingAmount"] = stakingAmount
 	params["validatorPk"] = validatorPk
 	params["stakingTimeBlocks"] = stakingTimeBlocks
@@ -156,6 +158,7 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	slashingTxSig string,
 	stakerBabylonPk string,
 	stakerAddress string,
+	changeAddress string,
 	stakerBabylonSig string,
 	stakerBtcSig string,
 	popType int,
@@ -170,6 +173,7 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	params["slashingTxSig"] = slashingTxSig
 	params["stakerBabylonPk"] = stakerBabylonPk
 	params["stakerAddress"] = stakerAddress
+	params["changeAddress"] = changeAddress
 	params["stakerBabylonSig"] = stakerBabylonSig
 	params["stakerBtcSig"] = stakerBtcSig
 	params["popType"] = popType

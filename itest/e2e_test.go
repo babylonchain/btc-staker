@@ -590,6 +590,7 @@ func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingD
 	res, err := tm.StakerClient.Stake(
 		context.Background(),
 		tm.MinerAddr.String(),
+		testStakingData.ChangeAddress.String(),
 		testStakingData.StakingAmount,
 		validatorKey,
 		int64(testStakingData.StakingTime),
@@ -626,6 +627,7 @@ func (tm *TestManager) sendMultipleStakingTx(t *testing.T, testStakingData []*te
 		res, err := tm.StakerClient.Stake(
 			context.Background(),
 			tm.MinerAddr.String(),
+			data.ChangeAddress.String(),
 			data.StakingAmount,
 			validatorKey,
 			int64(data.StakingTime),
@@ -721,7 +723,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 		testStakingData.StakerBabylonPrivKey,
 		tm.WalletPrivKey,
 	)
-
 	require.NoError(t, err)
 
 	_, err = tm.StakerClient.WatchStaking(
@@ -732,12 +733,12 @@ func (tm *TestManager) sendWatchedStakingTx(
 		hex.EncodeToString(slashSig.Serialize()),
 		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
 		tm.MinerAddr.String(),
+		testStakingData.ChangeAddress.String(),
 		hex.EncodeToString(pop.BabylonSig),
 		hex.EncodeToString(pop.BtcSig),
 		// Use schnor verification
 		int(btcstypes.BTCSigType_BIP340),
 	)
-
 	require.NoError(t, err)
 
 	mBlock := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{&txHash}))

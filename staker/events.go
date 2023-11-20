@@ -76,7 +76,7 @@ type watchTxData struct {
 }
 
 func newWatchedStakingRequest(
-	stakerAddress btcutil.Address,
+	stakerAddress, changeAddress btcutil.Address,
 	stakingTx *wire.MsgTx,
 	stakingOutputIdx uint32,
 	stakingOutputPkScript []byte,
@@ -89,6 +89,7 @@ func newWatchedStakingRequest(
 ) *stakingRequestedEvent {
 	return &stakingRequestedEvent{
 		stakerAddress:           stakerAddress,
+		changeAddress:           changeAddress,
 		stakingTxHash:           stakingTx.TxHash(),
 		stakingTx:               stakingTx,
 		stakingOutputIdx:        stakingOutputIdx,

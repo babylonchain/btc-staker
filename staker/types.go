@@ -334,7 +334,7 @@ func parseWatchStakingRequest(
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
-	stakerAddress btcutil.Address,
+	stakerAddress, changeAddress btcutil.Address,
 	pop *cl.BabylonPop,
 	currentParams *cl.StakingParams,
 	network *chaincfg.Params,
@@ -394,7 +394,7 @@ func parseWatchStakingRequest(
 	}
 
 	req := newWatchedStakingRequest(
-		stakerAddress,
+		stakerAddress, changeAddress,
 		stakingTx,
 		uint32(stakingOutputIdx),
 		stakingTx.TxOut[stakingOutputIdx].PkScript,

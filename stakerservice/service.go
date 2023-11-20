@@ -335,49 +335,48 @@ func (s *StakerService) watchStaking(
 	slashingTxSig string,
 	stakerBabylonPk string,
 	stakerAddress string,
+	changeAddress string,
 	stakerBabylonSig string,
 	stakerBtcSig string,
 	popType int,
 ) (*ResultStake, error) {
 
 	stkTx, err := decodeBtcTx(stakingTx)
-
 	if err != nil {
 		return nil, err
 	}
 
 	slshTx, err := decodeBtcTx(slashingTx)
-
 	if err != nil {
 		return nil, err
 	}
 
 	stkScript, err := hex.DecodeString(stakingScript)
-
 	if err != nil {
 		return nil, err
 	}
 
 	address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+	if err != nil {
+		return nil, err
+	}
 
+	changeAddr, err := btcutil.DecodeAddress(changeAddress, &s.config.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
 
 	slashTxSigBytes, err := hex.DecodeString(slashingTxSig)
-
 	if err != nil {
 		return nil, err
 	}
 
 	slashingTxSchnorSig, err := schnorr.ParseSignature(slashTxSigBytes)
-
 	if err != nil {
 		return nil, err
 	}
 
 	stakerBabylonPubkeyBytes, err := hex.DecodeString(stakerBabylonPk)
-
 	if err != nil {
 		return nil, err
 	}
@@ -391,25 +390,21 @@ func (s *StakerService) watchStaking(
 	}
 
 	stakerBabylonSigBytes, err := hex.DecodeString(stakerBabylonSig)
-
 	if err != nil {
 		return nil, err
 	}
 
 	stakerBtcSigBytes, err := hex.DecodeString(stakerBtcSig)
-
 	if err != nil {
 		return nil, err
 	}
 
 	btcPopType, err := babylonclient.IntToPopType(popType)
-
 	if err != nil {
 		return nil, err
 	}
 
 	proofOfPossesion, err := babylonclient.NewBabylonPop(btcPopType, stakerBabylonSigBytes, stakerBtcSigBytes)
-
 	if err != nil {
 		return nil, err
 	}
@@ -420,10 +415,9 @@ func (s *StakerService) watchStaking(
 		slshTx,
 		slashingTxSchnorSig,
 		&stakerBabylonPubKey,
-		address,
+		address, changeAddr,
 		proofOfPossesion,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +465,8 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"withdrawable_transactions": rpc.NewRPCFunc(s.withdrawableTransactions, "offset,limit"),
 
 		// watch api
-		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig,popType"),
+		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,"+
+			"stakerBabylonPk,stakerAddress,changeAddress,stakerBabylonSig,stakerBtcSig,popType"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),
