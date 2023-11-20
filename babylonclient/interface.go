@@ -8,7 +8,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -26,6 +26,8 @@ type StakingParams struct {
 
 	// Address to which slashing transactions are sent
 	SlashingAddress btcutil.Address
+
+	SlashingRate sdk.Dec
 }
 
 // SingleKeyCosmosKeyring represents a keyring that supports only one pritvate/public key pair

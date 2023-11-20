@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
@@ -45,7 +46,8 @@ func buildSlashingTxAndSig(
 	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
 		storedTx.StakingTx,
 		storedTx.StakingOutputIndex,
-		delegationData.slashingAddress,
+		delegationData.slashingAddress, delegationData.changeAddress,
+		delegationData.slashingRate,
 		int64(delegationData.slashingFee),
 	)
 
@@ -199,10 +201,11 @@ func createUndelegationData(
 	storedTx *stakerdb.StoredTransaction,
 	stakerPrivKey *btcec.PrivateKey,
 	juryPubKey *btcec.PublicKey,
-	slashingAddress btcutil.Address,
+	slashingAddress, changeAddress btcutil.Address,
 	feeRatePerKb btcutil.Amount,
 	finalizationTimeBlocks uint16,
 	slashingFee btcutil.Amount,
+	slashingRate sdk.Dec,
 	stakingScriptData *staking.StakingScriptData,
 	btcNetwork *chaincfg.Params,
 ) (*cl.UndelegationData, error) {
@@ -247,8 +250,9 @@ func createUndelegationData(
 	slashUnbondingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		unbondingTx,
 		0,
-		slashingAddress,
+		slashingAddress, changeAddress,
 		int64(slashingFee),
+		slashingRate,
 		unbondingScript,
 		btcNetwork,
 	)

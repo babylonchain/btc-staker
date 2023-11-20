@@ -129,8 +129,9 @@ func NewBabylonController(
 
 type StakingTrackerResponse struct {
 	SlashingAddress btcutil.Address
+	SlashingRate    sdk.Dec
 	JuryPk          btcec.PublicKey
-	MinSlashinFee   btcutil.Amount
+	MinSlashingFee  btcutil.Amount
 }
 
 type ValidatorInfo struct {
@@ -199,7 +200,7 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 		FinalizationTimeoutBlocks: uint32(bccParams.CheckpointFinalizationTimeout),
 		SlashingAddress:           stakingTrackerParams.SlashingAddress,
 		JuryPk:                    stakingTrackerParams.JuryPk,
-		MinSlashingTxFeeSat:       stakingTrackerParams.MinSlashinFee,
+		MinSlashingTxFeeSat:       stakingTrackerParams.MinSlashingFee,
 	}, nil
 }
 
@@ -465,27 +466,25 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 	queryClient := btcstypes.NewQueryClient(clientCtx)
 
 	response, err := queryClient.Params(ctx, &btcstypes.QueryParamsRequest{})
-
 	if err != nil {
 		return nil, err
 	}
 
 	slashingAddress, err := btcutil.DecodeAddress(response.Params.SlashingAddress, bc.btcParams)
-
 	if err != nil {
 		return nil, err
 	}
 
-	juryPk, err := response.Params.JuryPk.ToBTCPK()
-
+	juryPk, err := response.Params.CovenantPk.ToBTCPK()
 	if err != nil {
 		return nil, err
 	}
 
 	return &StakingTrackerResponse{
 		SlashingAddress: slashingAddress,
+		SlashingRate:    response.Params.SlashingRate,
 		JuryPk:          *juryPk,
-		MinSlashinFee:   btcutil.Amount(response.Params.MinSlashingTxFeeSat),
+		MinSlashingFee:  btcutil.Amount(response.Params.MinSlashingTxFeeSat),
 	}, nil
 }
 

@@ -83,6 +83,7 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 	stakingAmount int64,
 	validatorPk string,
 	stakingTimeBlocks int64,
+	changeAddress string,
 ) (*ResultStake, error) {
 
 	if stakingAmount <= 0 {
@@ -92,19 +93,21 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 	amount := btcutil.Amount(stakingAmount)
 
 	address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+	if err != nil {
+		return nil, err
+	}
 
+	changeAddr, err := btcutil.DecodeAddress(changeAddress, &s.config.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
 
 	validatorPkBytes, err := hex.DecodeString(validatorPk)
-
 	if err != nil {
 		return nil, err
 	}
 
 	valSchnorrKey, err := schnorr.ParsePubKey(validatorPkBytes)
-
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +118,7 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 
 	stakingTimeUint16 := uint16(stakingTimeBlocks)
 
-	stakingTxHash, err := s.staker.StakeFunds(address, amount, valSchnorrKey, stakingTimeUint16)
-
+	stakingTxHash, err := s.staker.StakeFunds(address, changeAddr, amount, valSchnorrKey, stakingTimeUint16)
 	if err != nil {
 		return nil, err
 	}

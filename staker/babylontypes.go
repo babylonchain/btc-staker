@@ -32,14 +32,12 @@ func (app *StakerApp) buildOwnedDelegation(
 	storedTx *stakerdb.StoredTransaction,
 	stakingTxInclusionProof []byte,
 ) (*cl.DelegationData, error) {
-	delegationData, err := app.retrieveExternalDelegationData(stakerAddress)
-
+	delegationData, err := app.retrieveExternalDelegationData(stakerAddress, storedTx.ChangeAddress)
 	if err != nil {
 		return nil, err
 	}
 
 	slashingTx, slashingTxSig, err := buildSlashingTxAndSig(delegationData, storedTx)
-
 	if err != nil {
 		// This is truly unexpected, most probably programming error we have
 		// valid and btc confirmed staking transacion, but for some reason we cannot

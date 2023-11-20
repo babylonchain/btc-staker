@@ -41,8 +41,12 @@ type externalDelegationData struct {
 	// slashingAddress needs to be retrieved from babylon
 	slashingAddress btcutil.Address
 
+	changeAddress btcutil.Address
+
 	// babylonPubKey needs to be retrieved from babylon keyring
 	babylonPubKey *secp256k1.PubKey
+
+	slashingRate sdk.Dec
 
 	slashingFee btcutil.Amount
 }
@@ -919,26 +923,29 @@ func (app *StakerApp) stakerPrivateKey(stakerAddress btcutil.Address) (*btcec.Pr
 	return privkey, nil
 }
 
-func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Address) (*externalDelegationData, error) {
+func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Address,
+	changeAddressStr string) (*externalDelegationData, error) {
 	params, err := app.babylonClient.Params()
-
 	if err != nil {
 		return nil, err
 	}
 
 	stakerPrivKey, err := app.stakerPrivateKey(stakerAddress)
-
 	if err != nil {
 		return nil, err
 	}
 
 	slashingFee := app.getSlashingFee(params)
 
+	changeAddress, err := btcutil.DecodeAddress(changeAddressStr, app.network)
+
 	return &externalDelegationData{
 		stakerPrivKey:   stakerPrivKey,
 		slashingAddress: params.SlashingAddress,
+		changeAddress:   changeAddress,
 		babylonPubKey:   app.babylonClient.GetPubKey(),
 		slashingFee:     slashingFee,
+		slashingRate:    params.SlashingRate,
 	}, nil
 }
 
@@ -1216,7 +1223,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakingOutputIdx,
 					ev.stakingTxScript,
 					babylonPopToDbPop(ev.pop),
-					ev.stakerAddress,
+					ev.stakerAddress, ev.changeAddress,
 					ev.watchTxData.slashingTx,
 					ev.watchTxData.slashingTxSig,
 					ev.watchTxData.stakerBabylonPubKey,
@@ -1517,7 +1524,7 @@ func (app *StakerApp) WatchStaking(
 }
 
 func (app *StakerApp) StakeFunds(
-	stakerAddress btcutil.Address,
+	stakerAddress, changeAddress btcutil.Address,
 	stakingAmount btcutil.Amount,
 	validatorPk *btcec.PublicKey,
 	stakingTimeBlocks uint16,
@@ -1600,13 +1607,14 @@ func (app *StakerApp) StakeFunds(
 
 	app.logger.WithFields(logrus.Fields{
 		"stakerAddress": stakerAddress,
+		"changeAddress": changeAddress,
 		"stakingAmount": output.Value,
 		"btxTxHash":     tx.TxHash(),
 		"fee":           feeRate,
 	}).Info("Created and signed staking transaction")
 
 	req := newOwnedStakingRequest(
-		stakerAddress,
+		stakerAddress, changeAddress,
 		tx,
 		0,
 		output.PkScript,
@@ -1893,27 +1901,30 @@ func (app *StakerApp) UnbondStaking(
 
 	// this can happen if we started staker on wrong network
 	stakerAddress, err := btcutil.DecodeAddress(tx.StakerAddress, app.network)
-
 	if err != nil {
 		return nil, fmt.Errorf("cannot unbond: failed decode staker address.: %w", err)
 	}
 
 	stakerPrivKey, err := app.stakerPrivateKey(stakerAddress)
-
 	if err != nil {
 		return nil, fmt.Errorf("cannot unbond: failed to retrieve private key.: %w", err)
 	}
-
 	stakingScriptData := app.mustParseScript(tx.TxScript)
+
+	changeAddress, err := btcutil.DecodeAddress(tx.ChangeAddress, app.network)
+	if err != nil {
+		return nil, fmt.Errorf("cannot unbond: failed decode change address.: %w", err)
+	}
 
 	undelegationData, err := createUndelegationData(
 		tx,
 		stakerPrivKey,
 		&currentParams.JuryPk,
-		currentParams.SlashingAddress,
+		currentParams.SlashingAddress, changeAddress,
 		unbondingTxFeeRatePerKb,
 		uint16(currentParams.FinalizationTimeoutBlocks),
 		app.getSlashingFee(currentParams),
+		currentParams.SlashingRate,
 		stakingScriptData,
 		app.network,
 	)

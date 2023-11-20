@@ -73,6 +73,7 @@ type StoredTransaction struct {
 	// Returning address as string, to avoid having to know how to decode address
 	// which requires knowing the network we are on
 	StakerAddress   string
+	ChangeAddress   string
 	State           proto.TransactionState
 	Watched         bool
 	UnbondingTxData *UnbondingStoreData
@@ -513,7 +514,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	stakingOutputIndex uint32,
 	txscript []byte,
 	pop *ProofOfPossession,
-	stakerAddress btcutil.Address,
+	stakerAddress, changeAddress btcutil.Address,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
@@ -533,6 +534,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 		StakingScript:                txscript,
 		StakingOutputIdx:             stakingOutputIndex,
 		StakerAddress:                stakerAddress.EncodeAddress(),
+		ChangeAddress:                changeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
 		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
