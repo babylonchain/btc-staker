@@ -355,6 +355,7 @@ func parseWatchStakingRequest(
 		slashingTx,
 		stakingTx,
 		int64(currentParams.MinSlashingTxFeeSat),
+		currentParams.SlashingRate,
 		currentParams.SlashingAddress,
 		stakingscript,
 		network,
@@ -366,7 +367,7 @@ func parseWatchStakingRequest(
 
 	// 3.Check jury key in script
 	if !bytes.Equal(
-		schnorr.SerializePubKey(scriptData.StakingScriptData.JuryKey),
+		schnorr.SerializePubKey(scriptData.StakingScriptData.CovenantKey),
 		schnorr.SerializePubKey(&currentParams.JuryPk),
 	) {
 		return nil, nil, fmt.Errorf("failed to watch staking tx. Script jury key do not match current node params")

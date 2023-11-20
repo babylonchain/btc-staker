@@ -13,27 +13,23 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	"strconv"
-
-	dc "github.com/babylonchain/btc-staker/stakerservice/client"
-	"github.com/babylonchain/btc-staker/utils"
-
+	staking "github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
-	service "github.com/babylonchain/btc-staker/stakerservice"
-	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
-
-	staking "github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
+	service "github.com/babylonchain/btc-staker/stakerservice"
+	dc "github.com/babylonchain/btc-staker/stakerservice/client"
 	"github.com/babylonchain/btc-staker/types"
+	"github.com/babylonchain/btc-staker/utils"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -45,6 +41,7 @@ import (
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sttypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/signal"
@@ -54,10 +51,14 @@ import (
 
 // bitcoin params used for testing
 var (
+	r = rand.New(rand.NewSource(time.Now().Unix()))
+
 	simnetParams     = &chaincfg.SimNetParams
 	submitterAddrStr = "bbn1eppc73j56382wjn6nnq3quu5eye4pmm087xfdh"
 	babylonTag       = []byte{1, 2, 3, 4}
 	babylonTagHex    = hex.EncodeToString(babylonTag)
+
+	changeAddress, _ = datagen.GenRandomBTCAddress(r, simnetParams)
 
 	// copy of the seed from btcd/integration/rpctest memWallet, this way we can
 	// import the same wallet in the btcd wallet
@@ -179,6 +180,7 @@ type testStakingData struct {
 	ValidatorBabylonPublicKey *secp256k1.PubKey
 	ValidatorBtcPrivKey       *btcec.PrivateKey
 	ValidatorBtcKey           *btcec.PublicKey
+	ChangeAddress             btcutil.Address
 	StakingTime               uint16
 	StakingAmount             int64
 	Script                    []byte
@@ -217,6 +219,7 @@ func (tm *TestManager) getTestStakingData(
 		ValidatorBabylonPublicKey: validatorBabylonPubKey,
 		ValidatorBtcPrivKey:       delegatarPrivKey,
 		ValidatorBtcKey:           delegatarPrivKey.PubKey(),
+		ChangeAddress:             changeAddress,
 		StakingTime:               stakingTime,
 		StakingAmount:             stakingAmount,
 		Script:                    script,
@@ -689,8 +692,9 @@ func (tm *TestManager) sendWatchedStakingTx(
 	slashingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		tx,
 		uint32(stakingOutputIdx),
-		params.SlashingAddress,
+		params.SlashingAddress, testStakingData.ChangeAddress,
 		int64(params.MinSlashingTxFeeSat)+10,
+		params.SlashingRate,
 		script,
 		simnetParams,
 	)
@@ -771,7 +775,7 @@ func (tm *TestManager) spendStakingTxWithHash(t *testing.T, stakingTxHash *chain
 	mBlock1 := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{spendTxHash}))
 	require.Equal(t, 2, len(mBlock1.Transactions))
 
-	//Tx is in chain
+	// Tx is in chain
 	txDetails, txState, err = tm.Sa.Wallet().TxDetails(spendTxHash, sendTx.MsgTx().TxOut[0].PkScript)
 	require.NoError(t, err)
 	require.NotNil(t, txDetails)
@@ -887,7 +891,6 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 }
 
 func TestSendingStakingTransaction(t *testing.T) {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -900,6 +903,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 	params, err := cl.Params()
 	require.NoError(t, err)
 	stakingTime := uint16(staker.GetMinStakingTime(params))
+
 	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
 	hashed, err := chainhash.NewHash(datagen.GenRandomByteArray(r, 32))

@@ -91,23 +91,21 @@ func GenerateStakingScriptAndAddress(
 		juryPk,
 		stakingTime,
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
 	script, err := scriptData.BuildStakingScript()
-
 	if err != nil {
 		return nil, err
 	}
 
+	unspendableKeyPathKey := staking.UnspendableKeyPathInternalPubKey()
 	address, err := staking.TaprootAddressForScript(
 		script,
-		staking.UnspendableKeyPathInternalPubKey(),
+		&unspendableKeyPathKey,
 		net,
 	)
-
 	if err != nil {
 		return nil, err
 	}
