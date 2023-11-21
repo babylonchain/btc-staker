@@ -786,7 +786,7 @@ func (bc *BabylonController) SubmitCovenantSig(
 		Sig:           sig,
 	}
 
-	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury sig")
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit covenant sig")
 }
 
 func (bc *BabylonController) SubmitCovenantUnbondingSigs(
@@ -805,7 +805,7 @@ func (bc *BabylonController) SubmitCovenantUnbondingSigs(
 		SlashingUnbondingTxSig: slashUnbondingSig,
 	}
 
-	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury unbonding sig")
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit covenant unbonding sig")
 }
 
 func (bc *BabylonController) SubmitValidatorUnbondingSig(

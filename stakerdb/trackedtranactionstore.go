@@ -131,7 +131,7 @@ func newUnbondingSignaturesUpdate(
 	}
 
 	if unbondingTxCovenantSignature == nil {
-		return nil, fmt.Errorf("cannot create unbonding tx data without jury signature")
+		return nil, fmt.Errorf("cannot create unbonding tx data without covenant signature")
 	}
 
 	unbondingData := &proto.UnbondingTxData{

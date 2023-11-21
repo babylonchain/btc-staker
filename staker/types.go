@@ -365,12 +365,12 @@ func parseWatchStakingRequest(
 		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid transactions: %w", err)
 	}
 
-	// 3.Check jury key in script
+	// 3.Check covenant key in script
 	if !bytes.Equal(
 		schnorr.SerializePubKey(scriptData.StakingScriptData.CovenantKey),
 		schnorr.SerializePubKey(&currentParams.CovenantPk),
 	) {
-		return nil, nil, fmt.Errorf("failed to watch staking tx. Script jury key do not match current node params")
+		return nil, nil, fmt.Errorf("failed to watch staking tx. Script covenant key do not match current node params")
 	}
 
 	// 4. Check slashig tx sig is good. It implicitly verify staker pubkey, as script

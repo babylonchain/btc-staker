@@ -104,7 +104,7 @@ func (app *StakerApp) buildDelegation(
 
 // TODO for now we launch this handler indefinitly. At some point we may introduce
 // timeout, and if signatures are not find in this timeout, then we may submit
-// evidence that validator or jury are censoring our unbonding
+// evidence that validator or covenant are censoring our unbonding
 func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chainhash.Hash) {
 	checkSigTicker := time.NewTicker(app.config.StakerConfig.UnbondingTxCheckInterval)
 	defer checkSigTicker.Stop()

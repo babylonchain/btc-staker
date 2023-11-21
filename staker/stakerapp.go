@@ -259,7 +259,7 @@ func NewStakerAppFromDeps(
 		// correct db state
 		undelegationSubmittedToBabylonEvChan: make(chan *undelegationSubmittedToBabylonEvent),
 
-		// channel which receives unbonding signatures from jury and validator for unbonding
+		// channel which receives unbonding signatures from covenant and validator for unbonding
 		// transaction
 		unbondingTxSignaturesConfirmedOnBabylonEvChan: make(chan *unbondingTxSignaturesConfirmedOnBabylonEvent),
 
@@ -779,7 +779,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			// If we are here, it means we encountered edge case where we sent undelegation successfully
 			// but staker application crashed before we could update database.
 			// we just need to restart our unbonding process just after we sent unbonding transaction.
-			// If jury and validator signatures are on babylon, the whole process will just finish quickly.
+			// If covenant and validator signatures are on babylon, the whole process will just finish quickly.
 			// TODO: Thinkg of how to test this case. It is a bit tricky as restarting would need to happen
 			// precisely after sending unbonding transaction, but before write tx to db.
 			confirmation := &undelegationSubmittedToBabylonEvent{
@@ -1853,7 +1853,7 @@ func (app *StakerApp) ListActiveValidators(limit uint64, offset uint64) (*cl.Val
 // 3. If request is successful, unbonding transaction is registred in db and
 // staking transaction is marked as unbonded
 // 4. Staker program starts watching for unbodning transactions signatures from
-// jury and validator
+// covenant and validator
 // 5. After gathering all signatures, unbonding transaction is sent to bitcoin
 // This function returns control to the caller after step 3. Later is up to the caller
 // to check what is state of unbonding transaction

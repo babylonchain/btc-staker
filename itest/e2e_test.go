@@ -816,15 +816,15 @@ func (tm *TestManager) insertAllMinedBlocksToBabylon(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func (tm *TestManager) insertJurySigForDelegation(t *testing.T, btcDel *btcstypes.BTCDelegation) {
+func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcstypes.BTCDelegation) {
 	slashingTx := btcDel.SlashingTx
 	stakingTx := btcDel.StakingTx
 	stakingMsgTx, err := stakingTx.ToMsgTx()
 	require.NoError(t, err)
 
-	// get Jury private key from the keyring
+	// get covenant private key from the keyring
 
-	jurySig, err := slashingTx.Sign(
+	covenantSig, err := slashingTx.Sign(
 		stakingMsgTx,
 		stakingTx.Script,
 		tm.CovenantPrivKey,
@@ -832,7 +832,7 @@ func (tm *TestManager) insertJurySigForDelegation(t *testing.T, btcDel *btcstype
 	)
 	require.NoError(t, err)
 
-	_, err = tm.BabylonClient.SubmitJurySig(btcDel.ValBtcPk, btcDel.BtcPk, stakingMsgTx.TxHash().String(), jurySig)
+	_, err = tm.BabylonClient.SubmitCovenantSig(btcDel.ValBtcPk, btcDel.BtcPk, stakingMsgTx.TxHash().String(), covenantSig)
 	require.NoError(t, err)
 }
 
@@ -861,7 +861,7 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	)
 	require.NoError(t, err)
 
-	juryUnbondingSig, err := unbondingTx.Sign(
+	covenantUnbondingSig, err := unbondingTx.Sign(
 		stakingMsgTx,
 		stakingTx.Script,
 		tm.CovenantPrivKey,
@@ -873,7 +873,7 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	unbondingTxMsg, err := unbondingTx.ToMsgTx()
 	require.NoError(t, err)
 
-	jurySlashingSig, err := btcDel.BtcUndelegation.SlashingTx.Sign(
+	covenantSlashingSig, err := btcDel.BtcUndelegation.SlashingTx.Sign(
 		unbondingTxMsg,
 		unbondingTx.Script,
 		tm.CovenantPrivKey,
@@ -881,12 +881,12 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	)
 	require.NoError(t, err)
 
-	_, err = tm.BabylonClient.SubmitJuryUnbondingSigs(
+	_, err = tm.BabylonClient.SubmitCovenantUnbondingSigs(
 		btcDel.ValBtcPk,
 		btcDel.BtcPk,
 		stakingTxHash,
-		juryUnbondingSig,
-		jurySlashingSig,
+		covenantUnbondingSig,
+		covenantSlashingSig,
 	)
 	require.NoError(t, err)
 }
@@ -1142,7 +1142,7 @@ func TestStakingUnbonding(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pend, 1)
 	// need to activate delegation to unbond
-	tm.insertJurySigForDelegation(t, pend[0])
+	tm.insertCovenantSigForDelegation(t, pend[0])
 
 	feeRate := 2000
 	resp, err := tm.StakerClient.UnbondStaking(context.Background(), txHash.String(), &feeRate)
@@ -1222,7 +1222,7 @@ func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pend, 1)
 	// need to activate delegation to unbond
-	tm.insertJurySigForDelegation(t, pend[0])
+	tm.insertCovenantSigForDelegation(t, pend[0])
 
 	feeRate := 2000
 	unbondResponse, err := tm.StakerClient.UnbondStaking(context.Background(), txHash.String(), &feeRate)
