@@ -61,7 +61,8 @@ func (c *StakerServiceJsonRpcClient) BabylonValidators(ctx context.Context, offs
 	return result, nil
 }
 
-func (c *StakerServiceJsonRpcClient) Stake(ctx context.Context,
+func (c *StakerServiceJsonRpcClient) Stake(
+	ctx context.Context,
 	stakerAddress string,
 	changeAddress string,
 	stakingAmount int64,

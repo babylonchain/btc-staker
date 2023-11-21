@@ -311,6 +311,7 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 			BtcSigOverBabylonSig: ttx.BtcSigBabylonSig,
 		},
 		StakerAddress:   ttx.StakerAddress,
+		ChangeAddress:   ttx.ChangeAddress,
 		State:           ttx.State,
 		Watched:         ttx.Watched,
 		UnbondingTxData: utd,
@@ -478,7 +479,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 	stakingOutputIndex uint32,
 	txscript []byte,
 	pop *ProofOfPossession,
-	stakerAddress btcutil.Address,
+	stakerAddress, changeAddress btcutil.Address,
 ) error {
 	txHash := btcTx.TxHash()
 	txHashBytes := txHash[:]
@@ -495,6 +496,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 		StakingScript:                txscript,
 		StakingOutputIdx:             stakingOutputIndex,
 		StakerAddress:                stakerAddress.EncodeAddress(),
+		ChangeAddress:                changeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
 		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
@@ -746,7 +748,6 @@ func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*Store
 
 		var storedTxProto proto.TrackedTransaction
 		err = pm.Unmarshal(maybeTx, &storedTxProto)
-
 		if err != nil {
 			return ErrCorruptedTransactionsDb
 		}

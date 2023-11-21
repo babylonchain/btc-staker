@@ -1152,7 +1152,6 @@ func (app *StakerApp) buildAndSendDelegation(
 	storedTx *stakerdb.StoredTransaction,
 ) (*sdk.TxResponse, error) {
 	delegation, err := app.buildDelegation(req, stakerAddress, storedTx)
-
 	if err != nil {
 		return nil, err
 	}
@@ -1249,7 +1248,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakingOutputIdx,
 					ev.stakingTxScript,
 					babylonPopToDbPop(ev.pop),
-					ev.stakerAddress,
+					ev.stakerAddress, ev.changeAddress,
 				)
 
 				if err != nil {
