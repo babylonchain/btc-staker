@@ -28,6 +28,7 @@ type StakingParams struct {
 	// Address to which slashing transactions are sent
 	SlashingAddress btcutil.Address
 
+	// The rate at which the staked funds will be slashed, expressed as a decimal.
 	SlashingRate sdk.Dec
 }
 
