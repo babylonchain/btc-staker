@@ -40,14 +40,13 @@ type externalDelegationData struct {
 	stakerPrivKey *btcec.PrivateKey
 	// slashingAddress needs to be retrieved from babylon
 	slashingAddress btcutil.Address
-
+	// changeAddress is the address used to receive change from slashing transaction.
 	changeAddress btcutil.Address
-
 	// babylonPubKey needs to be retrieved from babylon keyring
 	babylonPubKey *secp256k1.PubKey
-
+	// slashingRate is the rate at which the staked funds will be slashed, expressed as a decimal.
 	slashingRate sdk.Dec
-
+	// slashingFee is the fee to be paid for slashing transaction.
 	slashingFee btcutil.Amount
 }
 
