@@ -55,7 +55,9 @@ func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *st
 	require.NoError(t, err)
 	script, err := scriptData.BuildStakingScript()
 	require.NoError(t, err)
-	btcAddress, err := btcutil.NewAddressWitnessScriptHash(datagen.GenRandomByteArray(r, 32), &chaincfg.MainNetParams)
+	stakerAddr, err := datagen.GenRandomBTCAddress(r, &chaincfg.MainNetParams)
+	require.NoError(t, err)
+	changeAddr, err := datagen.GenRandomBTCAddress(r, &chaincfg.MainNetParams)
 	require.NoError(t, err)
 
 	return &stakerdb.StoredTransaction{
@@ -66,7 +68,8 @@ func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *st
 			BabylonSigOverBtcPk:  datagen.GenRandomByteArray(r, 64),
 			BtcSigOverBabylonSig: datagen.GenRandomByteArray(r, 64),
 		},
-		StakerAddress: btcAddress.String(),
+		StakerAddress: stakerAddr.String(),
+		ChangeAddress: changeAddr.String(),
 	}
 }
 
