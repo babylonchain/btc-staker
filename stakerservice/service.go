@@ -67,6 +67,7 @@ func storedTxToStakingDetails(storedTx *stakerdb.StoredTransaction) StakingDetai
 	return StakingDetails{
 		StakingTxHash:  storedTx.StakingTx.TxHash().String(),
 		StakerAddress:  storedTx.StakerAddress,
+		ChangeAddress:  storedTx.ChangeAddress,
 		StakingScript:  hex.EncodeToString(storedTx.TxScript),
 		StakingState:   storedTx.State.String(),
 		Watched:        storedTx.Watched,
@@ -80,10 +81,10 @@ func (s *StakerService) health(_ *rpctypes.Context) (*ResultHealth, error) {
 
 func (s *StakerService) stake(_ *rpctypes.Context,
 	stakerAddress string,
+	changeAddress string,
 	stakingAmount int64,
 	validatorPk string,
 	stakingTimeBlocks int64,
-	changeAddress string,
 ) (*ResultStake, error) {
 
 	if stakingAmount <= 0 {
@@ -132,19 +133,16 @@ func (s *StakerService) stakingDetails(_ *rpctypes.Context,
 	stakingTxHash string) (*StakingDetails, error) {
 
 	txHash, err := chainhash.NewHashFromStr(stakingTxHash)
-
 	if err != nil {
 		return nil, err
 	}
 
 	storedTx, err := s.staker.GetStoredTransaction(txHash)
-
 	if err != nil {
 		return nil, err
 	}
 
 	details := storedTxToStakingDetails(storedTx)
-
 	return &details, nil
 }
 
@@ -457,7 +455,8 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
 		// staking API
-		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
+		"stake": rpc.NewRPCFunc(s.stake, "stakerAddress,changeAddress,stakingAmount,validatorPk,"+
+			"stakingTimeBlocks"),
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
