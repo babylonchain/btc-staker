@@ -24,6 +24,7 @@ var scriptsCommands = []cli.Command{
 const (
 	stakerKeyFlag     = "staker-key"
 	stakerAddressFlag = "staker-address"
+	changeAddressFlag = "change-address"
 	delegatorKeyFlag  = "delegator-key"
 	juryKeyFlag       = "jury-key"
 	stakingTimeFlag   = "staking-time"
