@@ -93,7 +93,7 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 
 	amount := btcutil.Amount(stakingAmount)
 
-	address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+	stakerAddr, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 
 	stakingTimeUint16 := uint16(stakingTimeBlocks)
 
-	stakingTxHash, err := s.staker.StakeFunds(address, changeAddr, amount, valSchnorrKey, stakingTimeUint16)
+	stakingTxHash, err := s.staker.StakeFunds(stakerAddr, changeAddr, amount, valSchnorrKey, stakingTimeUint16)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +354,7 @@ func (s *StakerService) watchStaking(
 		return nil, err
 	}
 
-	address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+	stakerAddr, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +413,7 @@ func (s *StakerService) watchStaking(
 		slshTx,
 		slashingTxSchnorSig,
 		&stakerBabylonPubKey,
-		address, changeAddr,
+		stakerAddr, changeAddr,
 		proofOfPossesion,
 	)
 	if err != nil {
