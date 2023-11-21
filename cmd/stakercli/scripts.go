@@ -26,7 +26,7 @@ const (
 	stakerAddressFlag = "staker-address"
 	changeAddressFlag = "change-address"
 	delegatorKeyFlag  = "delegator-key"
-	juryKeyFlag       = "jury-key"
+	covenantKeyFlag   = "covenant-key"
 	stakingTimeFlag   = "staking-time"
 )
 
@@ -49,8 +49,8 @@ var generateStakingScript = cli.Command{
 			Required: true,
 		},
 		cli.StringFlag{
-			Name:     juryKeyFlag,
-			Usage:    "Hex encoded Bitcoin public key of the jury in bip340 format",
+			Name:     covenantKeyFlag,
+			Usage:    "Hex encoded Bitcoin public key of the covenant in bip340 format",
 			Required: true,
 		},
 		cli.Uint64Flag{
@@ -104,7 +104,7 @@ func genScript(ctx *cli.Context) error {
 	response, err := st.GenerateStakingScriptAndAddress(
 		stakerPkString,
 		ctx.String(delegatorKeyFlag),
-		ctx.String(juryKeyFlag),
+		ctx.String(covenantKeyFlag),
 		ctx.Uint64(stakingTimeFlag),
 		netParams,
 	)

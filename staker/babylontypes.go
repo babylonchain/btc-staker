@@ -144,7 +144,7 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 				continue
 			}
 
-			if di.UndelegationInfo.JuryUnbodningSignature != nil && di.UndelegationInfo.ValidatorUnbondingSignature != nil {
+			if di.UndelegationInfo.CovenantUnbondingSignature != nil && di.UndelegationInfo.ValidatorUnbondingSignature != nil {
 				// we have both signatures, we can stop checking
 				app.logger.WithFields(logrus.Fields{
 					"stakingTxHash": stakingTxHash,
@@ -154,7 +154,7 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 				// as channel is unbuffered
 				req := &unbondingTxSignaturesConfirmedOnBabylonEvent{
 					stakingTxHash:               *stakingTxHash,
-					juryUnbondingSignature:      di.UndelegationInfo.JuryUnbodningSignature,
+					covenantUnbondingSignature:  di.UndelegationInfo.CovenantUnbondingSignature,
 					validatorUnbondingSignature: di.UndelegationInfo.ValidatorUnbondingSignature,
 				}
 

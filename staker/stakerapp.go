@@ -1335,7 +1335,7 @@ func (app *StakerApp) handleStakingEvents() {
 			if err := app.txTracker.SetTxUnbondingSignaturesReceived(
 				&ev.stakingTxHash,
 				ev.validatorUnbondingSignature,
-				ev.juryUnbondingSignature,
+				ev.covenantUnbondingSignature,
 			); err != nil {
 				// TODO: handle this error somehow, it means we possilbly make invalid state transition
 				app.logger.Fatalf("Error setting state for tx %s: %s", &ev.stakingTxHash, err)

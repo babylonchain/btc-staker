@@ -249,9 +249,9 @@ func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*Unbondi
 		}
 	}
 
-	var jurySig *schnorr.Signature
+	var covenantSig *schnorr.Signature
 	if ud.UnbondingTransactionCovenantSig != nil {
-		jurySig, err = schnorr.ParseSignature(ud.UnbondingTransactionCovenantSig)
+		covenantSig, err = schnorr.ParseSignature(ud.UnbondingTransactionCovenantSig)
 
 		if err != nil {
 			return nil, err
@@ -268,7 +268,7 @@ func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*Unbondi
 		UnbondingTx:                   &unbondingTx,
 		UnbondingTxScript:             ud.UnbondingTransactionScript,
 		UnbondingTxValidatorSignature: validatorSig,
-		UnbondingTxCovenantSignature:  jurySig,
+		UnbondingTxCovenantSignature:  covenantSig,
 		UnbondingTxConfirmationInfo:   unbondingTxConfirmationInfo,
 	}, nil
 }
@@ -675,9 +675,9 @@ func (c *TrackedTransactionStore) SetTxUnbondingStarted(
 func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 	txHash *chainhash.Hash,
 	validatorUnbondingSignature *schnorr.Signature,
-	juryUnbondingSignature *schnorr.Signature,
+	covenantUnbondingSignature *schnorr.Signature,
 ) error {
-	update, err := newUnbondingSignaturesUpdate(validatorUnbondingSignature, juryUnbondingSignature)
+	update, err := newUnbondingSignaturesUpdate(validatorUnbondingSignature, covenantUnbondingSignature)
 
 	if err != nil {
 		return err

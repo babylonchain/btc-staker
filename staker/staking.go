@@ -77,7 +77,8 @@ func ParseStakingScriptData(
 	)
 }
 
-// GenerateStakingScriptAndAddress generates staking script and address for the given staker, delegator, jury and staking time
+// GenerateStakingScriptAndAddress generates staking script and address for the given staker, delegator,
+// covenant and staking time
 func GenerateStakingScriptAndAddress(
 	stakerPk string,
 	delegatorPk string,

@@ -200,7 +200,7 @@ func createSpendStakeTxFromStoredTx(
 func createUndelegationData(
 	storedTx *stakerdb.StoredTransaction,
 	stakerPrivKey *btcec.PrivateKey,
-	juryPubKey *btcec.PublicKey,
+	covenantPubKey *btcec.PublicKey,
 	slashingAddress, changeAddress btcutil.Address,
 	feeRatePerKb btcutil.Amount,
 	finalizationTimeBlocks uint16,
@@ -233,7 +233,7 @@ func createUndelegationData(
 	unbondingOutput, unbondingScript, err := staking.BuildStakingOutput(
 		stakingScriptData.StakerKey,
 		stakingScriptData.ValidatorKey,
-		juryPubKey,
+		covenantPubKey,
 		finalizationTimeBlocks+1,
 		btcutil.Amount(unbondingOutputValue),
 		btcNetwork,

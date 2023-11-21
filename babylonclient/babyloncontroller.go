@@ -291,7 +291,7 @@ type UndelegationData struct {
 }
 
 type UndelegationInfo struct {
-	JuryUnbodningSignature      *schnorr.Signature
+	CovenantUnbondingSignature  *schnorr.Signature
 	ValidatorUnbondingSignature *schnorr.Signature
 	UnbondingTransaction        *wire.MsgTx
 	UnbondingTransactionScript  []byte
@@ -707,13 +707,14 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 		var udi *UndelegationInfo = nil
 
 		if resp.UndelegationInfo != nil {
-			var jurySig *schnorr.Signature = nil
+			var covenantSig *schnorr.Signature = nil
 			if resp.UndelegationInfo.CovenantUnbondingSig != nil {
 				jsig, err := resp.UndelegationInfo.CovenantUnbondingSig.ToBTCSig()
 				if err != nil {
-					return retry.Unrecoverable(fmt.Errorf("malformed jury sig: %s : %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
+					return retry.Unrecoverable(fmt.Errorf("malformed covenant sig: %s : %w", err.Error(),
+						ErrInvalidValueReceivedFromBabylonNode))
 				}
-				jurySig = jsig
+				covenantSig = jsig
 			}
 
 			var validatorSig *schnorr.Signature = nil
@@ -732,7 +733,7 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 			}
 
 			udi = &UndelegationInfo{
-				JuryUnbodningSignature:      jurySig,
+				CovenantUnbondingSignature:  covenantSig,
 				ValidatorUnbondingSignature: validatorSig,
 				UnbondingTransaction:        tx,
 				UnbondingTransactionScript:  resp.UndelegationInfo.UnbondingTx.Script,
@@ -772,7 +773,7 @@ func (bc *BabylonController) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhas
 
 // Test methods for e2e testing
 // Different babylon sig methods to support e2e testing
-func (bc *BabylonController) SubmitJurySig(
+func (bc *BabylonController) SubmitCovenantSig(
 	btcPubKey *bbntypes.BIP340PubKey,
 	delPubKey *bbntypes.BIP340PubKey,
 	stakingTxHash string,
@@ -788,7 +789,7 @@ func (bc *BabylonController) SubmitJurySig(
 	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury sig")
 }
 
-func (bc *BabylonController) SubmitJuryUnbondingSigs(
+func (bc *BabylonController) SubmitCovenantUnbondingSigs(
 	btcPubKey *bbntypes.BIP340PubKey,
 	delPubKey *bbntypes.BIP340PubKey,
 	stakingTxHash string,

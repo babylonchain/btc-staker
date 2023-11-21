@@ -162,7 +162,7 @@ func (event *undelegationSubmittedToBabylonEvent) EventDesc() string {
 
 type unbondingTxSignaturesConfirmedOnBabylonEvent struct {
 	stakingTxHash               chainhash.Hash
-	juryUnbondingSignature      *schnorr.Signature
+	covenantUnbondingSignature  *schnorr.Signature
 	validatorUnbondingSignature *schnorr.Signature
 }
 
