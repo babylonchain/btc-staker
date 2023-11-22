@@ -65,13 +65,13 @@ func NewStakerService(
 
 func storedTxToStakingDetails(storedTx *stakerdb.StoredTransaction) StakingDetails {
 	return StakingDetails{
-		StakingTxHash:  storedTx.StakingTx.TxHash().String(),
-		StakerAddress:  storedTx.StakerAddress,
-		ChangeAddress:  storedTx.ChangeAddress,
-		StakingScript:  hex.EncodeToString(storedTx.TxScript),
-		StakingState:   storedTx.State.String(),
-		Watched:        storedTx.Watched,
-		TransactionIdx: strconv.FormatUint(storedTx.StoredTransactionIdx, 10),
+		StakingTxHash:           storedTx.StakingTx.TxHash().String(),
+		StakerAddress:           storedTx.StakerAddress,
+		SlashingTxChangeAddress: storedTx.SlashingTxChangeAddress,
+		StakingScript:           hex.EncodeToString(storedTx.TxScript),
+		StakingState:            storedTx.State.String(),
+		Watched:                 storedTx.Watched,
+		TransactionIdx:          strconv.FormatUint(storedTx.StoredTransactionIdx, 10),
 	}
 }
 
@@ -81,7 +81,7 @@ func (s *StakerService) health(_ *rpctypes.Context) (*ResultHealth, error) {
 
 func (s *StakerService) stake(_ *rpctypes.Context,
 	stakerAddress string,
-	changeAddress string,
+	slashingTxChangeAddress string,
 	stakingAmount int64,
 	validatorPk string,
 	stakingTimeBlocks int64,
@@ -98,7 +98,7 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 		return nil, err
 	}
 
-	changeAddr, err := btcutil.DecodeAddress(changeAddress, &s.config.ActiveNetParams)
+	slashingTxChangeAddr, err := btcutil.DecodeAddress(slashingTxChangeAddress, &s.config.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 
 	stakingTimeUint16 := uint16(stakingTimeBlocks)
 
-	stakingTxHash, err := s.staker.StakeFunds(stakerAddr, changeAddr, amount, valSchnorrKey, stakingTimeUint16)
+	stakingTxHash, err := s.staker.StakeFunds(stakerAddr, slashingTxChangeAddr, amount, valSchnorrKey, stakingTimeUint16)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +333,7 @@ func (s *StakerService) watchStaking(
 	slashingTxSig string,
 	stakerBabylonPk string,
 	stakerAddress string,
-	changeAddress string,
+	slashingTxChangeAddress string,
 	stakerBabylonSig string,
 	stakerBtcSig string,
 	popType int,
@@ -359,7 +359,7 @@ func (s *StakerService) watchStaking(
 		return nil, err
 	}
 
-	changeAddr, err := btcutil.DecodeAddress(changeAddress, &s.config.ActiveNetParams)
+	slashingTxChangeAddr, err := btcutil.DecodeAddress(slashingTxChangeAddress, &s.config.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +413,7 @@ func (s *StakerService) watchStaking(
 		slshTx,
 		slashingTxSchnorSig,
 		&stakerBabylonPubKey,
-		stakerAddr, changeAddr,
+		stakerAddr, slashingTxChangeAddr,
 		proofOfPossesion,
 	)
 	if err != nil {
@@ -455,8 +455,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
 		// staking API
-		"stake": rpc.NewRPCFunc(s.stake, "stakerAddress,changeAddress,stakingAmount,validatorPk,"+
-			"stakingTimeBlocks"),
+		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,slashingTxChangeAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
@@ -464,8 +463,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"withdrawable_transactions": rpc.NewRPCFunc(s.withdrawableTransactions, "offset,limit"),
 
 		// watch api
-		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,"+
-			"stakerBabylonPk,stakerAddress,changeAddress,stakerBabylonSig,stakerBtcSig,popType"),
+		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,slashingTxChangeAddress,stakerBabylonSig,stakerBtcSig,popType"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),

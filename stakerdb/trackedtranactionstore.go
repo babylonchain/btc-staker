@@ -72,11 +72,11 @@ type StoredTransaction struct {
 	Pop                       *ProofOfPossession
 	// Returning address as string, to avoid having to know how to decode address
 	// which requires knowing the network we are on
-	StakerAddress   string
-	ChangeAddress   string
-	State           proto.TransactionState
-	Watched         bool
-	UnbondingTxData *UnbondingStoreData
+	StakerAddress           string
+	SlashingTxChangeAddress string
+	State                   proto.TransactionState
+	Watched                 bool
+	UnbondingTxData         *UnbondingStoreData
 }
 
 type WatchedTransactionData struct {
@@ -310,11 +310,11 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 			BabylonSigOverBtcPk:  ttx.BabylonSigBtcPk,
 			BtcSigOverBabylonSig: ttx.BtcSigBabylonSig,
 		},
-		StakerAddress:   ttx.StakerAddress,
-		ChangeAddress:   ttx.ChangeAddress,
-		State:           ttx.State,
-		Watched:         ttx.Watched,
-		UnbondingTxData: utd,
+		StakerAddress:           ttx.StakerAddress,
+		SlashingTxChangeAddress: ttx.SlashingTxChangeAddress,
+		State:                   ttx.State,
+		Watched:                 ttx.Watched,
+		UnbondingTxData:         utd,
 	}, nil
 }
 
@@ -479,7 +479,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 	stakingOutputIndex uint32,
 	txscript []byte,
 	pop *ProofOfPossession,
-	stakerAddress, changeAddress btcutil.Address,
+	stakerAddress, slashingTxChangeAddress btcutil.Address,
 ) error {
 	txHash := btcTx.TxHash()
 	txHashBytes := txHash[:]
@@ -496,7 +496,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 		StakingScript:                txscript,
 		StakingOutputIdx:             stakingOutputIndex,
 		StakerAddress:                stakerAddress.EncodeAddress(),
-		ChangeAddress:                changeAddress.EncodeAddress(),
+		SlashingTxChangeAddress:      slashingTxChangeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
 		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
@@ -516,7 +516,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	stakingOutputIndex uint32,
 	txscript []byte,
 	pop *ProofOfPossession,
-	stakerAddress, changeAddress btcutil.Address,
+	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
@@ -536,7 +536,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 		StakingScript:                txscript,
 		StakingOutputIdx:             stakingOutputIndex,
 		StakerAddress:                stakerAddress.EncodeAddress(),
-		ChangeAddress:                changeAddress.EncodeAddress(),
+		SlashingTxChangeAddress:      slashingTxChangeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
 		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,

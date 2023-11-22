@@ -46,7 +46,7 @@ func buildSlashingTxAndSig(
 	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
 		storedTx.StakingTx,
 		storedTx.StakingOutputIndex,
-		delegationData.slashingAddress, delegationData.changeAddress,
+		delegationData.slashingAddress, delegationData.slashingTxChangeAddress,
 		delegationData.slashingRate,
 		int64(delegationData.slashingFee),
 	)
@@ -201,7 +201,7 @@ func createUndelegationData(
 	storedTx *stakerdb.StoredTransaction,
 	stakerPrivKey *btcec.PrivateKey,
 	covenantPubKey *btcec.PublicKey,
-	slashingAddress, changeAddress btcutil.Address,
+	slashingAddress, slashingTxChangeAddress btcutil.Address,
 	feeRatePerKb btcutil.Amount,
 	finalizationTimeBlocks uint16,
 	slashingFee btcutil.Amount,
@@ -250,7 +250,7 @@ func createUndelegationData(
 	slashUnbondingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		unbondingTx,
 		0,
-		slashingAddress, changeAddress,
+		slashingAddress, slashingTxChangeAddress,
 		int64(slashingFee),
 		slashingRate,
 		unbondingScript,
@@ -334,7 +334,7 @@ func parseWatchStakingRequest(
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
-	stakerAddress, changeAddress btcutil.Address,
+	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	pop *cl.BabylonPop,
 	currentParams *cl.StakingParams,
 	network *chaincfg.Params,
@@ -394,7 +394,7 @@ func parseWatchStakingRequest(
 	}
 
 	req := newWatchedStakingRequest(
-		stakerAddress, changeAddress,
+		stakerAddress, slashingTxChangeAddress,
 		stakingTx,
 		uint32(stakingOutputIdx),
 		stakingTx.TxOut[stakingOutputIdx].PkScript,

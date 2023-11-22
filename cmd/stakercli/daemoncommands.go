@@ -320,12 +320,12 @@ func stake(ctx *cli.Context) error {
 	sctx := context.Background()
 
 	stakerAddress := ctx.String(stakerAddressFlag)
-	changeAddress := ctx.String(changeAddressFlag)
+	slashingTxChangeAddress := ctx.String(slashingTxChangeAddressFlag)
 	stakingAmount := ctx.Int64(stakingAmountFlag)
 	validatorPk := ctx.String(validatorPkFlag)
 	stakingTimeBlocks := ctx.Int64(stakingTimeFlag)
 
-	results, err := client.Stake(sctx, stakerAddress, changeAddress, stakingAmount, validatorPk, stakingTimeBlocks)
+	results, err := client.Stake(sctx, stakerAddress, slashingTxChangeAddress, stakingAmount, validatorPk, stakingTimeBlocks)
 	if err != nil {
 		return err
 	}

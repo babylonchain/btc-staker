@@ -32,7 +32,7 @@ func (app *StakerApp) buildOwnedDelegation(
 	storedTx *stakerdb.StoredTransaction,
 	stakingTxInclusionProof []byte,
 ) (*cl.DelegationData, error) {
-	delegationData, err := app.retrieveExternalDelegationData(stakerAddress, storedTx.ChangeAddress)
+	delegationData, err := app.retrieveExternalDelegationData(stakerAddress, storedTx.SlashingTxChangeAddress)
 	if err != nil {
 		return nil, err
 	}

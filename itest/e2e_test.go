@@ -58,7 +58,7 @@ var (
 	babylonTag       = []byte{1, 2, 3, 4}
 	babylonTagHex    = hex.EncodeToString(babylonTag)
 
-	changeAddress, _ = datagen.GenRandomBTCAddress(r, simnetParams)
+	slashingTxChangeAddress, _ = datagen.GenRandomBTCAddress(r, simnetParams)
 
 	// copy of the seed from btcd/integration/rpctest memWallet, this way we can
 	// import the same wallet in the btcd wallet
@@ -180,7 +180,7 @@ type testStakingData struct {
 	ValidatorBabylonPublicKey *secp256k1.PubKey
 	ValidatorBtcPrivKey       *btcec.PrivateKey
 	ValidatorBtcKey           *btcec.PublicKey
-	ChangeAddress             btcutil.Address
+	SlashingTxChangeAddress   btcutil.Address
 	StakingTime               uint16
 	StakingAmount             int64
 	Script                    []byte
@@ -219,7 +219,7 @@ func (tm *TestManager) getTestStakingData(
 		ValidatorBabylonPublicKey: validatorBabylonPubKey,
 		ValidatorBtcPrivKey:       delegatarPrivKey,
 		ValidatorBtcKey:           delegatarPrivKey.PubKey(),
-		ChangeAddress:             changeAddress,
+		SlashingTxChangeAddress:   slashingTxChangeAddress,
 		StakingTime:               stakingTime,
 		StakingAmount:             stakingAmount,
 		Script:                    script,
@@ -590,7 +590,7 @@ func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingD
 	res, err := tm.StakerClient.Stake(
 		context.Background(),
 		tm.MinerAddr.String(),
-		testStakingData.ChangeAddress.String(),
+		testStakingData.SlashingTxChangeAddress.String(),
 		testStakingData.StakingAmount,
 		validatorKey,
 		int64(testStakingData.StakingTime),
@@ -627,7 +627,7 @@ func (tm *TestManager) sendMultipleStakingTx(t *testing.T, testStakingData []*te
 		res, err := tm.StakerClient.Stake(
 			context.Background(),
 			tm.MinerAddr.String(),
-			data.ChangeAddress.String(),
+			data.SlashingTxChangeAddress.String(),
 			data.StakingAmount,
 			validatorKey,
 			int64(data.StakingTime),
@@ -694,7 +694,7 @@ func (tm *TestManager) sendWatchedStakingTx(
 	slashingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		tx,
 		uint32(stakingOutputIdx),
-		params.SlashingAddress, testStakingData.ChangeAddress,
+		params.SlashingAddress, testStakingData.SlashingTxChangeAddress,
 		int64(params.MinSlashingTxFeeSat)+10,
 		params.SlashingRate,
 		script,
@@ -733,7 +733,7 @@ func (tm *TestManager) sendWatchedStakingTx(
 		hex.EncodeToString(slashSig.Serialize()),
 		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
 		tm.MinerAddr.String(),
-		testStakingData.ChangeAddress.String(),
+		testStakingData.SlashingTxChangeAddress.String(),
 		hex.EncodeToString(pop.BabylonSig),
 		hex.EncodeToString(pop.BtcSig),
 		// Use schnor verification
