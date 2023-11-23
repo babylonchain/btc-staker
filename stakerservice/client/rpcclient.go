@@ -159,7 +159,6 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	slashingTxSig string,
 	stakerBabylonPk string,
 	stakerAddress string,
-	slashingTxChangeAddress string,
 	stakerBabylonSig string,
 	stakerBtcSig string,
 	popType int,
@@ -174,7 +173,6 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	params["slashingTxSig"] = slashingTxSig
 	params["stakerBabylonPk"] = stakerBabylonPk
 	params["stakerAddress"] = stakerAddress
-	params["slashingTxChangeAddress"] = slashingTxChangeAddress
 	params["stakerBabylonSig"] = stakerBabylonSig
 	params["stakerBtcSig"] = stakerBtcSig
 	params["popType"] = popType

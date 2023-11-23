@@ -333,7 +333,6 @@ func (s *StakerService) watchStaking(
 	slashingTxSig string,
 	stakerBabylonPk string,
 	stakerAddress string,
-	slashingTxChangeAddress string,
 	stakerBabylonSig string,
 	stakerBtcSig string,
 	popType int,
@@ -355,11 +354,6 @@ func (s *StakerService) watchStaking(
 	}
 
 	stakerAddr, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
-	if err != nil {
-		return nil, err
-	}
-
-	slashingTxChangeAddr, err := btcutil.DecodeAddress(slashingTxChangeAddress, &s.config.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +407,7 @@ func (s *StakerService) watchStaking(
 		slshTx,
 		slashingTxSchnorSig,
 		&stakerBabylonPubKey,
-		stakerAddr, slashingTxChangeAddr,
+		stakerAddr,
 		proofOfPossesion,
 	)
 	if err != nil {
@@ -463,7 +457,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"withdrawable_transactions": rpc.NewRPCFunc(s.withdrawableTransactions, "offset,limit"),
 
 		// watch api
-		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,slashingTxChangeAddress,stakerBabylonSig,stakerBtcSig,popType"),
+		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig,popType"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),

@@ -700,7 +700,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 		script,
 		simnetParams,
 	)
-
 	require.NoError(t, err)
 
 	slashSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
@@ -733,7 +732,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 		hex.EncodeToString(slashSig.Serialize()),
 		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
 		tm.MinerAddr.String(),
-		testStakingData.SlashingTxChangeAddress.String(),
 		hex.EncodeToString(pop.BabylonSig),
 		hex.EncodeToString(pop.BtcSig),
 		// Use schnor verification

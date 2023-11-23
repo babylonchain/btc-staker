@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/stakerdb"
@@ -15,10 +13,12 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/wallet/txsizes"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 )
 
@@ -334,7 +334,7 @@ func parseWatchStakingRequest(
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
-	stakerAddress, slashingTxChangeAddress btcutil.Address,
+	stakerAddress btcutil.Address,
 	pop *cl.BabylonPop,
 	currentParams *cl.StakingParams,
 	network *chaincfg.Params,
@@ -345,7 +345,6 @@ func parseWatchStakingRequest(
 		stakingscript,
 		network,
 	)
-
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to watch staking tx due to script not matchin script: %w", err)
 	}
@@ -360,7 +359,6 @@ func parseWatchStakingRequest(
 		stakingscript,
 		network,
 	)
-
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid transactions: %w", err)
 	}
@@ -383,7 +381,6 @@ func parseWatchStakingRequest(
 		scriptData.StakingScriptData.StakerKey,
 		slashingTxSig.Serialize(),
 	)
-
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx sig: %w", err)
 	}
@@ -392,6 +389,16 @@ func parseWatchStakingRequest(
 	if err = pop.ValidatePop(stakerBabylonPk, scriptData.StakingScriptData.StakerKey, network); err != nil {
 		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid pop: %w", err)
 	}
+
+	// 6. Extract slashing tx change address
+	_, outAddrs, _, err := txscript.ExtractPkScriptAddrs(slashingTx.TxOut[1].PkScript, network)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx change address: %w", err)
+	}
+	if len(outAddrs) != 1 {
+		return nil, nil, fmt.Errorf("failed to watch staking tx. Only one slashing tx change address is allowed")
+	}
+	slashingTxChangeAddress := outAddrs[0]
 
 	req := newWatchedStakingRequest(
 		stakerAddress, slashingTxChangeAddress,

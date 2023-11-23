@@ -1467,7 +1467,7 @@ func (app *StakerApp) WatchStaking(
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
-	stakerAddress, slashingTxChangeAddress btcutil.Address,
+	stakerAddress btcutil.Address,
 	pop *cl.BabylonPop,
 ) (*chainhash.Hash, error) {
 	currentParams, err := app.babylonClient.Params()
@@ -1482,7 +1482,7 @@ func (app *StakerApp) WatchStaking(
 		slashingTx,
 		slashingTxSig,
 		stakerBabylonPk,
-		stakerAddress, slashingTxChangeAddress,
+		stakerAddress,
 		pop,
 		currentParams,
 		app.network,
