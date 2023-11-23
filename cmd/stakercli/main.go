@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/babylonchain/btc-staker/types"
 	"os"
+
+	"github.com/babylonchain/btc-staker/types"
 
 	"github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/staker"
@@ -108,8 +109,6 @@ func main() {
 		},
 	}
 
-	app.Commands = append(app.Commands, scriptsCommands...)
-	app.Commands = append(app.Commands, transactionCommands...)
 	app.Commands = append(app.Commands, daemonCommands...)
 	app.Commands = append(app.Commands, adminCommands...)
 

@@ -3,7 +3,7 @@ package babylonclient
 import (
 	"fmt"
 
-	"cosmossdk.io/math"
+	sdkmath "cosmossdk.io/math"
 	"github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
@@ -11,6 +11,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	pv "github.com/cosmos/relayer/v2/relayer/provider"
 )
 
 type StakingParams struct {
@@ -23,13 +24,16 @@ type StakingParams struct {
 	MinSlashingTxFeeSat btcutil.Amount
 
 	// Bitcoin public key of the current covenant
-	CovenantPk btcec.PublicKey
+	CovenantPks []*btcec.PublicKey
 
 	// Address to which slashing transactions are sent
 	SlashingAddress btcutil.Address
 
 	// The rate at which the staked funds will be slashed, expressed as a decimal.
-	SlashingRate sdk.Dec
+	SlashingRate sdkmath.LegacyDec
+
+	// Convenant quorum threshold
+	CovenantQuruomThreshold uint32
 }
 
 // SingleKeyCosmosKeyring represents a keyring that supports only one pritvate/public key pair
@@ -42,8 +46,8 @@ type SingleKeyKeyring interface {
 type BabylonClient interface {
 	SingleKeyKeyring
 	Params() (*StakingParams, error)
-	Delegate(dg *DelegationData) (*sdk.TxResponse, error)
-	Undelegate(ud *UndelegationData) (*sdk.TxResponse, error)
+	Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error)
+	Undelegate(ud *UndelegationData) (*pv.RelayerTxResponse, error)
 	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
 	QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error)
 	QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error)
@@ -90,7 +94,7 @@ func (m *MockBabylonClient) GetPubKey() *secp256k1.PubKey {
 	}
 }
 
-func (m *MockBabylonClient) Delegate(dg *DelegationData) (*sdk.TxResponse, error) {
+func (m *MockBabylonClient) Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error) {
 	msg, err := delegationDataToMsg("signer", dg)
 
 	if err != nil {
@@ -99,7 +103,7 @@ func (m *MockBabylonClient) Delegate(dg *DelegationData) (*sdk.TxResponse, error
 
 	m.SentMessages <- msg
 
-	return &sdk.TxResponse{Code: 0}, nil
+	return &pv.RelayerTxResponse{Code: 0}, nil
 }
 
 func (m *MockBabylonClient) QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error) {
@@ -132,8 +136,8 @@ func (m *MockBabylonClient) QueryDelegationInfo(stakingTxHash *chainhash.Hash) (
 	return nil, fmt.Errorf("delegation do not exist")
 }
 
-func (m *MockBabylonClient) Undelegate(ud *UndelegationData) (*sdk.TxResponse, error) {
-	return &sdk.TxResponse{Code: 0}, nil
+func (m *MockBabylonClient) Undelegate(ud *UndelegationData) (*pv.RelayerTxResponse, error) {
+	return &pv.RelayerTxResponse{Code: 0}, nil
 }
 
 func GetMockClient() *MockBabylonClient {
@@ -164,9 +168,9 @@ func GetMockClient() *MockBabylonClient {
 			ConfirmationTimeBlocks:    2,
 			FinalizationTimeoutBlocks: 5,
 			MinSlashingTxFeeSat:       btcutil.Amount(1000),
-			CovenantPk:                *covenantPk.PubKey(),
+			CovenantPks:               []*btcec.PublicKey{covenantPk.PubKey()},
 			SlashingAddress:           slashingAddress,
-			SlashingRate:              math.LegacyNewDecWithPrec(1, 1), // 1 * 10^{-1} = 0.1
+			SlashingRate:              sdkmath.LegacyNewDecWithPrec(1, 1), // 1 * 10^{-1} = 0.1
 		},
 		babylonKey:      priv,
 		SentMessages:    make(chan *types.MsgCreateBTCDelegation),

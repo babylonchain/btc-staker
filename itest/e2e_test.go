@@ -183,7 +183,6 @@ type testStakingData struct {
 	SlashingTxChangeAddress   btcutil.Address
 	StakingTime               uint16
 	StakingAmount             int64
-	Script                    []byte
 }
 
 func (tm *TestManager) getTestStakingData(
@@ -193,18 +192,6 @@ func (tm *TestManager) getTestStakingData(
 	stakingAmount int64) *testStakingData {
 	delegatarPrivKey, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
-	stakingData, err := staking.NewStakingScriptData(
-		stakerKey,
-		delegatarPrivKey.PubKey(),
-		tm.CovenantPubKey,
-		stakingTime,
-	)
-
-	require.NoError(t, err)
-
-	script, err := stakingData.BuildStakingScript()
-	require.NoError(t, err)
-
 	validatorBabylonPrivKey := secp256k1.GenPrivKey()
 	validatorBabylonPubKey := validatorBabylonPrivKey.PubKey().(*secp256k1.PubKey)
 
@@ -222,7 +209,6 @@ func (tm *TestManager) getTestStakingData(
 		SlashingTxChangeAddress:   slashingTxChangeAddress,
 		StakingTime:               stakingTime,
 		StakingAmount:             stakingAmount,
-		Script:                    script,
 	}
 }
 
@@ -548,13 +534,13 @@ func (tm *TestManager) createAndRegisterValidator(t *testing.T, testStakingData 
 
 	btcValKey := bbntypes.NewBIP340PubKeyFromBTCPK(testStakingData.ValidatorBtcKey)
 
-	params, err := tm.BabylonClient.StakingParams()
+	params, err := tm.BabylonClient.QueryStakingTracker()
 	require.NoError(t, err)
 
 	_, err = tm.BabylonClient.RegisterValidator(
 		testStakingData.ValidatorBabylonPublicKey,
 		btcValKey,
-		&params.Params.MinCommissionRate,
+		&params.MinComissionRate,
 		&sttypes.Description{},
 		pop,
 	)
@@ -660,10 +646,11 @@ func (tm *TestManager) sendWatchedStakingTx(
 	testStakingData *testStakingData,
 	params *babylonclient.StakingParams,
 ) *chainhash.Hash {
-	stakingOutput, script, err := staking.BuildStakingOutput(
+	stakingInfo, err := staking.BuildStakingInfo(
 		testStakingData.StakerKey,
-		testStakingData.ValidatorBtcKey,
-		&params.CovenantPk,
+		[]*btcec.PublicKey{testStakingData.ValidatorBtcKey},
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
 		testStakingData.StakingTime,
 		btcutil.Amount(testStakingData.StakingAmount),
 		simnetParams,
@@ -675,19 +662,31 @@ func (tm *TestManager) sendWatchedStakingTx(
 	require.NoError(t, err)
 
 	tx, err := tm.Sa.Wallet().CreateAndSignTx(
-		[]*wire.TxOut{stakingOutput},
+		[]*wire.TxOut{stakingInfo.StakingOutput},
 		2000,
 		tm.MinerAddr,
 	)
 	require.NoError(t, err)
 	txHash := tx.TxHash()
-
 	_, err = tm.Sa.Wallet().SendRawTransaction(tx, true)
 	require.NoError(t, err)
 
-	stakingOutputIdx, err := staking.GetIdxOutputCommitingToScript(
-		tx, script, simnetParams,
-	)
+	// Wait for tx to be in mempool
+	require.Eventually(t, func() bool {
+		tx, err := tm.MinerNode.Client.GetRawTransaction(&txHash)
+		if err != nil {
+			return false
+		}
+
+		if tx == nil {
+			return false
+
+		}
+
+		return true
+	}, 1*time.Minute, eventuallyPollTime)
+
+	stakingOutputIdx := 0
 
 	require.NoError(t, err)
 
@@ -697,16 +696,19 @@ func (tm *TestManager) sendWatchedStakingTx(
 		params.SlashingAddress, testStakingData.SlashingTxChangeAddress,
 		int64(params.MinSlashingTxFeeSat)+10,
 		params.SlashingRate,
-		script,
 		simnetParams,
 	)
+	require.NoError(t, err)
+
+	stakingTxSlashingPathInfo, err := stakingInfo.SlashingPathSpendInfo()
+
 	require.NoError(t, err)
 
 	slashSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
 		slashingTx,
 		tx.TxOut[stakingOutputIdx],
 		tm.WalletPrivKey,
-		script,
+		stakingTxSlashingPathInfo.RevealedLeaf.Script,
 	)
 
 	require.NoError(t, err)
@@ -727,7 +729,10 @@ func (tm *TestManager) sendWatchedStakingTx(
 	_, err = tm.StakerClient.WatchStaking(
 		context.Background(),
 		hex.EncodeToString(serializedStakingTx),
-		hex.EncodeToString(script),
+		int(testStakingData.StakingTime),
+		int(testStakingData.StakingAmount),
+		hex.EncodeToString(schnorr.SerializePubKey(testStakingData.StakerKey)),
+		hex.EncodeToString(schnorr.SerializePubKey(testStakingData.ValidatorBtcKey)),
 		hex.EncodeToString(serializedSlashingTx),
 		hex.EncodeToString(slashSig.Serialize()),
 		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
@@ -817,73 +822,115 @@ func (tm *TestManager) insertAllMinedBlocksToBabylon(t *testing.T) {
 func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcstypes.BTCDelegation) {
 	slashingTx := btcDel.SlashingTx
 	stakingTx := btcDel.StakingTx
-	stakingMsgTx, err := stakingTx.ToMsgTx()
+	stakingMsgTx, err := btcstypes.ParseBtcTx(stakingTx)
 	require.NoError(t, err)
 
+	cl := tm.Sa.BabylonController()
+	params, err := cl.Params()
+	require.NoError(t, err)
+
+	stakingInfo, err := staking.BuildStakingInfo(
+		btcDel.BtcPk.MustToBTCPK(),
+		// TODO: Handle multplie validators
+		[]*btcec.PublicKey{btcDel.ValBtcPkList[0].MustToBTCPK()},
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
+		btcDel.GetStakingTime(),
+		btcutil.Amount(btcDel.TotalSat),
+		simnetParams,
+	)
+
+	idx, err := btcstypes.GetOutputIdx(stakingMsgTx, stakingInfo.StakingOutput)
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+	slashingPathInfo, err := stakingInfo.SlashingPathSpendInfo()
+	require.NoError(t, err)
 	// get covenant private key from the keyring
 
 	covenantSig, err := slashingTx.Sign(
 		stakingMsgTx,
-		stakingTx.Script,
+		idx,
+		slashingPathInfo.RevealedLeaf.Script,
 		tm.CovenantPrivKey,
 		&tm.Config.ActiveNetParams,
 	)
 	require.NoError(t, err)
 
-	_, err = tm.BabylonClient.SubmitCovenantSig(btcDel.ValBtcPk, btcDel.BtcPk, stakingMsgTx.TxHash().String(), covenantSig)
+	_, err = tm.BabylonClient.SubmitCovenantSig(
+		bbntypes.NewBIP340PubKeyFromBTCPK(tm.CovenantPrivKey.PubKey()),
+		stakingMsgTx.TxHash().String(),
+		covenantSig,
+	)
 	require.NoError(t, err)
 }
 
 func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes.BTCDelegation, td *testStakingData) {
 	stakingTx := btcDel.StakingTx
-	stakingMsgTx, err := stakingTx.ToMsgTx()
+	stakingMsgTx, err := btcstypes.ParseBtcTx(stakingTx)
 	require.NoError(t, err)
-
-	unbondingTx := btcDel.BtcUndelegation.UnbondingTx
-
-	valSig, err := unbondingTx.Sign(
-		stakingMsgTx,
-		stakingTx.Script,
-		td.ValidatorBtcPrivKey,
-		simnetParams,
-	)
-	require.NoError(t, err)
-
 	stakingTxHash := stakingMsgTx.TxHash().String()
 
-	_, err = tm.BabylonClient.SubmitValidatorUnbondingSig(
-		btcDel.ValBtcPk,
-		btcDel.BtcPk,
-		stakingTxHash,
-		valSig,
-	)
+	unbondingTx := btcDel.BtcUndelegation.UnbondingTx
+	unbondingMsgTx, err := btcstypes.ParseBtcTx(unbondingTx)
 	require.NoError(t, err)
 
-	covenantUnbondingSig, err := unbondingTx.Sign(
-		stakingMsgTx,
-		stakingTx.Script,
-		tm.CovenantPrivKey,
+	cl := tm.Sa.BabylonController()
+	params, err := cl.Params()
+	require.NoError(t, err)
+
+	stakingInfo, err := staking.BuildStakingInfo(
+		btcDel.BtcPk.MustToBTCPK(),
+		[]*btcec.PublicKey{btcDel.ValBtcPkList[0].MustToBTCPK()},
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
+		btcDel.GetStakingTime(),
+		btcutil.Amount(btcDel.TotalSat),
 		simnetParams,
 	)
 
 	require.NoError(t, err)
+	unbondingInfo, err := staking.BuildUnbondingInfo(
+		btcDel.BtcPk.MustToBTCPK(),
+		[]*btcec.PublicKey{btcDel.ValBtcPkList[0].MustToBTCPK()},
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
+		uint16(btcDel.BtcUndelegation.UnbondingTime),
+		btcutil.Amount(unbondingMsgTx.TxOut[0].Value),
+		simnetParams,
+	)
+	require.NoError(t, err)
 
-	unbondingTxMsg, err := unbondingTx.ToMsgTx()
+	stakingTxUnbondingPathInfo, err := stakingInfo.UnbondingPathSpendInfo()
+	require.NoError(t, err)
+
+	covenantUnbondingSig, err := staking.SignTxWithOneScriptSpendInputFromTapLeaf(
+		unbondingMsgTx,
+		stakingInfo.StakingOutput,
+		tm.CovenantPrivKey,
+		stakingTxUnbondingPathInfo.RevealedLeaf,
+	)
+	require.NoError(t, err)
+
+	unbondingSig := bbntypes.NewBIP340SignatureFromBTCSig(covenantUnbondingSig)
+
+	// slashing unbodning tx sig
+	unbondingTxSlashingPathInfo, err := unbondingInfo.SlashingPathSpendInfo()
 	require.NoError(t, err)
 
 	covenantSlashingSig, err := btcDel.BtcUndelegation.SlashingTx.Sign(
-		unbondingTxMsg,
-		unbondingTx.Script,
+		unbondingMsgTx,
+		0,
+		unbondingTxSlashingPathInfo.RevealedLeaf.Script,
 		tm.CovenantPrivKey,
 		simnetParams,
 	)
 	require.NoError(t, err)
 
 	_, err = tm.BabylonClient.SubmitCovenantUnbondingSigs(
-		btcDel.ValBtcPk,
-		btcDel.BtcPk,
+		bbntypes.NewBIP340PubKeyFromBTCPK(tm.CovenantPubKey),
 		stakingTxHash,
-		covenantUnbondingSig,
+		&unbondingSig,
 		covenantSlashingSig,
 	)
 	require.NoError(t, err)
@@ -1152,6 +1199,7 @@ func TestStakingUnbonding(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Len(t, validatorDelegations, 1)
+	require.NotNil(t, validatorDelegations[0].BtcUndelegation)
 
 	tm.insertUnbondingSignatures(t, validatorDelegations[0], testStakingData)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED)

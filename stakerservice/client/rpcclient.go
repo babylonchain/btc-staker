@@ -154,7 +154,10 @@ func (c *StakerServiceJsonRpcClient) SpendStakingTransaction(ctx context.Context
 func (c *StakerServiceJsonRpcClient) WatchStaking(
 	ctx context.Context,
 	stakingTx string,
-	stakingScript string,
+	stakingTime int,
+	stakingValue int,
+	stakerBtcPk string,
+	validatorBtcPk string,
 	slashingTx string,
 	slashingTxSig string,
 	stakerBabylonPk string,
@@ -168,7 +171,10 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	params := make(map[string]interface{})
 
 	params["stakingTx"] = stakingTx
-	params["stakingScript"] = stakingScript
+	params["stakingTime"] = stakingTime
+	params["stakingValue"] = stakingValue
+	params["stakerBtcPk"] = stakerBtcPk
+	params["validatorBtcPk"] = validatorBtcPk
 	params["slashingTx"] = slashingTx
 	params["slashingTxSig"] = slashingTxSig
 	params["stakerBabylonPk"] = stakerBabylonPk
