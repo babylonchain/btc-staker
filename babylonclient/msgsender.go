@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"sync"
 
+	pv "github.com/cosmos/relayer/v2/relayer/provider"
+
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/sirupsen/logrus"
 )
 
@@ -16,7 +17,7 @@ var (
 )
 
 type sendDelegationRequest struct {
-	utils.Request[*sdk.TxResponse]
+	utils.Request[*pv.RelayerTxResponse]
 	dg                          *DelegationData
 	requiredInclusionBlockDepth uint64
 }
@@ -26,14 +27,14 @@ func newSendDelegationRequest(
 	requiredInclusionBlockDepth uint64,
 ) sendDelegationRequest {
 	return sendDelegationRequest{
-		Request:                     utils.NewRequest[*sdk.TxResponse](),
+		Request:                     utils.NewRequest[*pv.RelayerTxResponse](),
 		dg:                          dg,
 		requiredInclusionBlockDepth: requiredInclusionBlockDepth,
 	}
 }
 
 type sendUndelegationRequest struct {
-	utils.Request[*sdk.TxResponse]
+	utils.Request[*pv.RelayerTxResponse]
 	stakingTxHash *chainhash.Hash
 	ud            *UndelegationData
 }
@@ -43,7 +44,7 @@ func newSendUndelegationRequest(
 	stakingTxHash *chainhash.Hash,
 ) sendUndelegationRequest {
 	return sendUndelegationRequest{
-		Request:       utils.NewRequest[*sdk.TxResponse](),
+		Request:       utils.NewRequest[*pv.RelayerTxResponse](),
 		ud:            ud,
 		stakingTxHash: stakingTxHash,
 	}
@@ -148,7 +149,6 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 						"babylonTxHash":      txResp.TxHash,
 						"babylonBlockHeight": txResp.Height,
 						"babylonErrorCode":   txResp.Code,
-						"babylonLog":         txResp.RawLog,
 					}).Error("Invalid delegation data sent to babylon")
 				}
 
@@ -191,7 +191,6 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 						"babylonTxHash":      txResp.TxHash,
 						"babylonBlockHeight": txResp.Height,
 						"babylonErrorCode":   txResp.Code,
-						"babylonLog":         txResp.RawLog,
 					}).Error("Invalid delegation data sent to babylon")
 				}
 
@@ -215,10 +214,10 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 func (m *BabylonMsgSender) SendDelegation(
 	dg *DelegationData,
 	requiredInclusionBlockDepth uint64,
-) (*sdk.TxResponse, error) {
+) (*pv.RelayerTxResponse, error) {
 	req := newSendDelegationRequest(dg, requiredInclusionBlockDepth)
 
-	return utils.SendRequestAndWaitForResponseOrQuit[*sdk.TxResponse, *sendDelegationRequest](
+	return utils.SendRequestAndWaitForResponseOrQuit[*pv.RelayerTxResponse, *sendDelegationRequest](
 		&req,
 		m.sendDelegationRequestChan,
 		m.quit,
@@ -229,10 +228,10 @@ func (m *BabylonMsgSender) SendDelegation(
 func (m *BabylonMsgSender) SendUndelegation(
 	ud *UndelegationData,
 	stakingTxHash *chainhash.Hash,
-) (*sdk.TxResponse, error) {
+) (*pv.RelayerTxResponse, error) {
 	req := newSendUndelegationRequest(ud, stakingTxHash)
 
-	return utils.SendRequestAndWaitForResponseOrQuit[*sdk.TxResponse, *sendUndelegationRequest](
+	return utils.SendRequestAndWaitForResponseOrQuit[*pv.RelayerTxResponse, *sendUndelegationRequest](
 		&req,
 		m.sendUndelegationRequestChan,
 		m.quit,
