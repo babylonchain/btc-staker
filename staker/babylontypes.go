@@ -175,10 +175,15 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 					req,
 					app.quit,
 				)
-			}
 
-			// our job is done, we can return
-			return
+				return
+			} else {
+				app.logger.WithFields(logrus.Fields{
+					"stakingTxHash": stakingTxHash,
+					"numSignatures": len(di.UndelegationInfo.CovenantUnbondingSignatures),
+					"required":      params.CovenantQuruomThreshold,
+				}).Debug("Received not enough covenant unbonding signatures on babylon")
+			}
 
 		case <-app.quit:
 			return

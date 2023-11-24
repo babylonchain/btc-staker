@@ -524,7 +524,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"withdrawable_transactions": rpc.NewRPCFunc(s.withdrawableTransactions, "offset,limit"),
 
 		// watch api
-		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingScript,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,slashingTxChangeAddress,stakerBabylonSig,stakerBtcSig,popType"),
+		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingTime,stakingValue,stakerBtcPk,validatorBtcPk,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,slashingTxChangeAddress,stakerBabylonSig,stakerBtcSig,popType"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),

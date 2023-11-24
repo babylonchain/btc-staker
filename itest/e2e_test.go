@@ -668,9 +668,23 @@ func (tm *TestManager) sendWatchedStakingTx(
 	)
 	require.NoError(t, err)
 	txHash := tx.TxHash()
-
 	_, err = tm.Sa.Wallet().SendRawTransaction(tx, true)
 	require.NoError(t, err)
+
+	// Wait for tx to be in mempool
+	require.Eventually(t, func() bool {
+		tx, err := tm.MinerNode.Client.GetRawTransaction(&txHash)
+		if err != nil {
+			return false
+		}
+
+		if tx == nil {
+			return false
+
+		}
+
+		return true
+	}, 1*time.Minute, eventuallyPollTime)
 
 	stakingOutputIdx := 0
 
@@ -878,17 +892,15 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	)
 
 	require.NoError(t, err)
-
 	unbondingInfo, err := staking.BuildUnbondingInfo(
 		btcDel.BtcPk.MustToBTCPK(),
 		[]*btcec.PublicKey{btcDel.ValBtcPkList[0].MustToBTCPK()},
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
-		btcDel.GetStakingTime(),
-		btcutil.Amount(btcDel.TotalSat),
+		uint16(btcDel.BtcUndelegation.UnbondingTime),
+		btcutil.Amount(unbondingMsgTx.TxOut[0].Value),
 		simnetParams,
 	)
-
 	require.NoError(t, err)
 
 	stakingTxUnbondingPathInfo, err := stakingInfo.UnbondingPathSpendInfo()
@@ -900,11 +912,11 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 		tm.CovenantPrivKey,
 		stakingTxUnbondingPathInfo.RevealedLeaf,
 	)
+	require.NoError(t, err)
 
 	unbondingSig := bbntypes.NewBIP340SignatureFromBTCSig(covenantUnbondingSig)
 
-	require.NoError(t, err)
-
+	// slashing unbodning tx sig
 	unbondingTxSlashingPathInfo, err := unbondingInfo.SlashingPathSpendInfo()
 	require.NoError(t, err)
 
@@ -1189,6 +1201,7 @@ func TestStakingUnbonding(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Len(t, validatorDelegations, 1)
+	require.NotNil(t, validatorDelegations[0].BtcUndelegation)
 
 	tm.insertUnbondingSignatures(t, validatorDelegations[0], testStakingData)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED)
