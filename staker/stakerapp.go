@@ -797,8 +797,9 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			confirmation := &undelegationSubmittedToBabylonEvent{
 				stakingTxHash:        *localInfo.stakingTxHash,
 				unbondingTransaction: babylonInfo.UndelegationInfo.UnbondingTransaction,
-				unbondingTime:        uint16(params.FinalizationTimeoutBlocks) + 1,
-				successChan:          make(chan *chainhash.Hash, 1),
+				// TODO: Add unbonding time to babylon response
+				unbondingTime: uint16(params.FinalizationTimeoutBlocks) + 1,
+				successChan:   make(chan *chainhash.Hash, 1),
 			}
 
 			utils.PushOrQuit[*undelegationSubmittedToBabylonEvent](
