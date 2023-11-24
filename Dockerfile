@@ -1,4 +1,4 @@
-FROM golang:1.20.5-alpine as builder
+FROM golang:1.21-alpine as builder
 
 # Version to build. Default is the Git HEAD.
 ARG VERSION="HEAD"
