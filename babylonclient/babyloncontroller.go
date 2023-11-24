@@ -149,8 +149,8 @@ type ValidatorClientResponse struct {
 }
 
 // Copied from vigilante. Weirdly, there is only Stop function (no Start function ?)
-func (bc *BabylonController) Stop() {
-	bc.bbnClient.Stop()
+func (bc *BabylonController) Stop() error {
+	return bc.bbnClient.Stop()
 }
 
 func (bc *BabylonController) Params() (*StakingParams, error) {
