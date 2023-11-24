@@ -21,7 +21,6 @@ import (
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/wallet/txsizes"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 )
 
@@ -515,10 +514,10 @@ func parseWatchStakingRequest(
 	// 6. Extract slashing tx change address
 	_, outAddrs, _, err := txscript.ExtractPkScriptAddrs(slashingTx.TxOut[1].PkScript, network)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx change address: %w", err)
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx change address: %w", err)
 	}
 	if len(outAddrs) != 1 {
-		return nil, nil, fmt.Errorf("failed to watch staking tx. Only one slashing tx change address is allowed")
+		return nil, fmt.Errorf("failed to watch staking tx. Only one slashing tx change address is allowed")
 	}
 	slashingTxChangeAddress := outAddrs[0]
 
