@@ -30,10 +30,10 @@ func FuzzScriptGeneration(f *testing.F) {
 
 		stakerPk := hex.EncodeToString(schnorr.SerializePubKey(stakerPrivKey.PubKey()))
 		delegatorPk := hex.EncodeToString(schnorr.SerializePubKey(delegatorPrivkey.PubKey()))
-		juryPk := hex.EncodeToString(schnorr.SerializePubKey(jurPrivKey.PubKey()))
+		covenantPk := hex.EncodeToString(schnorr.SerializePubKey(jurPrivKey.PubKey()))
 		stakingTime := uint64(r.Int31n(math.MaxUint16))
 
-		resp, err := st.GenerateStakingScriptAndAddress(stakerPk, delegatorPk, juryPk, stakingTime, &chaincfg.MainNetParams)
+		resp, err := st.GenerateStakingScriptAndAddress(stakerPk, delegatorPk, covenantPk, stakingTime, &chaincfg.MainNetParams)
 		require.NoError(t, err)
 
 		// check that the script is valid hex

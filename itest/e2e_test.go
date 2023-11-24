@@ -13,27 +13,23 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	"strconv"
-
-	dc "github.com/babylonchain/btc-staker/stakerservice/client"
-	"github.com/babylonchain/btc-staker/utils"
-
+	staking "github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
-	service "github.com/babylonchain/btc-staker/stakerservice"
-	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
-
-	staking "github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
+	service "github.com/babylonchain/btc-staker/stakerservice"
+	dc "github.com/babylonchain/btc-staker/stakerservice/client"
 	"github.com/babylonchain/btc-staker/types"
+	"github.com/babylonchain/btc-staker/utils"
 	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -45,6 +41,7 @@ import (
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sttypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/signal"
@@ -54,10 +51,14 @@ import (
 
 // bitcoin params used for testing
 var (
+	r = rand.New(rand.NewSource(time.Now().Unix()))
+
 	simnetParams     = &chaincfg.SimNetParams
 	submitterAddrStr = "bbn1eppc73j56382wjn6nnq3quu5eye4pmm087xfdh"
 	babylonTag       = []byte{1, 2, 3, 4}
 	babylonTagHex    = hex.EncodeToString(babylonTag)
+
+	slashingTxChangeAddress, _ = datagen.GenRandomBTCAddress(r, simnetParams)
 
 	// copy of the seed from btcd/integration/rpctest memWallet, this way we can
 	// import the same wallet in the btcd wallet
@@ -167,8 +168,8 @@ type TestManager struct {
 	wg               *sync.WaitGroup
 	serviceAddress   string
 	StakerClient     *dc.StakerServiceJsonRpcClient
-	JuryPrivKey      *btcec.PrivateKey
-	JuryPubKey       *btcec.PublicKey
+	CovenantPrivKey  *btcec.PrivateKey
+	CovenantPubKey   *btcec.PublicKey
 }
 
 type testStakingData struct {
@@ -179,6 +180,7 @@ type testStakingData struct {
 	ValidatorBabylonPublicKey *secp256k1.PubKey
 	ValidatorBtcPrivKey       *btcec.PrivateKey
 	ValidatorBtcKey           *btcec.PublicKey
+	SlashingTxChangeAddress   btcutil.Address
 	StakingTime               uint16
 	StakingAmount             int64
 	Script                    []byte
@@ -194,7 +196,7 @@ func (tm *TestManager) getTestStakingData(
 	stakingData, err := staking.NewStakingScriptData(
 		stakerKey,
 		delegatarPrivKey.PubKey(),
-		tm.JuryPubKey,
+		tm.CovenantPubKey,
 		stakingTime,
 	)
 
@@ -217,6 +219,7 @@ func (tm *TestManager) getTestStakingData(
 		ValidatorBabylonPublicKey: validatorBabylonPubKey,
 		ValidatorBtcPrivKey:       delegatarPrivKey,
 		ValidatorBtcKey:           delegatarPrivKey.PubKey(),
+		SlashingTxChangeAddress:   slashingTxChangeAddress,
 		StakingTime:               stakingTime,
 		StakingAmount:             stakingAmount,
 		Script:                    script,
@@ -289,11 +292,11 @@ func StartManager(
 	err = wh.Start()
 	require.NoError(t, err)
 
-	juryPrivKey, err := btcec.NewPrivateKey()
+	covenantPrivKey, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
-	juryPubKey := juryPrivKey.PubKey()
+	covenantPubKey := covenantPrivKey.PubKey()
 
-	bh, err := NewBabylonNodeHandler(juryPubKey)
+	bh, err := NewBabylonNodeHandler(covenantPubKey)
 	require.NoError(t, err)
 
 	err = bh.Start()
@@ -387,8 +390,8 @@ func StartManager(
 		wg:               &wg,
 		serviceAddress:   addressString,
 		StakerClient:     stakerClient,
-		JuryPrivKey:      juryPrivKey,
-		JuryPubKey:       juryPubKey,
+		CovenantPrivKey:  covenantPrivKey,
+		CovenantPubKey:   covenantPubKey,
 	}
 }
 
@@ -587,6 +590,7 @@ func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingD
 	res, err := tm.StakerClient.Stake(
 		context.Background(),
 		tm.MinerAddr.String(),
+		testStakingData.SlashingTxChangeAddress.String(),
 		testStakingData.StakingAmount,
 		validatorKey,
 		int64(testStakingData.StakingTime),
@@ -623,6 +627,7 @@ func (tm *TestManager) sendMultipleStakingTx(t *testing.T, testStakingData []*te
 		res, err := tm.StakerClient.Stake(
 			context.Background(),
 			tm.MinerAddr.String(),
+			data.SlashingTxChangeAddress.String(),
 			data.StakingAmount,
 			validatorKey,
 			int64(data.StakingTime),
@@ -658,7 +663,7 @@ func (tm *TestManager) sendWatchedStakingTx(
 	stakingOutput, script, err := staking.BuildStakingOutput(
 		testStakingData.StakerKey,
 		testStakingData.ValidatorBtcKey,
-		&params.JuryPk,
+		&params.CovenantPk,
 		testStakingData.StakingTime,
 		btcutil.Amount(testStakingData.StakingAmount),
 		simnetParams,
@@ -689,12 +694,12 @@ func (tm *TestManager) sendWatchedStakingTx(
 	slashingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		tx,
 		uint32(stakingOutputIdx),
-		params.SlashingAddress,
+		params.SlashingAddress, testStakingData.SlashingTxChangeAddress,
 		int64(params.MinSlashingTxFeeSat)+10,
+		params.SlashingRate,
 		script,
 		simnetParams,
 	)
-
 	require.NoError(t, err)
 
 	slashSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
@@ -717,7 +722,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 		testStakingData.StakerBabylonPrivKey,
 		tm.WalletPrivKey,
 	)
-
 	require.NoError(t, err)
 
 	_, err = tm.StakerClient.WatchStaking(
@@ -733,7 +737,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 		// Use schnor verification
 		int(btcstypes.BTCSigType_BIP340),
 	)
-
 	require.NoError(t, err)
 
 	mBlock := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{&txHash}))
@@ -771,7 +774,7 @@ func (tm *TestManager) spendStakingTxWithHash(t *testing.T, stakingTxHash *chain
 	mBlock1 := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{spendTxHash}))
 	require.Equal(t, 2, len(mBlock1.Transactions))
 
-	//Tx is in chain
+	// Tx is in chain
 	txDetails, txState, err = tm.Sa.Wallet().TxDetails(spendTxHash, sendTx.MsgTx().TxOut[0].PkScript)
 	require.NoError(t, err)
 	require.NotNil(t, txDetails)
@@ -811,23 +814,23 @@ func (tm *TestManager) insertAllMinedBlocksToBabylon(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func (tm *TestManager) insertJurySigForDelegation(t *testing.T, btcDel *btcstypes.BTCDelegation) {
+func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcstypes.BTCDelegation) {
 	slashingTx := btcDel.SlashingTx
 	stakingTx := btcDel.StakingTx
 	stakingMsgTx, err := stakingTx.ToMsgTx()
 	require.NoError(t, err)
 
-	// get Jury private key from the keyring
+	// get covenant private key from the keyring
 
-	jurySig, err := slashingTx.Sign(
+	covenantSig, err := slashingTx.Sign(
 		stakingMsgTx,
 		stakingTx.Script,
-		tm.JuryPrivKey,
+		tm.CovenantPrivKey,
 		&tm.Config.ActiveNetParams,
 	)
 	require.NoError(t, err)
 
-	_, err = tm.BabylonClient.SubmitJurySig(btcDel.ValBtcPk, btcDel.BtcPk, stakingMsgTx.TxHash().String(), jurySig)
+	_, err = tm.BabylonClient.SubmitCovenantSig(btcDel.ValBtcPk, btcDel.BtcPk, stakingMsgTx.TxHash().String(), covenantSig)
 	require.NoError(t, err)
 }
 
@@ -856,10 +859,10 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	)
 	require.NoError(t, err)
 
-	juryUnbondingSig, err := unbondingTx.Sign(
+	covenantUnbondingSig, err := unbondingTx.Sign(
 		stakingMsgTx,
 		stakingTx.Script,
-		tm.JuryPrivKey,
+		tm.CovenantPrivKey,
 		simnetParams,
 	)
 
@@ -868,26 +871,25 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	unbondingTxMsg, err := unbondingTx.ToMsgTx()
 	require.NoError(t, err)
 
-	jurySlashingSig, err := btcDel.BtcUndelegation.SlashingTx.Sign(
+	covenantSlashingSig, err := btcDel.BtcUndelegation.SlashingTx.Sign(
 		unbondingTxMsg,
 		unbondingTx.Script,
-		tm.JuryPrivKey,
+		tm.CovenantPrivKey,
 		simnetParams,
 	)
 	require.NoError(t, err)
 
-	_, err = tm.BabylonClient.SubmitJuryUnbondingSigs(
+	_, err = tm.BabylonClient.SubmitCovenantUnbondingSigs(
 		btcDel.ValBtcPk,
 		btcDel.BtcPk,
 		stakingTxHash,
-		juryUnbondingSig,
-		jurySlashingSig,
+		covenantUnbondingSig,
+		covenantSlashingSig,
 	)
 	require.NoError(t, err)
 }
 
 func TestSendingStakingTransaction(t *testing.T) {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -900,11 +902,12 @@ func TestSendingStakingTransaction(t *testing.T) {
 	params, err := cl.Params()
 	require.NoError(t, err)
 	stakingTime := uint16(staker.GetMinStakingTime(params))
+
 	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
 	hashed, err := chainhash.NewHash(datagen.GenRandomByteArray(r, 32))
 	require.NoError(t, err)
-	scr, err := txscript.PayToTaprootScript(tm.JuryPubKey)
+	scr, err := txscript.PayToTaprootScript(tm.CovenantPubKey)
 	require.NoError(t, err)
 	_, st, erro := tm.Sa.Wallet().TxDetails(hashed, scr)
 	// query for exsisting tx is not an error, proper state should be returned
@@ -1137,7 +1140,7 @@ func TestStakingUnbonding(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pend, 1)
 	// need to activate delegation to unbond
-	tm.insertJurySigForDelegation(t, pend[0])
+	tm.insertCovenantSigForDelegation(t, pend[0])
 
 	feeRate := 2000
 	resp, err := tm.StakerClient.UnbondStaking(context.Background(), txHash.String(), &feeRate)
@@ -1217,7 +1220,7 @@ func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pend, 1)
 	// need to activate delegation to unbond
-	tm.insertJurySigForDelegation(t, pend[0])
+	tm.insertCovenantSigForDelegation(t, pend[0])
 
 	feeRate := 2000
 	unbondResponse, err := tm.StakerClient.UnbondStaking(context.Background(), txHash.String(), &feeRate)

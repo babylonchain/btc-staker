@@ -3,12 +3,13 @@ package babylonclient
 import (
 	"fmt"
 
+	"cosmossdk.io/math"
 	"github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	secp256k1 "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -21,11 +22,14 @@ type StakingParams struct {
 	// Minimum amount of satoshis required for slashing transaction
 	MinSlashingTxFeeSat btcutil.Amount
 
-	// Bitcoin public key of the current jury
-	JuryPk btcec.PublicKey
+	// Bitcoin public key of the current covenant
+	CovenantPk btcec.PublicKey
 
 	// Address to which slashing transactions are sent
 	SlashingAddress btcutil.Address
+
+	// The rate at which the staked funds will be slashed, expressed as a decimal.
+	SlashingRate sdk.Dec
 }
 
 // SingleKeyCosmosKeyring represents a keyring that supports only one pritvate/public key pair
@@ -133,18 +137,16 @@ func (m *MockBabylonClient) Undelegate(ud *UndelegationData) (*sdk.TxResponse, e
 }
 
 func GetMockClient() *MockBabylonClient {
-	juryPk, err := btcec.NewPrivateKey()
-
+	covenantPk, err := btcec.NewPrivateKey()
 	if err != nil {
 		panic(err)
 	}
 
 	priv := secp256k1.GenPrivKey()
 
-	slashingAddress, _ := btcutil.NewAddressPubKey(juryPk.PubKey().SerializeCompressed(), &chaincfg.SimNetParams)
+	slashingAddress, _ := btcutil.NewAddressPubKey(covenantPk.PubKey().SerializeCompressed(), &chaincfg.SimNetParams)
 
 	validatorBtcPrivKey, err := btcec.NewPrivateKey()
-
 	if err != nil {
 		panic(err)
 	}
@@ -162,8 +164,9 @@ func GetMockClient() *MockBabylonClient {
 			ConfirmationTimeBlocks:    2,
 			FinalizationTimeoutBlocks: 5,
 			MinSlashingTxFeeSat:       btcutil.Amount(1000),
-			JuryPk:                    *juryPk.PubKey(),
+			CovenantPk:                *covenantPk.PubKey(),
 			SlashingAddress:           slashingAddress,
+			SlashingRate:              math.LegacyNewDecWithPrec(1, 1), // 1 * 10^{-1} = 0.1
 		},
 		babylonKey:      priv,
 		SentMessages:    make(chan *types.MsgCreateBTCDelegation),

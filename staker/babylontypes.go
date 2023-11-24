@@ -32,14 +32,12 @@ func (app *StakerApp) buildOwnedDelegation(
 	storedTx *stakerdb.StoredTransaction,
 	stakingTxInclusionProof []byte,
 ) (*cl.DelegationData, error) {
-	delegationData, err := app.retrieveExternalDelegationData(stakerAddress)
-
+	delegationData, err := app.retrieveExternalDelegationData(stakerAddress, storedTx.SlashingTxChangeAddress)
 	if err != nil {
 		return nil, err
 	}
 
 	slashingTx, slashingTxSig, err := buildSlashingTxAndSig(delegationData, storedTx)
-
 	if err != nil {
 		// This is truly unexpected, most probably programming error we have
 		// valid and btc confirmed staking transacion, but for some reason we cannot
@@ -106,7 +104,7 @@ func (app *StakerApp) buildDelegation(
 
 // TODO for now we launch this handler indefinitly. At some point we may introduce
 // timeout, and if signatures are not find in this timeout, then we may submit
-// evidence that validator or jury are censoring our unbonding
+// evidence that validator or covenant are censoring our unbonding
 func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chainhash.Hash) {
 	checkSigTicker := time.NewTicker(app.config.StakerConfig.UnbondingTxCheckInterval)
 	defer checkSigTicker.Stop()
@@ -146,7 +144,7 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 				continue
 			}
 
-			if di.UndelegationInfo.JuryUnbodningSignature != nil && di.UndelegationInfo.ValidatorUnbondingSignature != nil {
+			if di.UndelegationInfo.CovenantUnbondingSignature != nil && di.UndelegationInfo.ValidatorUnbondingSignature != nil {
 				// we have both signatures, we can stop checking
 				app.logger.WithFields(logrus.Fields{
 					"stakingTxHash": stakingTxHash,
@@ -156,7 +154,7 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 				// as channel is unbuffered
 				req := &unbondingTxSignaturesConfirmedOnBabylonEvent{
 					stakingTxHash:               *stakingTxHash,
-					juryUnbondingSignature:      di.UndelegationInfo.JuryUnbodningSignature,
+					covenantUnbondingSignature:  di.UndelegationInfo.CovenantUnbondingSignature,
 					validatorUnbondingSignature: di.UndelegationInfo.ValidatorUnbondingSignature,
 				}
 

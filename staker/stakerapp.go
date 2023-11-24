@@ -40,10 +40,13 @@ type externalDelegationData struct {
 	stakerPrivKey *btcec.PrivateKey
 	// slashingAddress needs to be retrieved from babylon
 	slashingAddress btcutil.Address
-
+	// slashingTxChangeAddress is the address used to receive change from slashing transaction.
+	slashingTxChangeAddress btcutil.Address
 	// babylonPubKey needs to be retrieved from babylon keyring
 	babylonPubKey *secp256k1.PubKey
-
+	// slashingRate is the rate at which the staked funds will be slashed, expressed as a decimal.
+	slashingRate sdk.Dec
+	// slashingFee is the fee to be paid for slashing transaction.
 	slashingFee btcutil.Amount
 }
 
@@ -107,7 +110,7 @@ const (
 	// address types.
 	// Transaction is quite big as witness to spend is composed of:
 	// 1. StakerSig
-	// 2. JurySig
+	// 2. CovenantSig
 	// 3. ValidatorSig
 	// 4. StakingScript
 	// 5. Taproot control block
@@ -255,7 +258,7 @@ func NewStakerAppFromDeps(
 		// correct db state
 		undelegationSubmittedToBabylonEvChan: make(chan *undelegationSubmittedToBabylonEvent),
 
-		// channel which receives unbonding signatures from jury and validator for unbonding
+		// channel which receives unbonding signatures from covenant and validator for unbonding
 		// transaction
 		unbondingTxSignaturesConfirmedOnBabylonEvChan: make(chan *unbondingTxSignaturesConfirmedOnBabylonEvent),
 
@@ -775,7 +778,7 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			// If we are here, it means we encountered edge case where we sent undelegation successfully
 			// but staker application crashed before we could update database.
 			// we just need to restart our unbonding process just after we sent unbonding transaction.
-			// If jury and validator signatures are on babylon, the whole process will just finish quickly.
+			// If covenant and validator signatures are on babylon, the whole process will just finish quickly.
 			// TODO: Thinkg of how to test this case. It is a bit tricky as restarting would need to happen
 			// precisely after sending unbonding transaction, but before write tx to db.
 			confirmation := &undelegationSubmittedToBabylonEvent{
@@ -919,26 +922,32 @@ func (app *StakerApp) stakerPrivateKey(stakerAddress btcutil.Address) (*btcec.Pr
 	return privkey, nil
 }
 
-func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Address) (*externalDelegationData, error) {
+func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Address,
+	slashingTxChangeAddress string) (*externalDelegationData, error) {
 	params, err := app.babylonClient.Params()
-
 	if err != nil {
 		return nil, err
 	}
 
 	stakerPrivKey, err := app.stakerPrivateKey(stakerAddress)
-
 	if err != nil {
 		return nil, err
 	}
 
 	slashingFee := app.getSlashingFee(params)
 
+	slashingTxChangeAddr, err := btcutil.DecodeAddress(slashingTxChangeAddress, app.network)
+	if err != nil {
+		return nil, err
+	}
+
 	return &externalDelegationData{
-		stakerPrivKey:   stakerPrivKey,
-		slashingAddress: params.SlashingAddress,
-		babylonPubKey:   app.babylonClient.GetPubKey(),
-		slashingFee:     slashingFee,
+		stakerPrivKey:           stakerPrivKey,
+		slashingAddress:         params.SlashingAddress,
+		slashingTxChangeAddress: slashingTxChangeAddr,
+		babylonPubKey:           app.babylonClient.GetPubKey(),
+		slashingFee:             slashingFee,
+		slashingRate:            params.SlashingRate,
 	}, nil
 }
 
@@ -1142,7 +1151,6 @@ func (app *StakerApp) buildAndSendDelegation(
 	storedTx *stakerdb.StoredTransaction,
 ) (*sdk.TxResponse, error) {
 	delegation, err := app.buildDelegation(req, stakerAddress, storedTx)
-
 	if err != nil {
 		return nil, err
 	}
@@ -1216,7 +1224,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakingOutputIdx,
 					ev.stakingTxScript,
 					babylonPopToDbPop(ev.pop),
-					ev.stakerAddress,
+					ev.stakerAddress, ev.slashingTxChangeAddress,
 					ev.watchTxData.slashingTx,
 					ev.watchTxData.slashingTxSig,
 					ev.watchTxData.stakerBabylonPubKey,
@@ -1239,7 +1247,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakingOutputIdx,
 					ev.stakingTxScript,
 					babylonPopToDbPop(ev.pop),
-					ev.stakerAddress,
+					ev.stakerAddress, ev.slashingTxChangeAddress,
 				)
 
 				if err != nil {
@@ -1325,7 +1333,7 @@ func (app *StakerApp) handleStakingEvents() {
 			if err := app.txTracker.SetTxUnbondingSignaturesReceived(
 				&ev.stakingTxHash,
 				ev.validatorUnbondingSignature,
-				ev.juryUnbondingSignature,
+				ev.covenantUnbondingSignature,
 			); err != nil {
 				// TODO: handle this error somehow, it means we possilbly make invalid state transition
 				app.logger.Fatalf("Error setting state for tx %s: %s", &ev.stakingTxHash, err)
@@ -1517,7 +1525,7 @@ func (app *StakerApp) WatchStaking(
 }
 
 func (app *StakerApp) StakeFunds(
-	stakerAddress btcutil.Address,
+	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	stakingAmount btcutil.Amount,
 	validatorPk *btcec.PublicKey,
 	stakingTimeBlocks uint16,
@@ -1580,7 +1588,7 @@ func (app *StakerApp) StakeFunds(
 	output, script, err := staking.BuildStakingOutput(
 		stakerPrivKey.PubKey(),
 		validatorPk,
-		&params.JuryPk,
+		&params.CovenantPk,
 		stakingTimeBlocks,
 		stakingAmount,
 		app.network,
@@ -1599,14 +1607,15 @@ func (app *StakerApp) StakeFunds(
 	}
 
 	app.logger.WithFields(logrus.Fields{
-		"stakerAddress": stakerAddress,
-		"stakingAmount": output.Value,
-		"btxTxHash":     tx.TxHash(),
-		"fee":           feeRate,
+		"stakerAddress":           stakerAddress,
+		"slashingTxChangeAddress": slashingTxChangeAddress,
+		"stakingAmount":           output.Value,
+		"btxTxHash":               tx.TxHash(),
+		"fee":                     feeRate,
 	}).Info("Created and signed staking transaction")
 
 	req := newOwnedStakingRequest(
-		stakerAddress,
+		stakerAddress, slashingTxChangeAddress,
 		tx,
 		0,
 		output.PkScript,
@@ -1842,7 +1851,7 @@ func (app *StakerApp) ListActiveValidators(limit uint64, offset uint64) (*cl.Val
 // 3. If request is successful, unbonding transaction is registred in db and
 // staking transaction is marked as unbonded
 // 4. Staker program starts watching for unbodning transactions signatures from
-// jury and validator
+// covenant and validator
 // 5. After gathering all signatures, unbonding transaction is sent to bitcoin
 // This function returns control to the caller after step 3. Later is up to the caller
 // to check what is state of unbonding transaction
@@ -1893,27 +1902,30 @@ func (app *StakerApp) UnbondStaking(
 
 	// this can happen if we started staker on wrong network
 	stakerAddress, err := btcutil.DecodeAddress(tx.StakerAddress, app.network)
-
 	if err != nil {
 		return nil, fmt.Errorf("cannot unbond: failed decode staker address.: %w", err)
 	}
 
 	stakerPrivKey, err := app.stakerPrivateKey(stakerAddress)
-
 	if err != nil {
 		return nil, fmt.Errorf("cannot unbond: failed to retrieve private key.: %w", err)
 	}
-
 	stakingScriptData := app.mustParseScript(tx.TxScript)
+
+	slashingTxChangeAddress, err := btcutil.DecodeAddress(tx.SlashingTxChangeAddress, app.network)
+	if err != nil {
+		return nil, fmt.Errorf("cannot unbond: failed decode change address.: %w", err)
+	}
 
 	undelegationData, err := createUndelegationData(
 		tx,
 		stakerPrivKey,
-		&currentParams.JuryPk,
-		currentParams.SlashingAddress,
+		&currentParams.CovenantPk,
+		currentParams.SlashingAddress, slashingTxChangeAddress,
 		unbondingTxFeeRatePerKb,
 		uint16(currentParams.FinalizationTimeoutBlocks),
 		app.getSlashingFee(currentParams),
+		currentParams.SlashingRate,
 		stakingScriptData,
 		app.network,
 	)

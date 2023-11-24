@@ -27,6 +27,7 @@ var _ StakingEvent = (*criticalErrorEvent)(nil)
 
 type stakingRequestedEvent struct {
 	stakerAddress           btcutil.Address
+	slashingTxChangeAddress btcutil.Address
 	stakingTxHash           chainhash.Hash
 	stakingTx               *wire.MsgTx
 	stakingOutputIdx        uint32
@@ -44,7 +45,7 @@ func (req *stakingRequestedEvent) isWatched() bool {
 }
 
 func newOwnedStakingRequest(
-	stakerAddress btcutil.Address,
+	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	stakingTx *wire.MsgTx,
 	stakingOutputIdx uint32,
 	stakingOutputPkScript []byte,
@@ -54,6 +55,7 @@ func newOwnedStakingRequest(
 ) *stakingRequestedEvent {
 	return &stakingRequestedEvent{
 		stakerAddress:           stakerAddress,
+		slashingTxChangeAddress: slashingTxChangeAddress,
 		stakingTxHash:           stakingTx.TxHash(),
 		stakingTx:               stakingTx,
 		stakingOutputIdx:        stakingOutputIdx,
@@ -74,7 +76,7 @@ type watchTxData struct {
 }
 
 func newWatchedStakingRequest(
-	stakerAddress btcutil.Address,
+	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	stakingTx *wire.MsgTx,
 	stakingOutputIdx uint32,
 	stakingOutputPkScript []byte,
@@ -87,6 +89,7 @@ func newWatchedStakingRequest(
 ) *stakingRequestedEvent {
 	return &stakingRequestedEvent{
 		stakerAddress:           stakerAddress,
+		slashingTxChangeAddress: slashingTxChangeAddress,
 		stakingTxHash:           stakingTx.TxHash(),
 		stakingTx:               stakingTx,
 		stakingOutputIdx:        stakingOutputIdx,
@@ -159,7 +162,7 @@ func (event *undelegationSubmittedToBabylonEvent) EventDesc() string {
 
 type unbondingTxSignaturesConfirmedOnBabylonEvent struct {
 	stakingTxHash               chainhash.Hash
-	juryUnbondingSignature      *schnorr.Signature
+	covenantUnbondingSignature  *schnorr.Signature
 	validatorUnbondingSignature *schnorr.Signature
 }
 

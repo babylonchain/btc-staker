@@ -43,7 +43,7 @@ func ParseStakingTime(stakingTime uint64) (uint16, error) {
 func ParseStakingScriptData(
 	stakerPk string,
 	delegatorPk string,
-	juryPk string,
+	covenantPk string,
 	stakingTime uint64) (*staking.StakingScriptData, error) {
 
 	stakerKey, err := ParseSchnorrPk(stakerPk)
@@ -57,7 +57,7 @@ func ParseStakingScriptData(
 		return nil, err
 	}
 
-	juryKey, err := ParseSchnorrPk(juryPk)
+	covenantKey, err := ParseSchnorrPk(covenantPk)
 
 	if err != nil {
 		return nil, err
@@ -72,42 +72,41 @@ func ParseStakingScriptData(
 	return staking.NewStakingScriptData(
 		stakerKey,
 		delegatorKey,
-		juryKey,
+		covenantKey,
 		stakingTimeParsed,
 	)
 }
 
-// GenerateStakingScriptAndAddress generates staking script and address for the given staker, delegator, jury and staking time
+// GenerateStakingScriptAndAddress generates staking script and address for the given staker, delegator,
+// covenant and staking time
 func GenerateStakingScriptAndAddress(
 	stakerPk string,
 	delegatorPk string,
-	juryPk string,
+	covenantPk string,
 	stakingTime uint64,
 	net *chaincfg.Params) (*GenerateScriptResponse, error) {
 
 	scriptData, err := ParseStakingScriptData(
 		stakerPk,
 		delegatorPk,
-		juryPk,
+		covenantPk,
 		stakingTime,
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
 	script, err := scriptData.BuildStakingScript()
-
 	if err != nil {
 		return nil, err
 	}
 
+	unspendableKeyPathKey := staking.UnspendableKeyPathInternalPubKey()
 	address, err := staking.TaprootAddressForScript(
 		script,
-		staking.UnspendableKeyPathInternalPubKey(),
+		&unspendableKeyPathKey,
 		net,
 	)
-
 	if err != nil {
 		return nil, err
 	}

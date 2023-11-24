@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
-
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/stakerdb"
@@ -14,10 +13,12 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/wallet/txsizes"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 )
 
@@ -45,7 +46,8 @@ func buildSlashingTxAndSig(
 	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
 		storedTx.StakingTx,
 		storedTx.StakingOutputIndex,
-		delegationData.slashingAddress,
+		delegationData.slashingAddress, delegationData.slashingTxChangeAddress,
+		delegationData.slashingRate,
 		int64(delegationData.slashingFee),
 	)
 
@@ -198,11 +200,12 @@ func createSpendStakeTxFromStoredTx(
 func createUndelegationData(
 	storedTx *stakerdb.StoredTransaction,
 	stakerPrivKey *btcec.PrivateKey,
-	juryPubKey *btcec.PublicKey,
-	slashingAddress btcutil.Address,
+	covenantPubKey *btcec.PublicKey,
+	slashingAddress, slashingTxChangeAddress btcutil.Address,
 	feeRatePerKb btcutil.Amount,
 	finalizationTimeBlocks uint16,
 	slashingFee btcutil.Amount,
+	slashingRate sdk.Dec,
 	stakingScriptData *staking.StakingScriptData,
 	btcNetwork *chaincfg.Params,
 ) (*cl.UndelegationData, error) {
@@ -230,7 +233,7 @@ func createUndelegationData(
 	unbondingOutput, unbondingScript, err := staking.BuildStakingOutput(
 		stakingScriptData.StakerKey,
 		stakingScriptData.ValidatorKey,
-		juryPubKey,
+		covenantPubKey,
 		finalizationTimeBlocks+1,
 		btcutil.Amount(unbondingOutputValue),
 		btcNetwork,
@@ -247,8 +250,9 @@ func createUndelegationData(
 	slashUnbondingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		unbondingTx,
 		0,
-		slashingAddress,
+		slashingAddress, slashingTxChangeAddress,
 		int64(slashingFee),
+		slashingRate,
 		unbondingScript,
 		btcNetwork,
 	)
@@ -288,7 +292,7 @@ func createWitnessToSendUnbondingTx(
 		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain unbonding transaction")
 	}
 
-	if unbondingData.UnbondingTxJurySignature == nil || unbondingData.UnbondingTxValidatorSignature == nil {
+	if unbondingData.UnbondingTxCovenantSignature == nil || unbondingData.UnbondingTxValidatorSignature == nil {
 		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain all necessary signatures")
 	}
 
@@ -314,7 +318,7 @@ func createWitnessToSendUnbondingTx(
 
 	// Build valid wittness for spending staking output with all signatures
 	witnessStack := wire.TxWitness(make([][]byte, 6))
-	witnessStack[0] = unbondingData.UnbondingTxJurySignature.Serialize()
+	witnessStack[0] = unbondingData.UnbondingTxCovenantSignature.Serialize()
 	witnessStack[1] = unbondingData.UnbondingTxValidatorSignature.Serialize()
 	witnessStack[2] = stakerWitness[0]
 	witnessStack[3] = []byte{}
@@ -341,7 +345,6 @@ func parseWatchStakingRequest(
 		stakingscript,
 		network,
 	)
-
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to watch staking tx due to script not matchin script: %w", err)
 	}
@@ -351,21 +354,21 @@ func parseWatchStakingRequest(
 		slashingTx,
 		stakingTx,
 		int64(currentParams.MinSlashingTxFeeSat),
+		currentParams.SlashingRate,
 		currentParams.SlashingAddress,
 		stakingscript,
 		network,
 	)
-
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid transactions: %w", err)
 	}
 
-	// 3.Check jury key in script
+	// 3.Check covenant key in script
 	if !bytes.Equal(
-		schnorr.SerializePubKey(scriptData.StakingScriptData.JuryKey),
-		schnorr.SerializePubKey(&currentParams.JuryPk),
+		schnorr.SerializePubKey(scriptData.StakingScriptData.CovenantKey),
+		schnorr.SerializePubKey(&currentParams.CovenantPk),
 	) {
-		return nil, nil, fmt.Errorf("failed to watch staking tx. Script jury key do not match current node params")
+		return nil, nil, fmt.Errorf("failed to watch staking tx. Script covenant key do not match current node params")
 	}
 
 	// 4. Check slashig tx sig is good. It implicitly verify staker pubkey, as script
@@ -378,7 +381,6 @@ func parseWatchStakingRequest(
 		scriptData.StakingScriptData.StakerKey,
 		slashingTxSig.Serialize(),
 	)
-
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx sig: %w", err)
 	}
@@ -388,8 +390,18 @@ func parseWatchStakingRequest(
 		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid pop: %w", err)
 	}
 
+	// 6. Extract slashing tx change address
+	_, outAddrs, _, err := txscript.ExtractPkScriptAddrs(slashingTx.TxOut[1].PkScript, network)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx change address: %w", err)
+	}
+	if len(outAddrs) != 1 {
+		return nil, nil, fmt.Errorf("failed to watch staking tx. Only one slashing tx change address is allowed")
+	}
+	slashingTxChangeAddress := outAddrs[0]
+
 	req := newWatchedStakingRequest(
-		stakerAddress,
+		stakerAddress, slashingTxChangeAddress,
 		stakingTx,
 		uint32(stakingOutputIdx),
 		stakingTx.TxOut[stakingOutputIdx].PkScript,

@@ -72,10 +72,11 @@ type StoredTransaction struct {
 	Pop                       *ProofOfPossession
 	// Returning address as string, to avoid having to know how to decode address
 	// which requires knowing the network we are on
-	StakerAddress   string
-	State           proto.TransactionState
-	Watched         bool
-	UnbondingTxData *UnbondingStoreData
+	StakerAddress           string
+	SlashingTxChangeAddress string
+	State                   proto.TransactionState
+	Watched                 bool
+	UnbondingTxData         *UnbondingStoreData
 }
 
 type WatchedTransactionData struct {
@@ -88,7 +89,7 @@ type UnbondingStoreData struct {
 	UnbondingTx                   *wire.MsgTx
 	UnbondingTxScript             []byte
 	UnbondingTxValidatorSignature *schnorr.Signature
-	UnbondingTxJurySignature      *schnorr.Signature
+	UnbondingTxCovenantSignature  *schnorr.Signature
 	UnbondingTxConfirmationInfo   *BtcConfirmationInfo
 }
 
@@ -114,7 +115,7 @@ func newInitialUnbondingTxData(
 		UnbondingTransaction:             serializedTx,
 		UnbondingTransactionScript:       unbondingTxScript,
 		UnbondingTransactionValidatorSig: nil,
-		UnbondingTransactionJurySig:      nil,
+		UnbondingTransactionCovenantSig:  nil,
 		UnbondingTxBtcConfirmationInfo:   nil,
 	}
 
@@ -123,21 +124,21 @@ func newInitialUnbondingTxData(
 
 func newUnbondingSignaturesUpdate(
 	unbondingTxValidatorSignature *schnorr.Signature,
-	unbondingTxJurySignature *schnorr.Signature,
+	unbondingTxCovenantSignature *schnorr.Signature,
 ) (*proto.UnbondingTxData, error) {
 	if unbondingTxValidatorSignature == nil {
 		return nil, fmt.Errorf("cannot create unbonding tx data without validator signature")
 	}
 
-	if unbondingTxJurySignature == nil {
-		return nil, fmt.Errorf("cannot create unbonding tx data without jury signature")
+	if unbondingTxCovenantSignature == nil {
+		return nil, fmt.Errorf("cannot create unbonding tx data without covenant signature")
 	}
 
 	unbondingData := &proto.UnbondingTxData{
 		UnbondingTransaction:             nil,
 		UnbondingTransactionScript:       nil,
 		UnbondingTransactionValidatorSig: unbondingTxValidatorSignature.Serialize(),
-		UnbondingTransactionJurySig:      unbondingTxJurySignature.Serialize(),
+		UnbondingTransactionCovenantSig:  unbondingTxCovenantSignature.Serialize(),
 		UnbondingTxBtcConfirmationInfo:   nil,
 	}
 
@@ -248,9 +249,9 @@ func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*Unbondi
 		}
 	}
 
-	var jurySig *schnorr.Signature
-	if ud.UnbondingTransactionJurySig != nil {
-		jurySig, err = schnorr.ParseSignature(ud.UnbondingTransactionJurySig)
+	var covenantSig *schnorr.Signature
+	if ud.UnbondingTransactionCovenantSig != nil {
+		covenantSig, err = schnorr.ParseSignature(ud.UnbondingTransactionCovenantSig)
 
 		if err != nil {
 			return nil, err
@@ -267,7 +268,7 @@ func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*Unbondi
 		UnbondingTx:                   &unbondingTx,
 		UnbondingTxScript:             ud.UnbondingTransactionScript,
 		UnbondingTxValidatorSignature: validatorSig,
-		UnbondingTxJurySignature:      jurySig,
+		UnbondingTxCovenantSignature:  covenantSig,
 		UnbondingTxConfirmationInfo:   unbondingTxConfirmationInfo,
 	}, nil
 }
@@ -309,10 +310,11 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 			BabylonSigOverBtcPk:  ttx.BabylonSigBtcPk,
 			BtcSigOverBabylonSig: ttx.BtcSigBabylonSig,
 		},
-		StakerAddress:   ttx.StakerAddress,
-		State:           ttx.State,
-		Watched:         ttx.Watched,
-		UnbondingTxData: utd,
+		StakerAddress:           ttx.StakerAddress,
+		SlashingTxChangeAddress: ttx.SlashingTxChangeAddress,
+		State:                   ttx.State,
+		Watched:                 ttx.Watched,
+		UnbondingTxData:         utd,
 	}, nil
 }
 
@@ -477,7 +479,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 	stakingOutputIndex uint32,
 	txscript []byte,
 	pop *ProofOfPossession,
-	stakerAddress btcutil.Address,
+	stakerAddress, slashingTxChangeAddress btcutil.Address,
 ) error {
 	txHash := btcTx.TxHash()
 	txHashBytes := txHash[:]
@@ -494,6 +496,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 		StakingScript:                txscript,
 		StakingOutputIdx:             stakingOutputIndex,
 		StakerAddress:                stakerAddress.EncodeAddress(),
+		SlashingTxChangeAddress:      slashingTxChangeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
 		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
@@ -513,7 +516,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	stakingOutputIndex uint32,
 	txscript []byte,
 	pop *ProofOfPossession,
-	stakerAddress btcutil.Address,
+	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
@@ -533,6 +536,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 		StakingScript:                txscript,
 		StakingOutputIdx:             stakingOutputIndex,
 		StakerAddress:                stakerAddress.EncodeAddress(),
+		SlashingTxChangeAddress:      slashingTxChangeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
 		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
@@ -673,9 +677,9 @@ func (c *TrackedTransactionStore) SetTxUnbondingStarted(
 func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 	txHash *chainhash.Hash,
 	validatorUnbondingSignature *schnorr.Signature,
-	juryUnbondingSignature *schnorr.Signature,
+	covenantUnbondingSignature *schnorr.Signature,
 ) error {
-	update, err := newUnbondingSignaturesUpdate(validatorUnbondingSignature, juryUnbondingSignature)
+	update, err := newUnbondingSignaturesUpdate(validatorUnbondingSignature, covenantUnbondingSignature)
 
 	if err != nil {
 		return err
@@ -686,12 +690,12 @@ func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 			return fmt.Errorf("cannot set unbonding signatures received, because unbonding tx data does not exist: %w", ErrUnbondingDataNotFound)
 		}
 
-		if tx.UnbondingTxData.UnbondingTransactionJurySig != nil || tx.UnbondingTxData.UnbondingTransactionValidatorSig != nil {
+		if tx.UnbondingTxData.UnbondingTransactionCovenantSig != nil || tx.UnbondingTxData.UnbondingTransactionValidatorSig != nil {
 			return fmt.Errorf("cannot set unbonding signatures received, because unbonding signatures already exist: %w", ErrInvalidUnbondingDataUpdate)
 		}
 
 		tx.State = proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED
-		tx.UnbondingTxData.UnbondingTransactionJurySig = update.UnbondingTransactionJurySig
+		tx.UnbondingTxData.UnbondingTransactionCovenantSig = update.UnbondingTransactionCovenantSig
 		tx.UnbondingTxData.UnbondingTransactionValidatorSig = update.UnbondingTransactionValidatorSig
 		return nil
 	}
@@ -744,7 +748,6 @@ func (c *TrackedTransactionStore) GetTransaction(txHash *chainhash.Hash) (*Store
 
 		var storedTxProto proto.TrackedTransaction
 		err = pm.Unmarshal(maybeTx, &storedTxProto)
-
 		if err != nil {
 			return ErrCorruptedTransactionsDb
 		}

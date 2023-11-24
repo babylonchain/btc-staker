@@ -65,12 +65,13 @@ func NewStakerService(
 
 func storedTxToStakingDetails(storedTx *stakerdb.StoredTransaction) StakingDetails {
 	return StakingDetails{
-		StakingTxHash:  storedTx.StakingTx.TxHash().String(),
-		StakerAddress:  storedTx.StakerAddress,
-		StakingScript:  hex.EncodeToString(storedTx.TxScript),
-		StakingState:   storedTx.State.String(),
-		Watched:        storedTx.Watched,
-		TransactionIdx: strconv.FormatUint(storedTx.StoredTransactionIdx, 10),
+		StakingTxHash:           storedTx.StakingTx.TxHash().String(),
+		StakerAddress:           storedTx.StakerAddress,
+		SlashingTxChangeAddress: storedTx.SlashingTxChangeAddress,
+		StakingScript:           hex.EncodeToString(storedTx.TxScript),
+		StakingState:            storedTx.State.String(),
+		Watched:                 storedTx.Watched,
+		TransactionIdx:          strconv.FormatUint(storedTx.StoredTransactionIdx, 10),
 	}
 }
 
@@ -80,6 +81,7 @@ func (s *StakerService) health(_ *rpctypes.Context) (*ResultHealth, error) {
 
 func (s *StakerService) stake(_ *rpctypes.Context,
 	stakerAddress string,
+	slashingTxChangeAddress string,
 	stakingAmount int64,
 	validatorPk string,
 	stakingTimeBlocks int64,
@@ -91,20 +93,22 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 
 	amount := btcutil.Amount(stakingAmount)
 
-	address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+	stakerAddr, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+	if err != nil {
+		return nil, err
+	}
 
+	slashingTxChangeAddr, err := btcutil.DecodeAddress(slashingTxChangeAddress, &s.config.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
 
 	validatorPkBytes, err := hex.DecodeString(validatorPk)
-
 	if err != nil {
 		return nil, err
 	}
 
 	valSchnorrKey, err := schnorr.ParsePubKey(validatorPkBytes)
-
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +119,7 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 
 	stakingTimeUint16 := uint16(stakingTimeBlocks)
 
-	stakingTxHash, err := s.staker.StakeFunds(address, amount, valSchnorrKey, stakingTimeUint16)
-
+	stakingTxHash, err := s.staker.StakeFunds(stakerAddr, slashingTxChangeAddr, amount, valSchnorrKey, stakingTimeUint16)
 	if err != nil {
 		return nil, err
 	}
@@ -130,19 +133,16 @@ func (s *StakerService) stakingDetails(_ *rpctypes.Context,
 	stakingTxHash string) (*StakingDetails, error) {
 
 	txHash, err := chainhash.NewHashFromStr(stakingTxHash)
-
 	if err != nil {
 		return nil, err
 	}
 
 	storedTx, err := s.staker.GetStoredTransaction(txHash)
-
 	if err != nil {
 		return nil, err
 	}
 
 	details := storedTxToStakingDetails(storedTx)
-
 	return &details, nil
 }
 
@@ -339,43 +339,36 @@ func (s *StakerService) watchStaking(
 ) (*ResultStake, error) {
 
 	stkTx, err := decodeBtcTx(stakingTx)
-
 	if err != nil {
 		return nil, err
 	}
 
 	slshTx, err := decodeBtcTx(slashingTx)
-
 	if err != nil {
 		return nil, err
 	}
 
 	stkScript, err := hex.DecodeString(stakingScript)
-
 	if err != nil {
 		return nil, err
 	}
 
-	address, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
-
+	stakerAddr, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
 
 	slashTxSigBytes, err := hex.DecodeString(slashingTxSig)
-
 	if err != nil {
 		return nil, err
 	}
 
 	slashingTxSchnorSig, err := schnorr.ParseSignature(slashTxSigBytes)
-
 	if err != nil {
 		return nil, err
 	}
 
 	stakerBabylonPubkeyBytes, err := hex.DecodeString(stakerBabylonPk)
-
 	if err != nil {
 		return nil, err
 	}
@@ -389,25 +382,21 @@ func (s *StakerService) watchStaking(
 	}
 
 	stakerBabylonSigBytes, err := hex.DecodeString(stakerBabylonSig)
-
 	if err != nil {
 		return nil, err
 	}
 
 	stakerBtcSigBytes, err := hex.DecodeString(stakerBtcSig)
-
 	if err != nil {
 		return nil, err
 	}
 
 	btcPopType, err := babylonclient.IntToPopType(popType)
-
 	if err != nil {
 		return nil, err
 	}
 
 	proofOfPossesion, err := babylonclient.NewBabylonPop(btcPopType, stakerBabylonSigBytes, stakerBtcSigBytes)
-
 	if err != nil {
 		return nil, err
 	}
@@ -418,10 +407,9 @@ func (s *StakerService) watchStaking(
 		slshTx,
 		slashingTxSchnorSig,
 		&stakerBabylonPubKey,
-		address,
+		stakerAddr,
 		proofOfPossesion,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -461,7 +449,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
 		// staking API
-		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
+		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,slashingTxChangeAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),

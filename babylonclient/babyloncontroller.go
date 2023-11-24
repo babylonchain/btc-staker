@@ -129,8 +129,9 @@ func NewBabylonController(
 
 type StakingTrackerResponse struct {
 	SlashingAddress btcutil.Address
-	JuryPk          btcec.PublicKey
-	MinSlashinFee   btcutil.Amount
+	SlashingRate    sdk.Dec
+	CovenantPk      btcec.PublicKey
+	MinSlashingFee  btcutil.Amount
 }
 
 type ValidatorInfo struct {
@@ -198,8 +199,9 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 		ConfirmationTimeBlocks:    uint32(bccParams.BtcConfirmationDepth),
 		FinalizationTimeoutBlocks: uint32(bccParams.CheckpointFinalizationTimeout),
 		SlashingAddress:           stakingTrackerParams.SlashingAddress,
-		JuryPk:                    stakingTrackerParams.JuryPk,
-		MinSlashingTxFeeSat:       stakingTrackerParams.MinSlashinFee,
+		CovenantPk:                stakingTrackerParams.CovenantPk,
+		MinSlashingTxFeeSat:       stakingTrackerParams.MinSlashingFee,
+		SlashingRate:              stakingTrackerParams.SlashingRate,
 	}, nil
 }
 
@@ -289,7 +291,7 @@ type UndelegationData struct {
 }
 
 type UndelegationInfo struct {
-	JuryUnbodningSignature      *schnorr.Signature
+	CovenantUnbondingSignature  *schnorr.Signature
 	ValidatorUnbondingSignature *schnorr.Signature
 	UnbondingTransaction        *wire.MsgTx
 	UnbondingTransactionScript  []byte
@@ -465,27 +467,25 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 	queryClient := btcstypes.NewQueryClient(clientCtx)
 
 	response, err := queryClient.Params(ctx, &btcstypes.QueryParamsRequest{})
-
 	if err != nil {
 		return nil, err
 	}
 
 	slashingAddress, err := btcutil.DecodeAddress(response.Params.SlashingAddress, bc.btcParams)
-
 	if err != nil {
 		return nil, err
 	}
 
-	juryPk, err := response.Params.JuryPk.ToBTCPK()
-
+	covenantPk, err := response.Params.CovenantPk.ToBTCPK()
 	if err != nil {
 		return nil, err
 	}
 
 	return &StakingTrackerResponse{
 		SlashingAddress: slashingAddress,
-		JuryPk:          *juryPk,
-		MinSlashinFee:   btcutil.Amount(response.Params.MinSlashingTxFeeSat),
+		SlashingRate:    response.Params.SlashingRate,
+		CovenantPk:      *covenantPk,
+		MinSlashingFee:  btcutil.Amount(response.Params.MinSlashingTxFeeSat),
 	}, nil
 }
 
@@ -640,10 +640,6 @@ func (bc *BabylonController) QueryHeaderDepth(headerHash *chainhash.Hash) (uint6
 			return 0, fmt.Errorf("%s: %w", err.Error(), ErrHeaderNotKnownToBabylon)
 		}
 
-		if strings.Contains(err.Error(), btclctypes.ErrHeaderOnFork.Error()) {
-			return 0, fmt.Errorf("%s: %w", err.Error(), ErrHeaderOnBabylonLCFork)
-		}
-
 		// got unexpected error, return it
 		return 0, err
 	}
@@ -654,19 +650,20 @@ func (bc *BabylonController) QueryHeaderDepth(headerHash *chainhash.Hash) (uint6
 
 // Insert BTC block header using rpc client
 func (bc *BabylonController) InsertBtcBlockHeaders(headers []*wire.BlockHeader) (*sdk.TxResponse, error) {
-	// convert to []sdk.Msg type
-	imsgs := []sdk.Msg{}
-	for _, h := range headers {
-		headerBytes := bbntypes.NewBTCHeaderBytesFromBlockHeader(h)
-		msg := btclctypes.MsgInsertHeader{
-			Header: &headerBytes,
-			Signer: bc.getTxSigner(),
-		}
-
-		imsgs = append(imsgs, &msg)
+	msg := &btclctypes.MsgInsertHeaders{
+		Signer:  bc.getTxSigner(),
+		Headers: chainToChainBytes(headers),
 	}
 
-	return bc.reliablySendMsgs(imsgs, "Failed to send block headers to babylon node")
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "Failed to send block headers to babylon node")
+}
+
+func chainToChainBytes(chain []*wire.BlockHeader) []bbntypes.BTCHeaderBytes {
+	chainBytes := make([]bbntypes.BTCHeaderBytes, len(chain))
+	for i, header := range chain {
+		chainBytes[i] = bbntypes.NewBTCHeaderBytesFromBlockHeader(header)
+	}
+	return chainBytes
 }
 
 // RegisterValidator registers a BTC validator via a MsgCreateBTCValidator to Babylon
@@ -710,13 +707,14 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 		var udi *UndelegationInfo = nil
 
 		if resp.UndelegationInfo != nil {
-			var jurySig *schnorr.Signature = nil
-			if resp.UndelegationInfo.JuryUnbondingSig != nil {
-				jsig, err := resp.UndelegationInfo.JuryUnbondingSig.ToBTCSig()
+			var covenantSig *schnorr.Signature = nil
+			if resp.UndelegationInfo.CovenantUnbondingSig != nil {
+				jsig, err := resp.UndelegationInfo.CovenantUnbondingSig.ToBTCSig()
 				if err != nil {
-					return retry.Unrecoverable(fmt.Errorf("malformed jury sig: %s : %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
+					return retry.Unrecoverable(fmt.Errorf("malformed covenant sig: %s : %w", err.Error(),
+						ErrInvalidValueReceivedFromBabylonNode))
 				}
-				jurySig = jsig
+				covenantSig = jsig
 			}
 
 			var validatorSig *schnorr.Signature = nil
@@ -735,7 +733,7 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 			}
 
 			udi = &UndelegationInfo{
-				JuryUnbodningSignature:      jurySig,
+				CovenantUnbondingSignature:  covenantSig,
 				ValidatorUnbondingSignature: validatorSig,
 				UnbondingTransaction:        tx,
 				UnbondingTransactionScript:  resp.UndelegationInfo.UnbondingTx.Script,
@@ -775,12 +773,12 @@ func (bc *BabylonController) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhas
 
 // Test methods for e2e testing
 // Different babylon sig methods to support e2e testing
-func (bc *BabylonController) SubmitJurySig(
+func (bc *BabylonController) SubmitCovenantSig(
 	btcPubKey *bbntypes.BIP340PubKey,
 	delPubKey *bbntypes.BIP340PubKey,
 	stakingTxHash string,
 	sig *bbntypes.BIP340Signature) (*sdk.TxResponse, error) {
-	msg := &btcstypes.MsgAddJurySig{
+	msg := &btcstypes.MsgAddCovenantSig{
 		Signer:        bc.getTxSigner(),
 		ValPk:         btcPubKey,
 		DelPk:         delPubKey,
@@ -788,17 +786,17 @@ func (bc *BabylonController) SubmitJurySig(
 		Sig:           sig,
 	}
 
-	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury sig")
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit covenant sig")
 }
 
-func (bc *BabylonController) SubmitJuryUnbondingSigs(
+func (bc *BabylonController) SubmitCovenantUnbondingSigs(
 	btcPubKey *bbntypes.BIP340PubKey,
 	delPubKey *bbntypes.BIP340PubKey,
 	stakingTxHash string,
 	unbondingSig *bbntypes.BIP340Signature,
 	slashUnbondingSig *bbntypes.BIP340Signature,
 ) (*sdk.TxResponse, error) {
-	msg := &btcstypes.MsgAddJuryUnbondingSigs{
+	msg := &btcstypes.MsgAddCovenantUnbondingSigs{
 		Signer:                 bc.getTxSigner(),
 		ValPk:                  btcPubKey,
 		DelPk:                  delPubKey,
@@ -807,7 +805,7 @@ func (bc *BabylonController) SubmitJuryUnbondingSigs(
 		SlashingUnbondingTxSig: slashUnbondingSig,
 	}
 
-	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit jury unbonding sig")
+	return bc.reliablySendMsgs([]sdk.Msg{msg}, "failed to submit covenant unbonding sig")
 }
 
 func (bc *BabylonController) SubmitValidatorUnbondingSig(

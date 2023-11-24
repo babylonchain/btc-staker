@@ -55,7 +55,9 @@ func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *st
 	require.NoError(t, err)
 	script, err := scriptData.BuildStakingScript()
 	require.NoError(t, err)
-	btcAddress, err := btcutil.NewAddressWitnessScriptHash(datagen.GenRandomByteArray(r, 32), &chaincfg.MainNetParams)
+	stakerAddr, err := datagen.GenRandomBTCAddress(r, &chaincfg.MainNetParams)
+	require.NoError(t, err)
+	slashingTxChangeAddr, err := datagen.GenRandomBTCAddress(r, &chaincfg.MainNetParams)
 	require.NoError(t, err)
 
 	return &stakerdb.StoredTransaction{
@@ -66,7 +68,8 @@ func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *st
 			BabylonSigOverBtcPk:  datagen.GenRandomByteArray(r, 64),
 			BtcSigOverBabylonSig: datagen.GenRandomByteArray(r, 64),
 		},
-		StakerAddress: btcAddress.String(),
+		StakerAddress:           stakerAddr.String(),
+		SlashingTxChangeAddress: slashingTxChangeAddr.String(),
 	}
 }
 
@@ -101,14 +104,16 @@ func FuzzStoringTxs(f *testing.F) {
 		numTx := r.Intn(maxCreatedTx) + 1
 		generatedStoredTxs := genNStoredTransactions(t, r, numTx, 200)
 		for _, storedTx := range generatedStoredTxs {
-			address, err := btcutil.DecodeAddress(storedTx.StakerAddress, &chaincfg.MainNetParams)
+			stakerAddr, err := btcutil.DecodeAddress(storedTx.StakerAddress, &chaincfg.MainNetParams)
+			require.NoError(t, err)
+			slashingTxChangeAddr, err := btcutil.DecodeAddress(storedTx.SlashingTxChangeAddress, &chaincfg.MainNetParams)
 			require.NoError(t, err)
 			err = s.AddTransaction(
 				storedTx.StakingTx,
 				storedTx.StakingOutputIndex,
 				storedTx.TxScript,
 				storedTx.Pop,
-				address,
+				stakerAddr, slashingTxChangeAddr,
 			)
 			require.NoError(t, err)
 		}
@@ -156,17 +161,17 @@ func TestStateTransitions(t *testing.T) {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	s := MakeTestStore(t)
 	tx := genStoredTransaction(t, r, 200)
-	address, err := btcutil.DecodeAddress(tx.StakerAddress, &chaincfg.MainNetParams)
+	stakerAddr, err := btcutil.DecodeAddress(tx.StakerAddress, &chaincfg.MainNetParams)
 	require.NoError(t, err)
-
+	slashingTxChangeAddr, err := btcutil.DecodeAddress(tx.SlashingTxChangeAddress, &chaincfg.MainNetParams)
+	require.NoError(t, err)
 	txHash := tx.StakingTx.TxHash()
-
 	err = s.AddTransaction(
 		tx.StakingTx,
 		tx.StakingOutputIndex,
 		tx.TxScript,
 		tx.Pop,
-		address,
+		stakerAddr, slashingTxChangeAddr,
 	)
 	require.NoError(t, err)
 
@@ -211,14 +216,16 @@ func TestPaginator(t *testing.T) {
 
 	generatedStoredTxs := genNStoredTransactions(t, r, numTx, 200)
 	for _, storedTx := range generatedStoredTxs {
-		address, err := btcutil.DecodeAddress(storedTx.StakerAddress, &chaincfg.MainNetParams)
+		stakerAddr, err := btcutil.DecodeAddress(storedTx.StakerAddress, &chaincfg.MainNetParams)
+		require.NoError(t, err)
+		slashingTxChangeAddr, err := btcutil.DecodeAddress(storedTx.SlashingTxChangeAddress, &chaincfg.MainNetParams)
 		require.NoError(t, err)
 		err = s.AddTransaction(
 			storedTx.StakingTx,
 			storedTx.StakingOutputIndex,
 			storedTx.TxScript,
 			storedTx.Pop,
-			address,
+			stakerAddr, slashingTxChangeAddr,
 		)
 		require.NoError(t, err)
 	}
@@ -278,14 +285,16 @@ func FuzzQuerySpendableTx(f *testing.F) {
 		maxStakingTime := r.Int31n(101) + 150
 		stored := genNStoredTransactions(t, r, maxCreatedTx, uint16(maxStakingTime))
 		for _, storedTx := range stored {
-			address, err := btcutil.DecodeAddress(storedTx.StakerAddress, &chaincfg.MainNetParams)
+			stakerAddr, err := btcutil.DecodeAddress(storedTx.StakerAddress, &chaincfg.MainNetParams)
+			require.NoError(t, err)
+			slashingTxChangeAddr, err := btcutil.DecodeAddress(storedTx.SlashingTxChangeAddress, &chaincfg.MainNetParams)
 			require.NoError(t, err)
 			err = s.AddTransaction(
 				storedTx.StakingTx,
 				storedTx.StakingOutputIndex,
 				storedTx.TxScript,
 				storedTx.Pop,
-				address,
+				stakerAddr, slashingTxChangeAddr,
 			)
 			require.NoError(t, err)
 		}
