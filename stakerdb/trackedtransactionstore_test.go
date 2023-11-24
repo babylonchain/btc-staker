@@ -1,6 +1,7 @@
 package stakerdb_test
 
 import (
+	"bytes"
 	"errors"
 	"math/rand"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -37,6 +39,10 @@ func MakeTestStore(t *testing.T) *stakerdb.TrackedTransactionStore {
 	require.NoError(t, err)
 
 	return store
+}
+
+func pubKeysEqual(pk1, pk2 *btcec.PublicKey) bool {
+	return bytes.Equal(schnorr.SerializePubKey(pk1), schnorr.SerializePubKey(pk2))
 }
 
 func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *stakerdb.StoredTransaction {
@@ -118,7 +124,7 @@ func FuzzStoringTxs(f *testing.F) {
 			require.Equal(t, storedTx.StakingTx, tx.StakingTx)
 			require.Equal(t, storedTx.StakingOutputIndex, tx.StakingOutputIndex)
 			require.Equal(t, storedTx.StakingTime, tx.StakingTime)
-			require.Equal(t, storedTx.ValidatorBtcPk, tx.ValidatorBtcPk)
+			require.True(t, pubKeysEqual(storedTx.ValidatorBtcPk, tx.ValidatorBtcPk))
 			require.Equal(t, storedTx.Pop, tx.Pop)
 			require.Equal(t, storedTx.StakerAddress, tx.StakerAddress)
 			require.Equal(t, expectedIdx, tx.StoredTransactionIdx)
@@ -136,7 +142,7 @@ func FuzzStoringTxs(f *testing.F) {
 			require.Equal(t, storedTx.StakingTx, storedResult.Transactions[i].StakingTx)
 			require.Equal(t, storedTx.StakingOutputIndex, storedResult.Transactions[i].StakingOutputIndex)
 			require.Equal(t, storedTx.StakingTime, storedResult.Transactions[i].StakingTime)
-			require.Equal(t, storedTx.ValidatorBtcPk, storedResult.Transactions[i].ValidatorBtcPk)
+			require.True(t, pubKeysEqual(storedTx.ValidatorBtcPk, storedResult.Transactions[i].ValidatorBtcPk))
 			require.Equal(t, storedTx.Pop, storedResult.Transactions[i].Pop)
 			require.Equal(t, storedTx.StakerAddress, storedResult.Transactions[i].StakerAddress)
 		}
@@ -264,7 +270,7 @@ func TestPaginator(t *testing.T) {
 		require.Equal(t, storedTx.StakingTx, allTransactionsFromDb[i].StakingTx)
 		require.Equal(t, storedTx.StakingOutputIndex, allTransactionsFromDb[i].StakingOutputIndex)
 		require.Equal(t, storedTx.StakingTime, allTransactionsFromDb[i].StakingTime)
-		require.Equal(t, storedTx.ValidatorBtcPk, allTransactionsFromDb[i].ValidatorBtcPk)
+		require.True(t, pubKeysEqual(storedTx.ValidatorBtcPk, allTransactionsFromDb[i].ValidatorBtcPk))
 		require.Equal(t, storedTx.Pop, allTransactionsFromDb[i].Pop)
 		require.Equal(t, storedTx.StakerAddress, allTransactionsFromDb[i].StakerAddress)
 	}

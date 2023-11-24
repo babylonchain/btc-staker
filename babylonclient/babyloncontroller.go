@@ -128,6 +128,7 @@ func NewBabylonController(
 type StakingTrackerResponse struct {
 	SlashingAddress         btcutil.Address
 	SlashingRate            sdkmath.LegacyDec
+	MinComissionRate        sdkmath.LegacyDec
 	CovenantPks             []*btcec.PublicKey
 	CovenantQuruomThreshold uint32
 	MinSlashingFee          btcutil.Amount
@@ -465,6 +466,7 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 	return &StakingTrackerResponse{
 		SlashingAddress:         slashingAddress,
 		SlashingRate:            response.Params.SlashingRate,
+		MinComissionRate:        response.Params.MinCommissionRate,
 		CovenantPks:             covenantPks,
 		MinSlashingFee:          btcutil.Amount(response.Params.MinSlashingTxFeeSat),
 		CovenantQuruomThreshold: response.Params.CovenantQuorum,
