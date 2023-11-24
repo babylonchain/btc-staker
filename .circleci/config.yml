@@ -11,7 +11,7 @@ jobs:
     resource_class: large
     steps:
       - go/install:
-          version: "1.21"
+          version: "1.21.4"
       - checkout
       - run:
           name: Print Go environment
