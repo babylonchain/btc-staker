@@ -122,8 +122,9 @@ func createKeyRing(c *cli.Context) error {
 		options.SupportedAlgosLedger = keyring.SigningAlgoList{hd.Secp256k1}
 	})
 
-	encConf := babylonApp.GetEncodingConfig()
-	encConf.InterfaceRegistry.RegisterImplementations(
+	app := babylonApp.NewTmpBabylonApp()
+
+	app.AppCodec().InterfaceRegistry().RegisterImplementations(
 		(*cryptotypes.PubKey)(nil),
 		&secp256k1.PubKey{},
 	)
@@ -138,7 +139,7 @@ func createKeyRing(c *cli.Context) error {
 		backend,
 		keyDir,
 		nil,
-		encConf.Marshaler,
+		app.AppCodec(),
 		keyringOptions...)
 
 	if err != nil {

@@ -37,7 +37,7 @@ func (app *StakerApp) buildOwnedDelegation(
 		return nil, err
 	}
 
-	slashingTx, slashingTxSig, err := buildSlashingTxAndSig(delegationData, storedTx)
+	slashingTx, slashingTxSig, err := buildSlashingTxAndSig(delegationData, storedTx, app.network)
 	if err != nil {
 		// This is truly unexpected, most probably programming error we have
 		// valid and btc confirmed staking transacion, but for some reason we cannot
@@ -50,6 +50,7 @@ func (app *StakerApp) buildOwnedDelegation(
 	}
 
 	dg := createDelegationData(
+		delegationData.stakerPrivKey.PubKey(),
 		req.inclusionBlock,
 		req.txIndex,
 		storedTx,
@@ -83,6 +84,7 @@ func (app *StakerApp) buildDelegation(
 		}
 
 		dg := createDelegationData(
+			watchedData.StakerBtcPubKey,
 			req.inclusionBlock,
 			req.txIndex,
 			storedTx,
@@ -144,18 +146,28 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 				continue
 			}
 
-			if di.UndelegationInfo.CovenantUnbondingSignature != nil && di.UndelegationInfo.ValidatorUnbondingSignature != nil {
-				// we have both signatures, we can stop checking
+			params, err := app.babylonClient.Params()
+
+			if err != nil {
 				app.logger.WithFields(logrus.Fields{
 					"stakingTxHash": stakingTxHash,
-				}).Debug("Received both required signatures for unbonding tx for staking tx with given hash")
+					"err":           err,
+				}).Error("Error getting babylon params")
+				// Failed to get params, we cannont do anything, most probably connection error to babylon node
+				// we will try again in next iteration
+				continue
+			}
 
-				// first push signatures to the channel, this will block until signatures pushed on this channel
-				// as channel is unbuffered
+			// we have enough signatures to submit unbonding tx
+			if len(di.UndelegationInfo.CovenantUnbondingSignatures) >= int(params.CovenantQuruomThreshold) {
+				app.logger.WithFields(logrus.Fields{
+					"stakingTxHash": stakingTxHash,
+					"numSignatures": len(di.UndelegationInfo.CovenantUnbondingSignatures),
+				}).Debug("Received enough covenant unbonding signatures on babylon")
+
 				req := &unbondingTxSignaturesConfirmedOnBabylonEvent{
 					stakingTxHash:               *stakingTxHash,
-					covenantUnbondingSignature:  di.UndelegationInfo.CovenantUnbondingSignature,
-					validatorUnbondingSignature: di.UndelegationInfo.ValidatorUnbondingSignature,
+					covenantUnbondingSignatures: di.UndelegationInfo.CovenantUnbondingSignatures,
 				}
 
 				utils.PushOrQuit[*unbondingTxSignaturesConfirmedOnBabylonEvent](
@@ -163,10 +175,10 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 					req,
 					app.quit,
 				)
-
-				// our job is done, we can return
-				return
 			}
+
+			// our job is done, we can return
+			return
 
 		case <-app.quit:
 			return
@@ -175,6 +187,10 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 }
 
 func (app *StakerApp) validatorExists(validatorPk *btcec.PublicKey) error {
+	if validatorPk == nil {
+		return fmt.Errorf("provided validator public key is nil")
+	}
+
 	_, err := app.babylonClient.QueryValidator(validatorPk)
 
 	if err != nil {

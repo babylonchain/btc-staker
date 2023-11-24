@@ -24,13 +24,16 @@ type StakingParams struct {
 	MinSlashingTxFeeSat btcutil.Amount
 
 	// Bitcoin public key of the current covenant
-	CovenantPks []btcec.PublicKey
+	CovenantPks []*btcec.PublicKey
 
 	// Address to which slashing transactions are sent
 	SlashingAddress btcutil.Address
 
 	// The rate at which the staked funds will be slashed, expressed as a decimal.
 	SlashingRate sdkmath.LegacyDec
+
+	// Convenant quorum threshold
+	CovenantQuruomThreshold uint32
 }
 
 // SingleKeyCosmosKeyring represents a keyring that supports only one pritvate/public key pair
@@ -165,7 +168,7 @@ func GetMockClient() *MockBabylonClient {
 			ConfirmationTimeBlocks:    2,
 			FinalizationTimeoutBlocks: 5,
 			MinSlashingTxFeeSat:       btcutil.Amount(1000),
-			CovenantPks:               []btcec.PublicKey{*covenantPk.PubKey()},
+			CovenantPks:               []*btcec.PublicKey{covenantPk.PubKey()},
 			SlashingAddress:           slashingAddress,
 			SlashingRate:              sdkmath.LegacyNewDecWithPrec(1, 1), // 1 * 10^{-1} = 0.1
 		},

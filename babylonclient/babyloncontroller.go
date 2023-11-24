@@ -126,10 +126,11 @@ func NewBabylonController(
 }
 
 type StakingTrackerResponse struct {
-	SlashingAddress btcutil.Address
-	SlashingRate    sdkmath.LegacyDec
-	CovenantPks     []btcec.PublicKey
-	MinSlashingFee  btcutil.Amount
+	SlashingAddress         btcutil.Address
+	SlashingRate            sdkmath.LegacyDec
+	CovenantPks             []*btcec.PublicKey
+	CovenantQuruomThreshold uint32
+	MinSlashingFee          btcutil.Amount
 }
 
 type ValidatorInfo struct {
@@ -199,6 +200,7 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 		CovenantPks:               stakingTrackerParams.CovenantPks,
 		MinSlashingTxFeeSat:       stakingTrackerParams.MinSlashingFee,
 		SlashingRate:              stakingTrackerParams.SlashingRate,
+		CovenantQuruomThreshold:   stakingTrackerParams.CovenantQuruomThreshold,
 	}, nil
 }
 
@@ -450,21 +452,22 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 		return nil, err
 	}
 
-	var covenantPks []btcec.PublicKey
+	var covenantPks []*btcec.PublicKey
 
 	for _, covenantPk := range response.Params.CovenantPks {
 		covenantBtcPk, err := covenantPk.ToBTCPK()
 		if err != nil {
 			return nil, err
 		}
-		covenantPks = append(covenantPks, *covenantBtcPk)
+		covenantPks = append(covenantPks, covenantBtcPk)
 	}
 
 	return &StakingTrackerResponse{
-		SlashingAddress: slashingAddress,
-		SlashingRate:    response.Params.SlashingRate,
-		CovenantPks:     covenantPks,
-		MinSlashingFee:  btcutil.Amount(response.Params.MinSlashingTxFeeSat),
+		SlashingAddress:         slashingAddress,
+		SlashingRate:            response.Params.SlashingRate,
+		CovenantPks:             covenantPks,
+		MinSlashingFee:          btcutil.Amount(response.Params.MinSlashingTxFeeSat),
+		CovenantQuruomThreshold: response.Params.CovenantQuorum,
 	}, nil
 }
 

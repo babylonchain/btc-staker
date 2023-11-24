@@ -15,6 +15,7 @@ import (
 	str "github.com/babylonchain/btc-staker/staker"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -68,7 +69,6 @@ func storedTxToStakingDetails(storedTx *stakerdb.StoredTransaction) StakingDetai
 		StakingTxHash:           storedTx.StakingTx.TxHash().String(),
 		StakerAddress:           storedTx.StakerAddress,
 		SlashingTxChangeAddress: storedTx.SlashingTxChangeAddress,
-		StakingScript:           hex.EncodeToString(storedTx.TxScript),
 		StakingState:            storedTx.State.String(),
 		Watched:                 storedTx.Watched,
 		TransactionIdx:          strconv.FormatUint(storedTx.StoredTransactionIdx, 10),
@@ -325,10 +325,49 @@ func decodeBtcTx(txHex string) (*wire.MsgTx, error) {
 	return &txMsg, nil
 }
 
+func decodeBtcPk(pkHex string) (*btcec.PublicKey, error) {
+	pkBytes, err := hex.DecodeString(pkHex)
+
+	if err != nil {
+		return nil, err
+	}
+
+	pk, err := schnorr.ParsePubKey(pkBytes)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return pk, nil
+}
+
+func parseStakingTime(stakingTime int) (uint16, error) {
+	if stakingTime <= 0 {
+		return 0, fmt.Errorf("staking time must be positive")
+	}
+
+	if stakingTime > math.MaxUint16 {
+		return 0, fmt.Errorf("staking time %d is too big", stakingTime)
+	}
+
+	return uint16(stakingTime), nil
+}
+
+func parseStakingValue(stakingValue int) (btcutil.Amount, error) {
+	if stakingValue <= 0 {
+		return 0, fmt.Errorf("staking value must be positive")
+	}
+
+	return btcutil.Amount(stakingValue), nil
+}
+
 func (s *StakerService) watchStaking(
 	_ *rpctypes.Context,
 	stakingTx string,
-	stakingScript string,
+	stakingTime int,
+	stakingValue int,
+	stakerBtcPk string,
+	validatorBtcPk string,
 	slashingTx string,
 	slashingTxSig string,
 	stakerBabylonPk string,
@@ -349,7 +388,26 @@ func (s *StakerService) watchStaking(
 		return nil, err
 	}
 
-	stkScript, err := hex.DecodeString(stakingScript)
+	stakerBtcPkParsed, err := decodeBtcPk(stakerBtcPk)
+
+	if err != nil {
+		return nil, err
+	}
+
+	validatorBtcPkParsed, err := decodeBtcPk(validatorBtcPk)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakingTimeUint16, err := parseStakingTime(stakingTime)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakingValueBtc, err := parseStakingValue(stakingValue)
+
 	if err != nil {
 		return nil, err
 	}
@@ -409,10 +467,13 @@ func (s *StakerService) watchStaking(
 
 	hash, err := s.staker.WatchStaking(
 		stkTx,
-		stkScript,
+		stakingTimeUint16,
+		stakingValueBtc,
+		validatorBtcPkParsed,
 		slshTx,
 		slashingTxSchnorSig,
 		&stakerBabylonPubKey,
+		stakerBtcPkParsed,
 		stakerAddr, slashingTxChangeAddr,
 		proofOfPossesion,
 	)
@@ -520,7 +581,7 @@ func (s *StakerService) RunUntilShutdown() error {
 
 		listener, err := rpc.Listen(
 			listenAddressStr,
-			config,
+			config.MaxOpenConnections,
 		)
 
 		if err != nil {

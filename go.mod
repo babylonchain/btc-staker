@@ -5,6 +5,7 @@ go 1.21
 toolchain go1.21.4
 
 require (
+	cosmossdk.io/errors v1.0.0
 	cosmossdk.io/math v1.2.0
 	github.com/avast/retry-go/v4 v4.5.1
 	github.com/babylonchain/babylon v0.7.2
@@ -21,6 +22,7 @@ require (
 	github.com/cometbft/cometbft v0.38.1
 	github.com/cosmos/cosmos-sdk v0.50.1
 	github.com/cosmos/go-bip39 v1.0.0
+	github.com/cosmos/relayer/v2 v2.4.3-0.20231121194223-be8ebe0a83db
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/lightningnetwork/lnd v0.16.4-beta.rc1
 	github.com/lightningnetwork/lnd/kvdb v1.4.1
@@ -41,7 +43,6 @@ require (
 	cosmossdk.io/collections v0.4.0 // indirect
 	cosmossdk.io/core v0.11.0 // indirect
 	cosmossdk.io/depinject v1.0.0-alpha.4 // indirect
-	cosmossdk.io/errors v1.0.0 // indirect
 	cosmossdk.io/log v1.2.1 // indirect
 	cosmossdk.io/store v1.0.0 // indirect
 	cosmossdk.io/x/circuit v0.1.0 // indirect
@@ -97,7 +98,6 @@ require (
 	github.com/cosmos/ibc-go/v8 v8.0.0 // indirect
 	github.com/cosmos/ics23/go v0.10.0 // indirect
 	github.com/cosmos/ledger-cosmos-go v0.13.3 // indirect
-	github.com/cosmos/relayer/v2 v2.4.3-0.20231121194223-be8ebe0a83db // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect
 	github.com/crate-crypto/go-kzg-4844 v0.7.0 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect

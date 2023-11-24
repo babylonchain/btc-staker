@@ -1,11 +1,12 @@
 package staker
 
 import (
-	"bytes"
 	"fmt"
 
+	sdkmath "cosmossdk.io/math"
 	staking "github.com/babylonchain/babylon/btcstaking"
-	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
 
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
@@ -23,10 +24,10 @@ import (
 )
 
 type spendStakeTxInfo struct {
-	spendStakeTx        *wire.MsgTx
-	fundingOutput       *wire.TxOut
-	fundingOutputScript []byte
-	calculatedFee       btcutil.Amount
+	spendStakeTx           *wire.MsgTx
+	fundingOutput          *wire.TxOut
+	fundingOutputSpendInfo *staking.SpendInfo
+	calculatedFee          btcutil.Amount
 }
 
 // babylonPopToDbPop receives already validated pop from external sources and converts it to database representation
@@ -38,9 +39,43 @@ func babylonPopToDbPop(pop *cl.BabylonPop) *stakerdb.ProofOfPossession {
 	}
 }
 
+func babylonCovSigToDbCovSig(covSig cl.CovenantSignatureInfo) stakerdb.PubKeySigPair {
+	return stakerdb.NewCovenantMemberSignature(covSig.Signature, covSig.PubKey)
+}
+
+func babylonCovSigsToDbSigSigs(covSigs []cl.CovenantSignatureInfo) []stakerdb.PubKeySigPair {
+	sigSigs := make([]stakerdb.PubKeySigPair, len(covSigs))
+
+	for i := range covSigs {
+		sigSigs[i] = babylonCovSigToDbCovSig(covSigs[i])
+	}
+
+	return sigSigs
+}
+
+func pubKeySigPairsToSortedSignatures(pairs []stakerdb.PubKeySigPair) [][]byte {
+
+	var sigInfos []*staking.SignatureInfo = make([]*staking.SignatureInfo, len(pairs))
+
+	for i, pair := range pairs {
+		sigInfos[i] = staking.NewSignatureInfo(pair.PubKey, pair.Signature.Serialize())
+	}
+
+	sorted := staking.SortSignatureInfo(sigInfos)
+
+	signatures := make([][]byte, len(sorted))
+
+	for i, sigInfo := range sorted {
+		signatures[i] = sigInfo.Signature
+	}
+
+	return signatures
+}
+
 func buildSlashingTxAndSig(
 	delegationData *externalDelegationData,
 	storedTx *stakerdb.StoredTransaction,
+	net *chaincfg.Params,
 ) (*wire.MsgTx, *schnorr.Signature, error) {
 
 	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
@@ -55,11 +90,31 @@ func buildSlashingTxAndSig(
 		return nil, nil, fmt.Errorf("buidling slashing transaction failed: %w", err)
 	}
 
+	stakingInfo, err := staking.BuildStakingInfo(
+		delegationData.stakerPrivKey.PubKey(),
+		[]*btcec.PublicKey{storedTx.ValidatorBtcPk},
+		delegationData.covenantPks,
+		delegationData.covenantThreshold,
+		storedTx.StakingTime,
+		btcutil.Amount(storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex].Value),
+		net,
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("building staking info failed: %w", err)
+	}
+
+	slashingPathInfo, err := stakingInfo.SlashingPathSpendInfo()
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("building slashing path info failed: %w", err)
+	}
+
 	slashingTxSignature, err := staking.SignTxWithOneScriptSpendInputFromScript(
 		slashingTx,
 		storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex],
 		delegationData.stakerPrivKey,
-		storedTx.TxScript,
+		slashingPathInfo.RevealedLeaf.Script,
 	)
 
 	if err != nil {
@@ -70,6 +125,7 @@ func buildSlashingTxAndSig(
 }
 
 func createDelegationData(
+	StakerBtcPk *btcec.PublicKey,
 	inclusionBlock *wire.MsgBlock,
 	stakingTxIdx uint32,
 	storedTx *stakerdb.StoredTransaction,
@@ -83,9 +139,12 @@ func createDelegationData(
 	dg := cl.DelegationData{
 		StakingTransaction:                   storedTx.StakingTx,
 		StakingTransactionIdx:                stakingTxIdx,
-		StakingTransactionScript:             storedTx.TxScript,
 		StakingTransactionInclusionProof:     stakingTxInclusionProof,
 		StakingTransactionInclusionBlockHash: &inclusionBlockHash,
+		StakingTime:                          storedTx.StakingTime,
+		StakingValue:                         btcutil.Amount(storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex].Value),
+		ValidatorBtcPk:                       storedTx.ValidatorBtcPk,
+		StakerBtcPk:                          StakerBtcPk,
 		SlashingTransaction:                  slashingTx,
 		SlashingTransactionSig:               slashingTxSignature,
 		BabylonPk:                            babylonPubKey,
@@ -129,15 +188,33 @@ func createSpendStakeTx(
 }
 
 func createSpendStakeTxFromStoredTx(
+	stakerBtcPk *btcec.PublicKey,
+	covenantPublicKeys []*btcec.PublicKey,
+	covenantThreshold uint32,
 	storedtx *stakerdb.StoredTransaction,
 	destinationScript []byte,
 	feeRate chainfee.SatPerKVByte,
+	net *chaincfg.Params,
 ) (*spendStakeTxInfo, error) {
 	if storedtx.State == proto.TransactionState_SENT_TO_BABYLON {
-		parsedScript, err := staking.ParseStakingTransactionScript(storedtx.TxScript)
+		stakingInfo, err := staking.BuildStakingInfo(
+			stakerBtcPk,
+			[]*btcec.PublicKey{storedtx.ValidatorBtcPk},
+			covenantPublicKeys,
+			covenantThreshold,
+			storedtx.StakingTime,
+			btcutil.Amount(storedtx.StakingTx.TxOut[storedtx.StakingOutputIndex].Value),
+			net,
+		)
 
 		if err != nil {
-			return nil, fmt.Errorf("invalid staking transaction script in provides staking transaction: %w", err)
+			return nil, fmt.Errorf("failed to build staking info while spending staking transaction: %w", err)
+		}
+
+		stakingTimeLockPathInfo, err := stakingInfo.TimeLockPathSpendInfo()
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to build time lock path info while spending staking transaction: %w", err)
 		}
 
 		stakingTxHash := storedtx.StakingTx.TxHash()
@@ -147,7 +224,7 @@ func createSpendStakeTxFromStoredTx(
 			storedtx.StakingTx.TxOut[storedtx.StakingOutputIndex],
 			storedtx.StakingOutputIndex,
 			&stakingTxHash,
-			parsedScript.StakingTime,
+			storedtx.StakingTime,
 			feeRate,
 		)
 
@@ -156,22 +233,35 @@ func createSpendStakeTxFromStoredTx(
 		}
 
 		return &spendStakeTxInfo{
-			spendStakeTx:        spendTx,
-			fundingOutputScript: storedtx.TxScript,
-			fundingOutput:       storedtx.StakingTx.TxOut[storedtx.StakingOutputIndex],
-			calculatedFee:       *calculatedFee,
+			spendStakeTx:           spendTx,
+			fundingOutputSpendInfo: stakingTimeLockPathInfo,
+			fundingOutput:          storedtx.StakingTx.TxOut[storedtx.StakingOutputIndex],
+			calculatedFee:          *calculatedFee,
 		}, nil
 	} else if storedtx.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC {
-
 		data := storedtx.UnbondingTxData
 
-		unbondingTxHash := data.UnbondingTx.TxHash()
-
-		parsedScript, err := staking.ParseStakingTransactionScript(data.UnbondingTxScript)
+		unbondingInfo, err := staking.BuildUnbondingInfo(
+			stakerBtcPk,
+			[]*btcec.PublicKey{storedtx.ValidatorBtcPk},
+			covenantPublicKeys,
+			covenantThreshold,
+			data.UnbondingTime,
+			btcutil.Amount(data.UnbondingTx.TxOut[0].Value),
+			net,
+		)
 
 		if err != nil {
-			return nil, fmt.Errorf("invalid staking transaction script in provided unbonding transaction: %w", err)
+			return nil, fmt.Errorf("failed to build staking info while spending unbonding transaction: %w", err)
 		}
+
+		unbondingTimeLockPathInfo, err := unbondingInfo.TimeLockPathSpendInfo()
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to build time lock path info while spending unbonding transaction: %w", err)
+		}
+
+		unbondingTxHash := data.UnbondingTx.TxHash()
 
 		spendTx, calculatedFee, err := createSpendStakeTx(
 			destinationScript,
@@ -179,7 +269,7 @@ func createSpendStakeTxFromStoredTx(
 			data.UnbondingTx.TxOut[0],
 			0,
 			&unbondingTxHash,
-			parsedScript.StakingTime,
+			data.UnbondingTime,
 			feeRate,
 		)
 		if err != nil {
@@ -187,10 +277,10 @@ func createSpendStakeTxFromStoredTx(
 		}
 
 		return &spendStakeTxInfo{
-			spendStakeTx:        spendTx,
-			fundingOutput:       data.UnbondingTx.TxOut[0],
-			fundingOutputScript: data.UnbondingTxScript,
-			calculatedFee:       *calculatedFee,
+			spendStakeTx:           spendTx,
+			fundingOutput:          data.UnbondingTx.TxOut[0],
+			fundingOutputSpendInfo: unbondingTimeLockPathInfo,
+			calculatedFee:          *calculatedFee,
 		}, nil
 	} else {
 		return nil, fmt.Errorf("cannot build spend stake transactions.Staking transaction is in invalid state: %s", storedtx.State)
@@ -200,13 +290,13 @@ func createSpendStakeTxFromStoredTx(
 func createUndelegationData(
 	storedTx *stakerdb.StoredTransaction,
 	stakerPrivKey *btcec.PrivateKey,
-	covenantPubKey *btcec.PublicKey,
+	covenantPubKeys []*btcec.PublicKey,
+	covenantThreshold uint32,
 	slashingAddress, slashingTxChangeAddress btcutil.Address,
 	feeRatePerKb btcutil.Amount,
 	finalizationTimeBlocks uint16,
 	slashingFee btcutil.Amount,
-	slashingRate sdk.Dec,
-	stakingScriptData *staking.StakingScriptData,
+	slashingRate sdkmath.LegacyDec,
 	btcNetwork *chaincfg.Params,
 ) (*cl.UndelegationData, error) {
 	stakingTxHash := storedTx.StakingTx.TxHash()
@@ -229,23 +319,25 @@ func createUndelegationData(
 		)
 	}
 
-	// unbonding output script is the same as staking output (usually it will have lower staking time)
-	unbondingOutput, unbondingScript, err := staking.BuildStakingOutput(
-		stakingScriptData.StakerKey,
-		stakingScriptData.ValidatorKey,
-		covenantPubKey,
-		finalizationTimeBlocks+1,
+	unbondingTime := finalizationTimeBlocks + 1
+
+	unbondingInfo, err := staking.BuildUnbondingInfo(
+		stakerPrivKey.PubKey(),
+		[]*btcec.PublicKey{storedTx.ValidatorBtcPk},
+		covenantPubKeys,
+		covenantThreshold,
+		unbondingTime,
 		btcutil.Amount(unbondingOutputValue),
 		btcNetwork,
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to build unbonding output: %w", err)
+		return nil, fmt.Errorf("failed to build unbonding data: %w", err)
 	}
 
 	unbondingTx := wire.NewMsgTx(2)
 	unbondingTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&stakingTxHash, storedTx.StakingOutputIndex), nil, nil))
-	unbondingTx.AddTxOut(unbondingOutput)
+	unbondingTx.AddTxOut(unbondingInfo.UnbondingOutput)
 
 	slashUnbondingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		unbondingTx,
@@ -253,7 +345,6 @@ func createUndelegationData(
 		slashingAddress, slashingTxChangeAddress,
 		int64(slashingFee),
 		slashingRate,
-		unbondingScript,
 		btcNetwork,
 	)
 
@@ -261,10 +352,17 @@ func createUndelegationData(
 		return nil, fmt.Errorf("failed to build unbonding data: failed to build slashing tx: %w", err)
 	}
 
+	slashingPathInfo, err := unbondingInfo.SlashingPathSpendInfo()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build slashing path info: %w", err)
+	}
+
 	slashUnbondingTxSignature, err := staking.SignTxWithOneScriptSpendInputFromScript(
 		slashUnbondingTx,
-		unbondingOutput,
-		stakerPrivKey, unbondingScript,
+		unbondingInfo.UnbondingOutput,
+		stakerPrivKey,
+		slashingPathInfo.RevealedLeaf.Script,
 	)
 
 	if err != nil {
@@ -273,7 +371,8 @@ func createUndelegationData(
 
 	return &cl.UndelegationData{
 		UnbondingTransaction:         unbondingTx,
-		UnbondingTransactionScript:   unbondingScript,
+		UnbondingTxValue:             btcutil.Amount(unbondingOutputValue),
+		UnbondingTxUnbondingTime:     unbondingTime,
 		SlashUnbondingTransaction:    slashUnbondingTx,
 		SlashUnbondingTransactionSig: slashUnbondingTxSignature,
 	}, nil
@@ -283,6 +382,9 @@ func createWitnessToSendUnbondingTx(
 	stakerPrivKey *btcec.PrivateKey,
 	storedTx *stakerdb.StoredTransaction,
 	unbondingData *stakerdb.UnbondingStoreData,
+	covenantPublicKeys []*btcec.PublicKey,
+	covenantThreshold uint32,
+	net *chaincfg.Params,
 ) (wire.TxWitness, error) {
 	if storedTx.State < proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED {
 		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Staking transaction is in invalid state: %s", storedTx.State)
@@ -292,85 +394,103 @@ func createWitnessToSendUnbondingTx(
 		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain unbonding transaction")
 	}
 
-	if unbondingData.UnbondingTxCovenantSignature == nil || unbondingData.UnbondingTxValidatorSignature == nil {
+	if len(unbondingData.CovenantSignatures) == 0 {
 		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain all necessary signatures")
+	}
+
+	stakingInfo, err := staking.BuildStakingInfo(
+		stakerPrivKey.PubKey(),
+		[]*btcec.PublicKey{storedTx.ValidatorBtcPk},
+		covenantPublicKeys,
+		covenantThreshold,
+		storedTx.StakingTime,
+		btcutil.Amount(storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex].Value),
+		net,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build unbonding data: %w", err)
+	}
+
+	unbondingPathInfo, err := stakingInfo.UnbondingPathSpendInfo()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build unbonding path info: %w", err)
 	}
 
 	stakerUnbondingSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
 		unbondingData.UnbondingTx,
 		storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex],
 		stakerPrivKey,
-		storedTx.TxScript,
+		unbondingPathInfo.RevealedLeaf.Script,
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	stakerWitness, err := staking.NewWitnessFromStakingScriptAndSignature(
-		storedTx.TxScript,
-		stakerUnbondingSig,
-	)
+	covenantSigantures := pubKeySigPairsToSortedSignatures(unbondingData.CovenantSignatures)
 
-	if err != nil {
-		return nil, err
-	}
+	var witnessSignatures [][]byte
+	witnessSignatures = append(witnessSignatures, covenantSigantures...)
+	witnessSignatures = append(witnessSignatures, stakerUnbondingSig.Serialize())
 
-	// Build valid wittness for spending staking output with all signatures
-	witnessStack := wire.TxWitness(make([][]byte, 6))
-	witnessStack[0] = unbondingData.UnbondingTxCovenantSignature.Serialize()
-	witnessStack[1] = unbondingData.UnbondingTxValidatorSignature.Serialize()
-	witnessStack[2] = stakerWitness[0]
-	witnessStack[3] = []byte{}
-	witnessStack[4] = stakerWitness[1]
-	witnessStack[5] = stakerWitness[2]
-
-	return witnessStack, nil
+	return staking.CreateBabylonWitness(witnessSignatures, unbondingPathInfo)
 }
 
 func parseWatchStakingRequest(
 	stakingTx *wire.MsgTx,
-	stakingscript []byte,
+	stakingTime uint16,
+	stakingValue btcutil.Amount,
+	validatorBtcPK *btcec.PublicKey,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
+	stakerBtcPk *btcec.PublicKey,
 	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	pop *cl.BabylonPop,
 	currentParams *cl.StakingParams,
 	network *chaincfg.Params,
-) (*stakingRequestedEvent, *staking.StakingScriptData, error) {
-	// 1. Check script matches transaction
-	stakingOutputIdx, err := staking.GetIdxOutputCommitingToScript(
-		stakingTx,
-		stakingscript,
+) (*stakingRequestedEvent, error) {
+	stakingInfo, err := staking.BuildStakingInfo(
+		stakerBtcPk,
+		[]*btcec.PublicKey{validatorBtcPK},
+		currentParams.CovenantPks,
+		currentParams.CovenantQuruomThreshold,
+		stakingTime,
+		stakingValue,
 		network,
 	)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to watch staking tx due to script not matchin script: %w", err)
+		return nil, fmt.Errorf("failed to watch staking tx due to invalid staking info: %w", err)
+	}
+
+	stakingOutputIdx, err := btcstypes.GetOutputIdx(stakingTx, stakingInfo.StakingOutput)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx due to tx not matching current data: %w", err)
 	}
 
 	// 2. Check wheter slashing tx match staking tx
-	scriptData, err := staking.CheckTransactions(
+	err = staking.CheckTransactions(
 		slashingTx,
 		stakingTx,
+		stakingOutputIdx,
 		int64(currentParams.MinSlashingTxFeeSat),
 		currentParams.SlashingRate,
 		currentParams.SlashingAddress,
-		stakingscript,
 		network,
 	)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid transactions: %w", err)
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid transactions: %w", err)
 	}
 
-	// 3.Check covenant key in script
-	if !bytes.Equal(
-		schnorr.SerializePubKey(scriptData.StakingScriptData.CovenantKey),
-		schnorr.SerializePubKey(&currentParams.CovenantPk),
-	) {
-		return nil, nil, fmt.Errorf("failed to watch staking tx. Script covenant key do not match current node params")
+	stakingTxSlashingPathInfo, err := stakingInfo.SlashingPathSpendInfo()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid staking path info: %w", err)
 	}
 
 	// 4. Check slashig tx sig is good. It implicitly verify staker pubkey, as script
@@ -379,18 +499,18 @@ func parseWatchStakingRequest(
 		slashingTx,
 		stakingTx.TxOut[stakingOutputIdx].PkScript,
 		stakingTx.TxOut[stakingOutputIdx].Value,
-		stakingscript,
-		scriptData.StakingScriptData.StakerKey,
+		stakingTxSlashingPathInfo.RevealedLeaf.Script,
+		stakerBtcPk,
 		slashingTxSig.Serialize(),
 	)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx sig: %w", err)
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx sig: %w", err)
 	}
 
 	// 5. Validate pop
-	if err = pop.ValidatePop(stakerBabylonPk, scriptData.StakingScriptData.StakerKey, network); err != nil {
-		return nil, nil, fmt.Errorf("failed to watch staking tx. Invalid pop: %w", err)
+	if err = pop.ValidatePop(stakerBabylonPk, stakerBtcPk, network); err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid pop: %w", err)
 	}
 
 	req := newWatchedStakingRequest(
@@ -398,13 +518,16 @@ func parseWatchStakingRequest(
 		stakingTx,
 		uint32(stakingOutputIdx),
 		stakingTx.TxOut[stakingOutputIdx].PkScript,
-		stakingscript,
+		stakingTime,
+		stakingValue,
+		validatorBtcPK,
 		currentParams.ConfirmationTimeBlocks,
 		pop,
 		slashingTx,
 		slashingTxSig,
 		stakerBabylonPk,
+		stakerBtcPk,
 	)
 
-	return req, scriptData.StakingScriptData, nil
+	return req, nil
 }

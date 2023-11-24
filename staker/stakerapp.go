@@ -8,6 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	pv "github.com/cosmos/relayer/v2/relayer/provider"
+
+	sdkmath "cosmossdk.io/math"
 	"github.com/avast/retry-go/v4"
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
@@ -28,7 +31,6 @@ import (
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	notifier "github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/kvdb"
@@ -45,9 +47,13 @@ type externalDelegationData struct {
 	// babylonPubKey needs to be retrieved from babylon keyring
 	babylonPubKey *secp256k1.PubKey
 	// slashingRate is the rate at which the staked funds will be slashed, expressed as a decimal.
-	slashingRate sdk.Dec
+	slashingRate sdkmath.LegacyDec
 	// slashingFee is the fee to be paid for slashing transaction.
 	slashingFee btcutil.Amount
+	// Public keys of the current covenant committee
+	covenantPks []*btcec.PublicKey
+	// current threshold for covenant committee
+	covenantThreshold uint32
 }
 
 type stakingDbInfo struct {
@@ -775,6 +781,13 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				"stakingState":  localInfo.stakingTxState,
 			}).Debug("Restarting unbonding process for staking request which was already sent to babylon but not registered in local db")
 
+			// TODO: Add addtional field to babylon response, with unbodning time
+			params, err := app.babylonClient.Params()
+
+			if err != nil {
+				return err
+			}
+
 			// If we are here, it means we encountered edge case where we sent undelegation successfully
 			// but staker application crashed before we could update database.
 			// we just need to restart our unbonding process just after we sent unbonding transaction.
@@ -782,10 +795,10 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			// TODO: Thinkg of how to test this case. It is a bit tricky as restarting would need to happen
 			// precisely after sending unbonding transaction, but before write tx to db.
 			confirmation := &undelegationSubmittedToBabylonEvent{
-				stakingTxHash:              *localInfo.stakingTxHash,
-				unbondingTransaction:       babylonInfo.UndelegationInfo.UnbondingTransaction,
-				unbondingTransactionScript: babylonInfo.UndelegationInfo.UnbondingTransactionScript,
-				successChan:                make(chan *chainhash.Hash, 1),
+				stakingTxHash:        *localInfo.stakingTxHash,
+				unbondingTransaction: babylonInfo.UndelegationInfo.UnbondingTransaction,
+				unbondingTime:        uint16(params.FinalizationTimeoutBlocks) + 1,
+				successChan:          make(chan *chainhash.Hash, 1),
 			}
 
 			utils.PushOrQuit[*undelegationSubmittedToBabylonEvent](
@@ -894,18 +907,6 @@ func (app *StakerApp) mustBuildInclusionProof(req *sendDelegationRequest) []byte
 	return proof
 }
 
-func (app *StakerApp) mustParseScript(script []byte) *staking.StakingScriptData {
-	parsedScript, err := staking.ParseStakingTransactionScript(script)
-
-	if err != nil {
-		app.logger.WithFields(logrus.Fields{
-			"err": err,
-		}).Fatal("error parsing staking transaction script from db")
-	}
-
-	return parsedScript
-}
-
 func (app *StakerApp) stakerPrivateKey(stakerAddress btcutil.Address) (*btcec.PrivateKey, error) {
 	err := app.wc.UnlockWallet(defaultWalletUnlockTimeout)
 
@@ -948,6 +949,8 @@ func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Addre
 		babylonPubKey:           app.babylonClient.GetPubKey(),
 		slashingFee:             slashingFee,
 		slashingRate:            params.SlashingRate,
+		covenantPks:             params.CovenantPks,
+		covenantThreshold:       params.CovenantQuruomThreshold,
 	}, nil
 }
 
@@ -967,10 +970,20 @@ func (app *StakerApp) sendUnbondingTxToBtcWithWitness(
 		return err
 	}
 
+	// TODO: As covenant comitee is static, consider quering it once and storing in database
+	params, err := app.babylonClient.Params()
+
+	if err != nil {
+		return err
+	}
+
 	witness, err := createWitnessToSendUnbondingTx(
 		privkey,
 		storedTx,
 		unbondingData,
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
+		app.network,
 	)
 
 	if err != nil {
@@ -1149,7 +1162,7 @@ func (app *StakerApp) buildAndSendDelegation(
 	req *sendDelegationRequest,
 	stakerAddress btcutil.Address,
 	storedTx *stakerdb.StoredTransaction,
-) (*sdk.TxResponse, error) {
+) (*pv.RelayerTxResponse, error) {
 	delegation, err := app.buildDelegation(req, stakerAddress, storedTx)
 	if err != nil {
 		return nil, err
@@ -1222,12 +1235,14 @@ func (app *StakerApp) handleStakingEvents() {
 				err := app.txTracker.AddWatchedTransaction(
 					ev.stakingTx,
 					ev.stakingOutputIdx,
-					ev.stakingTxScript,
+					ev.stakingTime,
+					ev.validatorBtcPk,
 					babylonPopToDbPop(ev.pop),
 					ev.stakerAddress, ev.slashingTxChangeAddress,
 					ev.watchTxData.slashingTx,
 					ev.watchTxData.slashingTxSig,
 					ev.watchTxData.stakerBabylonPubKey,
+					ev.watchTxData.stakerBtcPubKey,
 				)
 
 				if err != nil {
@@ -1245,7 +1260,8 @@ func (app *StakerApp) handleStakingEvents() {
 				err = app.txTracker.AddTransaction(
 					ev.stakingTx,
 					ev.stakingOutputIdx,
-					ev.stakingTxScript,
+					ev.stakingTime,
+					ev.validatorBtcPk,
 					babylonPopToDbPop(ev.pop),
 					ev.stakerAddress, ev.slashingTxChangeAddress,
 				)
@@ -1312,7 +1328,7 @@ func (app *StakerApp) handleStakingEvents() {
 			if err := app.txTracker.SetTxUnbondingStarted(
 				&ev.stakingTxHash,
 				ev.unbondingTransaction,
-				ev.unbondingTransactionScript,
+				ev.unbondingTime,
 			); err != nil {
 				// TODO: handle this error somehow, it means we possilbly make invalid state transition
 				app.logger.Fatalf("Error setting state for tx %s: %s", &ev.stakingTxHash, err)
@@ -1332,8 +1348,7 @@ func (app *StakerApp) handleStakingEvents() {
 
 			if err := app.txTracker.SetTxUnbondingSignaturesReceived(
 				&ev.stakingTxHash,
-				ev.validatorUnbondingSignature,
-				ev.covenantUnbondingSignature,
+				babylonCovSigsToDbSigSigs(ev.covenantUnbondingSignatures),
 			); err != nil {
 				// TODO: handle this error somehow, it means we possilbly make invalid state transition
 				app.logger.Fatalf("Error setting state for tx %s: %s", &ev.stakingTxHash, err)
@@ -1463,10 +1478,13 @@ func GetMinStakingTime(p *cl.StakingParams) uint32 {
 
 func (app *StakerApp) WatchStaking(
 	stakingTx *wire.MsgTx,
-	stakingscript []byte,
+	stakingTime uint16,
+	stakingValue btcutil.Amount,
+	validatorPk *btcec.PublicKey,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
+	stakerBtcPk *btcec.PublicKey,
 	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	pop *cl.BabylonPop,
 ) (*chainhash.Hash, error) {
@@ -1476,12 +1494,15 @@ func (app *StakerApp) WatchStaking(
 		return nil, fmt.Errorf("failed to watch staking tx. Failed to get params: %w", err)
 	}
 
-	watchedRequest, scriptData, err := parseWatchStakingRequest(
+	watchedRequest, err := parseWatchStakingRequest(
 		stakingTx,
-		stakingscript,
+		stakingTime,
+		stakingValue,
+		validatorPk,
 		slashingTx,
 		slashingTxSig,
 		stakerBabylonPk,
+		stakerBtcPk,
 		stakerAddress, slashingTxChangeAddress,
 		pop,
 		currentParams,
@@ -1493,7 +1514,7 @@ func (app *StakerApp) WatchStaking(
 	}
 
 	// we have valid request, check whether validator exists on babylon
-	if err := app.validatorExists(scriptData.ValidatorKey); err != nil {
+	if err := app.validatorExists(validatorPk); err != nil {
 		return nil, err
 	}
 
@@ -1585,22 +1606,23 @@ func (app *StakerApp) StakeFunds(
 		return nil, err
 	}
 
-	output, script, err := staking.BuildStakingOutput(
+	stakingInfo, err := staking.BuildStakingInfo(
 		stakerPrivKey.PubKey(),
-		validatorPk,
-		&params.CovenantPk,
+		[]*btcec.PublicKey{validatorPk},
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
 		stakingTimeBlocks,
 		stakingAmount,
 		app.network,
 	)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to build staking info: %w", err)
 	}
 
 	feeRate := app.feeEstimator.EstimateFeePerKb()
 
-	tx, err := app.wc.CreateAndSignTx([]*wire.TxOut{output}, btcutil.Amount(feeRate), stakerAddress)
+	tx, err := app.wc.CreateAndSignTx([]*wire.TxOut{stakingInfo.StakingOutput}, btcutil.Amount(feeRate), stakerAddress)
 
 	if err != nil {
 		return nil, err
@@ -1609,7 +1631,7 @@ func (app *StakerApp) StakeFunds(
 	app.logger.WithFields(logrus.Fields{
 		"stakerAddress":           stakerAddress,
 		"slashingTxChangeAddress": slashingTxChangeAddress,
-		"stakingAmount":           output.Value,
+		"stakingAmount":           stakingInfo.StakingOutput,
 		"btxTxHash":               tx.TxHash(),
 		"fee":                     feeRate,
 	}).Info("Created and signed staking transaction")
@@ -1618,8 +1640,10 @@ func (app *StakerApp) StakeFunds(
 		stakerAddress, slashingTxChangeAddress,
 		tx,
 		0,
-		output.PkScript,
-		script,
+		stakingInfo.StakingOutput.PkScript,
+		stakingTimeBlocks,
+		stakingAmount,
+		validatorPk,
 		params.ConfirmationTimeBlocks,
 		pop,
 	)
@@ -1769,16 +1793,10 @@ func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash
 		return nil, nil, fmt.Errorf("cannot spend staking output. Cannot built destination script: %w", err)
 	}
 
-	currentFeeRate := app.feeEstimator.EstimateFeePerKb()
-
-	spendStakeTxInfo, err := createSpendStakeTxFromStoredTx(
-		tx,
-		destAddressScript,
-		currentFeeRate,
-	)
+	params, err := app.babylonClient.Params()
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("cannot spend staking output. Error getting params: %w", err)
 	}
 
 	privKey, err := app.stakerPrivateKey(destAddress)
@@ -1787,11 +1805,35 @@ func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash
 		return nil, nil, fmt.Errorf("cannot spend staking output. Error getting private key: %w", err)
 	}
 
-	witness, err := staking.BuildWitnessToSpendStakingOutput(
+	currentFeeRate := app.feeEstimator.EstimateFeePerKb()
+
+	spendStakeTxInfo, err := createSpendStakeTxFromStoredTx(
+		privKey.PubKey(),
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
+		tx,
+		destAddressScript,
+		currentFeeRate,
+		app.network,
+	)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	stakerSig, err := staking.SignTxWithOneScriptSpendInputFromTapLeaf(
 		spendStakeTxInfo.spendStakeTx,
 		spendStakeTxInfo.fundingOutput,
-		spendStakeTxInfo.fundingOutputScript,
 		privKey,
+		spendStakeTxInfo.fundingOutputSpendInfo.RevealedLeaf,
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot spend staking output. Error building signature: %w", err)
+	}
+
+	witness, err := staking.CreateBabylonWitness(
+		[][]byte{stakerSig.Serialize()}, spendStakeTxInfo.fundingOutputSpendInfo,
 	)
 
 	if err != nil {
@@ -1910,7 +1952,6 @@ func (app *StakerApp) UnbondStaking(
 	if err != nil {
 		return nil, fmt.Errorf("cannot unbond: failed to retrieve private key.: %w", err)
 	}
-	stakingScriptData := app.mustParseScript(tx.TxScript)
 
 	slashingTxChangeAddress, err := btcutil.DecodeAddress(tx.SlashingTxChangeAddress, app.network)
 	if err != nil {
@@ -1920,13 +1961,13 @@ func (app *StakerApp) UnbondStaking(
 	undelegationData, err := createUndelegationData(
 		tx,
 		stakerPrivKey,
-		&currentParams.CovenantPk,
+		currentParams.CovenantPks,
+		currentParams.CovenantQuruomThreshold,
 		currentParams.SlashingAddress, slashingTxChangeAddress,
 		unbondingTxFeeRatePerKb,
 		uint16(currentParams.FinalizationTimeoutBlocks),
 		app.getSlashingFee(currentParams),
 		currentParams.SlashingRate,
-		stakingScriptData,
 		app.network,
 	)
 
@@ -1947,10 +1988,10 @@ func (app *StakerApp) UnbondStaking(
 	}
 
 	unbondingRequestConfirmEvent := undelegationSubmittedToBabylonEvent{
-		stakingTxHash:              stakingTxHash,
-		unbondingTransaction:       undelegationData.UnbondingTransaction,
-		unbondingTransactionScript: undelegationData.UnbondingTransactionScript,
-		successChan:                make(chan *chainhash.Hash, 1),
+		stakingTxHash:        stakingTxHash,
+		unbondingTransaction: undelegationData.UnbondingTransaction,
+		unbondingTime:        uint16(currentParams.FinalizationTimeoutBlocks + 1),
+		successChan:          make(chan *chainhash.Hash, 1),
 	}
 
 	utils.PushOrQuit[*undelegationSubmittedToBabylonEvent](
