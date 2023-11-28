@@ -680,7 +680,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 
 		if tx == nil {
 			return false
-
 		}
 
 		return true
@@ -914,7 +913,7 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 
 	unbondingSig := bbntypes.NewBIP340SignatureFromBTCSig(covenantUnbondingSig)
 
-	// slashing unbodning tx sig
+	// slashing unbonding tx sig
 	unbondingTxSlashingPathInfo, err := unbondingInfo.SlashingPathSpendInfo()
 	require.NoError(t, err)
 

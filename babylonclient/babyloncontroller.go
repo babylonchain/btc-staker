@@ -5,14 +5,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	sdkErr "cosmossdk.io/errors"
 	sdkmath "cosmossdk.io/math"
 	"github.com/avast/retry-go/v4"
-	bbn "github.com/babylonchain/babylon/app"
 	bbntypes "github.com/babylonchain/babylon/types"
 	bcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
 	btclctypes "github.com/babylonchain/babylon/x/btclightclient/types"
@@ -21,7 +19,6 @@ import (
 	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/babylonchain/btc-staker/utils"
 	bbnclient "github.com/babylonchain/rpc-client/client"
-	"github.com/babylonchain/rpc-client/config"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
@@ -29,7 +26,6 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	bq "github.com/cosmos/cosmos-sdk/types/query"
@@ -58,7 +54,6 @@ var (
 )
 
 type BabylonController struct {
-	Keybase   keyring.Keyring
 	bbnClient *bbnclient.Client
 	cfg       *stakercfg.BBNConfig
 	btcParams *chaincfg.Params
@@ -66,25 +61,6 @@ type BabylonController struct {
 }
 
 var _ BabylonClient = (*BabylonController)(nil)
-
-// TODO: Expose it from rpc-client
-func keyringFromConfig(bbnConfig *config.BabylonConfig) (keyring.Keyring, error) {
-	tmpBabylon := bbn.NewTmpBabylonApp()
-
-	keybase, err := keyring.New(
-		bbnConfig.ChainID,
-		bbnConfig.KeyringBackend,
-		bbnConfig.KeyDirectory,
-		os.Stdin,
-		tmpBabylon.AppCodec(),
-		[]keyring.Option{}...)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return keybase, nil
-}
 
 func NewBabylonController(
 	cfg *stakercfg.BBNConfig,
@@ -107,15 +83,8 @@ func NewBabylonController(
 		return nil, err
 	}
 
-	kb, err := keyringFromConfig(&babylonConfig)
-
-	if err != nil {
-		return nil, err
-	}
-
 	// wrap to our type
 	client := &BabylonController{
-		kb,
 		bc,
 		cfg,
 		btcParams,
@@ -211,7 +180,7 @@ func (bc *BabylonController) GetKeyAddress() sdk.AccAddress {
 	// and we should panic.
 	// This is checked at the start of BabylonController, so if it fails something is really wrong
 
-	keyRec, err := bc.Keybase.Key(bc.cfg.Key)
+	keyRec, err := bc.bbnClient.GetKeyring().Key(bc.cfg.Key)
 
 	if err != nil {
 		panic(fmt.Sprintf("Failed to get key address: %s", err))
@@ -233,7 +202,7 @@ func (bc *BabylonController) getTxSigner() string {
 }
 
 func (bc *BabylonController) getPubKeyInternal() (*secp256k1.PubKey, error) {
-	record, err := bc.Keybase.KeyByAddress(bc.GetKeyAddress())
+	record, err := bc.bbnClient.GetKeyring().KeyByAddress(bc.GetKeyAddress())
 
 	if err != nil {
 		return nil, err
@@ -264,7 +233,7 @@ func (bc *BabylonController) GetPubKey() *secp256k1.PubKey {
 }
 
 func (bc *BabylonController) Sign(msg []byte) ([]byte, error) {
-	sign, kt, err := bc.Keybase.SignByAddress(bc.GetKeyAddress(), msg, signing.SignMode_SIGN_MODE_DIRECT)
+	sign, kt, err := bc.bbnClient.GetKeyring().SignByAddress(bc.GetKeyAddress(), msg, signing.SignMode_SIGN_MODE_DIRECT)
 
 	if err != nil {
 		return nil, err
@@ -404,7 +373,8 @@ func undelegationDataToMsg(signer string, ud *UndelegationData) (*btcstypes.MsgB
 func (bc *BabylonController) reliablySendMsgs(
 	msgs []sdk.Msg,
 ) (*pv.RelayerTxResponse, error) {
-	return bc.bbnClient.ReliablySendMsgs(msgs, []*sdkErr.Error{}, []*sdkErr.Error{})
+	// TODO Empty errors ??
+	return bc.bbnClient.ReliablySendMsgs(context.Background(), msgs, []*sdkErr.Error{}, []*sdkErr.Error{})
 }
 
 // TODO: for now return sdk.TxResponse, it will ease up debugging/testing
@@ -416,8 +386,7 @@ func (bc *BabylonController) Delegate(dg *DelegationData) (*pv.RelayerTxResponse
 		return nil, err
 	}
 
-	// TODO Empty errors ??
-	return bc.bbnClient.ReliablySendMsg(delegateMsg, []*sdkErr.Error{}, []*sdkErr.Error{})
+	return bc.reliablySendMsgs([]sdk.Msg{delegateMsg})
 }
 
 func (bc *BabylonController) Undelegate(ud *UndelegationData) (*pv.RelayerTxResponse, error) {
@@ -426,9 +395,7 @@ func (bc *BabylonController) Undelegate(ud *UndelegationData) (*pv.RelayerTxResp
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO Empty errors ??
-	return bc.bbnClient.ReliablySendMsg(unbondMsg, []*sdkErr.Error{}, []*sdkErr.Error{})
+	return bc.reliablySendMsgs([]sdk.Msg{unbondMsg})
 }
 
 func getQueryContext(timeout time.Duration) (context.Context, context.CancelFunc) {

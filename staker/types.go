@@ -55,7 +55,6 @@ func babylonCovSigsToDbSigSigs(covSigs []cl.CovenantSignatureInfo) []stakerdb.Pu
 }
 
 func pubKeySigPairsToSortedSignatures(pairs []stakerdb.PubKeySigPair) [][]byte {
-
 	var sigInfos []*staking.SignatureInfo = make([]*staking.SignatureInfo, len(pairs))
 
 	for i, pair := range pairs {

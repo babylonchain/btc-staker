@@ -80,7 +80,7 @@ type watchTxData struct {
 	slashingTx          *wire.MsgTx
 	slashingTxSig       *schnorr.Signature
 	stakerBabylonPubKey *secp256k1.PubKey
-	stakerBtcPubKey     *btcec.PublicKey
+	stakerBtcPk         *btcec.PublicKey
 }
 
 func newWatchedStakingRequest(
@@ -96,7 +96,7 @@ func newWatchedStakingRequest(
 	slashingTx *wire.MsgTx,
 	slashingTxSignature *schnorr.Signature,
 	stakerBabylonPubKey *secp256k1.PubKey,
-	stakerBtcPubKey *btcec.PublicKey,
+	stakerBtcPk *btcec.PublicKey,
 ) *stakingRequestedEvent {
 	return &stakingRequestedEvent{
 		stakerAddress:           stakerAddress,
@@ -114,7 +114,7 @@ func newWatchedStakingRequest(
 			slashingTx:          slashingTx,
 			slashingTxSig:       slashingTxSignature,
 			stakerBabylonPubKey: stakerBabylonPubKey,
-			stakerBtcPubKey:     stakerBtcPubKey,
+			stakerBtcPk:         stakerBtcPk,
 		},
 		errChan:     make(chan error, 1),
 		successChan: make(chan *chainhash.Hash, 1),

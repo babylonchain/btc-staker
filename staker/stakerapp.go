@@ -971,7 +971,7 @@ func (app *StakerApp) sendUnbondingTxToBtcWithWitness(
 		return err
 	}
 
-	// TODO: As covenant comitee is static, consider quering it once and storing in database
+	// TODO: As covenant committee is static, consider quering it once and storing in database
 	params, err := app.babylonClient.Params()
 
 	if err != nil {
@@ -1243,7 +1243,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.watchTxData.slashingTx,
 					ev.watchTxData.slashingTxSig,
 					ev.watchTxData.stakerBabylonPubKey,
-					ev.watchTxData.stakerBtcPubKey,
+					ev.watchTxData.stakerBtcPk,
 				)
 
 				if err != nil {
