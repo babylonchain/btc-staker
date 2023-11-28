@@ -11,7 +11,7 @@ jobs:
     resource_class: large
     steps:
       - go/install:
-          version: "1.20"
+          version: "1.21.4"
       - checkout
       - run:
           name: Print Go environment
@@ -29,8 +29,8 @@ jobs:
       - run:
           name: Lint
           command: |
-            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.52.2
-            ./bin/golangci-lint run
+            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.55.2
+            ./bin/golangci-lint run --timeout 5m0s
       - run:
           name: Run tests
           command: |

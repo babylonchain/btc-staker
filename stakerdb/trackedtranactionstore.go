@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"math"
 
-	staking "github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/utils"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -58,6 +58,57 @@ func NewProofOfPossession(
 	}
 }
 
+type PubKeySigPair struct {
+	Signature *schnorr.Signature
+	PubKey    *btcec.PublicKey
+}
+
+func NewCovenantMemberSignature(
+	sig *schnorr.Signature,
+	pubKey *btcec.PublicKey,
+) PubKeySigPair {
+	return PubKeySigPair{
+		sig,
+		pubKey,
+	}
+}
+
+func covenantSigToProto(c *PubKeySigPair) *proto.CovenantSig {
+	return &proto.CovenantSig{
+		CovenantSig:      c.Signature.Serialize(),
+		CovenantSigBtcPk: schnorr.SerializePubKey(c.PubKey),
+	}
+}
+
+func covenantSigsToProto(c []PubKeySigPair) []*proto.CovenantSig {
+	protoC := make([]*proto.CovenantSig, len(c))
+
+	for i, sig := range c {
+		protoC[i] = covenantSigToProto(&sig)
+	}
+
+	return protoC
+}
+
+func covenantSigFromProto(c *proto.CovenantSig) (*PubKeySigPair, error) {
+	sig, err := schnorr.ParseSignature(c.CovenantSig)
+
+	if err != nil {
+		return nil, err
+	}
+
+	pubKey, err := schnorr.ParsePubKey(c.CovenantSigBtcPk)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &PubKeySigPair{
+		Signature: sig,
+		PubKey:    pubKey,
+	}, nil
+}
+
 type BtcConfirmationInfo struct {
 	Height    uint32
 	BlockHash chainhash.Hash
@@ -68,7 +119,8 @@ type StoredTransaction struct {
 	StakingTx                 *wire.MsgTx
 	StakingOutputIndex        uint32
 	StakingTxConfirmationInfo *BtcConfirmationInfo
-	TxScript                  []byte
+	StakingTime               uint16
+	ValidatorBtcPk            *btcec.PublicKey
 	Pop                       *ProofOfPossession
 	// Returning address as string, to avoid having to know how to decode address
 	// which requires knowing the network we are on
@@ -83,26 +135,22 @@ type WatchedTransactionData struct {
 	SlashingTx          *wire.MsgTx
 	SlashingTxSig       *schnorr.Signature
 	StakerBabylonPubKey *secp256k1.PubKey
+	StakerBtcPubKey     *btcec.PublicKey
 }
 
 type UnbondingStoreData struct {
-	UnbondingTx                   *wire.MsgTx
-	UnbondingTxScript             []byte
-	UnbondingTxValidatorSignature *schnorr.Signature
-	UnbondingTxCovenantSignature  *schnorr.Signature
-	UnbondingTxConfirmationInfo   *BtcConfirmationInfo
+	UnbondingTx                 *wire.MsgTx
+	UnbondingTime               uint16
+	CovenantSignatures          []PubKeySigPair
+	UnbondingTxConfirmationInfo *BtcConfirmationInfo
 }
 
 func newInitialUnbondingTxData(
 	unbondingTx *wire.MsgTx,
-	unbondingTxScript []byte,
+	unbondingTime uint16,
 ) (*proto.UnbondingTxData, error) {
 	if unbondingTx == nil {
 		return nil, fmt.Errorf("cannot create unbonding tx data without unbonding tx")
-	}
-
-	if len(unbondingTxScript) == 0 {
-		return nil, fmt.Errorf("cannot create unbonding tx data without unbonding tx script")
 	}
 
 	serializedTx, err := utils.SerializeBtcTransaction(unbondingTx)
@@ -112,34 +160,10 @@ func newInitialUnbondingTxData(
 	}
 
 	unbondingData := &proto.UnbondingTxData{
-		UnbondingTransaction:             serializedTx,
-		UnbondingTransactionScript:       unbondingTxScript,
-		UnbondingTransactionValidatorSig: nil,
-		UnbondingTransactionCovenantSig:  nil,
-		UnbondingTxBtcConfirmationInfo:   nil,
-	}
-
-	return unbondingData, nil
-}
-
-func newUnbondingSignaturesUpdate(
-	unbondingTxValidatorSignature *schnorr.Signature,
-	unbondingTxCovenantSignature *schnorr.Signature,
-) (*proto.UnbondingTxData, error) {
-	if unbondingTxValidatorSignature == nil {
-		return nil, fmt.Errorf("cannot create unbonding tx data without validator signature")
-	}
-
-	if unbondingTxCovenantSignature == nil {
-		return nil, fmt.Errorf("cannot create unbonding tx data without covenant signature")
-	}
-
-	unbondingData := &proto.UnbondingTxData{
-		UnbondingTransaction:             nil,
-		UnbondingTransactionScript:       nil,
-		UnbondingTransactionValidatorSig: unbondingTxValidatorSignature.Serialize(),
-		UnbondingTransactionCovenantSig:  unbondingTxCovenantSignature.Serialize(),
-		UnbondingTxBtcConfirmationInfo:   nil,
+		UnbondingTransaction:           serializedTx,
+		UnbondingTime:                  uint32(unbondingTime),
+		CovenantSignatures:             make([]*proto.CovenantSig, 0),
+		UnbondingTxBtcConfirmationInfo: nil,
 	}
 
 	return unbondingData, nil
@@ -232,7 +256,7 @@ func protoBtcConfirmationInfoToBtcConfirmationInfo(ci *proto.BTCConfirmationInfo
 }
 
 func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*UnbondingStoreData, error) {
-	// Unbodning txdata should always containt unbodning transaction and script
+	// Unbodning txdata should always contains unbonding tx
 	var unbondingTx wire.MsgTx
 	err := unbondingTx.Deserialize(bytes.NewReader(ud.UnbondingTransaction))
 
@@ -240,22 +264,20 @@ func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*Unbondi
 		return nil, err
 	}
 
-	var validatorSig *schnorr.Signature
-	if ud.UnbondingTransactionValidatorSig != nil {
-		validatorSig, err = schnorr.ParseSignature(ud.UnbondingTransactionValidatorSig)
-
-		if err != nil {
-			return nil, err
-		}
+	if ud.UnbondingTime > math.MaxUint16 {
+		return nil, fmt.Errorf("unbonding time is too large. Max value is %d", math.MaxUint16)
 	}
 
-	var covenantSig *schnorr.Signature
-	if ud.UnbondingTransactionCovenantSig != nil {
-		covenantSig, err = schnorr.ParseSignature(ud.UnbondingTransactionCovenantSig)
+	var sigs []PubKeySigPair
+
+	for _, sig := range ud.CovenantSignatures {
+		covenantSig, err := covenantSigFromProto(sig)
 
 		if err != nil {
 			return nil, err
 		}
+
+		sigs = append(sigs, *covenantSig)
 	}
 
 	unbondingTxConfirmationInfo, err := protoBtcConfirmationInfoToBtcConfirmationInfo(ud.UnbondingTxBtcConfirmationInfo)
@@ -265,11 +287,10 @@ func protoUnbondingDataToUnbondingStoreData(ud *proto.UnbondingTxData) (*Unbondi
 	}
 
 	return &UnbondingStoreData{
-		UnbondingTx:                   &unbondingTx,
-		UnbondingTxScript:             ud.UnbondingTransactionScript,
-		UnbondingTxValidatorSignature: validatorSig,
-		UnbondingTxCovenantSignature:  covenantSig,
-		UnbondingTxConfirmationInfo:   unbondingTxConfirmationInfo,
+		UnbondingTx:                 &unbondingTx,
+		UnbondingTime:               uint16(ud.UnbondingTime),
+		CovenantSignatures:          sigs,
+		UnbondingTxConfirmationInfo: unbondingTxConfirmationInfo,
 	}, nil
 }
 
@@ -299,12 +320,23 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 		return nil, err
 	}
 
+	if ttx.StakingTime > math.MaxUint16 {
+		return nil, fmt.Errorf("staking time is too large. Max value is %d", math.MaxUint16)
+	}
+
+	validatorPubkey, err := schnorr.ParsePubKey(ttx.ValidatorBtcPk)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &StoredTransaction{
 		StoredTransactionIdx:      ttx.TrackedTransactionIdx,
 		StakingTx:                 &stakingTx,
 		StakingOutputIndex:        ttx.StakingOutputIdx,
 		StakingTxConfirmationInfo: stakingTxConfgInfo,
-		TxScript:                  ttx.StakingScript,
+		StakingTime:               uint16(ttx.StakingTime),
+		ValidatorBtcPk:            validatorPubkey,
 		Pop: &ProofOfPossession{
 			BtcSigType:           ttx.BtcSigType,
 			BabylonSigOverBtcPk:  ttx.BabylonSigBtcPk,
@@ -335,10 +367,17 @@ func protoWatchedDataToWatchedTransactionData(wd *proto.WatchedTxData) (*Watched
 		Key: wd.StakerBabylonPk,
 	}
 
+	stakerBtcKey, err := schnorr.ParsePubKey(wd.StakerBtcPk)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &WatchedTransactionData{
 		SlashingTx:          &slashingTx,
 		SlashingTxSig:       schnorSig,
 		StakerBabylonPubKey: &stakerBabylonKey,
+		StakerBtcPubKey:     stakerBtcKey,
 	}, nil
 }
 
@@ -477,7 +516,8 @@ func (c *TrackedTransactionStore) addTransactionInternal(
 func (c *TrackedTransactionStore) AddTransaction(
 	btcTx *wire.MsgTx,
 	stakingOutputIndex uint32,
-	txscript []byte,
+	stakingTime uint16,
+	validatorPubKey *btcec.PublicKey,
 	pop *ProofOfPossession,
 	stakerAddress, slashingTxChangeAddress btcutil.Address,
 ) error {
@@ -493,9 +533,10 @@ func (c *TrackedTransactionStore) AddTransaction(
 		// Setting it to 0, proper number will be filled by `addTransactionInternal`
 		TrackedTransactionIdx:        0,
 		StakingTransaction:           serializedTx,
-		StakingScript:                txscript,
 		StakingOutputIdx:             stakingOutputIndex,
 		StakerAddress:                stakerAddress.EncodeAddress(),
+		StakingTime:                  uint32(stakingTime),
+		ValidatorBtcPk:               schnorr.SerializePubKey(validatorPubKey),
 		SlashingTxChangeAddress:      slashingTxChangeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
@@ -514,12 +555,14 @@ func (c *TrackedTransactionStore) AddTransaction(
 func (c *TrackedTransactionStore) AddWatchedTransaction(
 	btcTx *wire.MsgTx,
 	stakingOutputIndex uint32,
-	txscript []byte,
+	stakingTime uint16,
+	validatorPubKey *btcec.PublicKey,
 	pop *ProofOfPossession,
 	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
+	stakerBtcPk *btcec.PublicKey,
 ) error {
 	txHash := btcTx.TxHash()
 	txHashBytes := txHash[:]
@@ -533,9 +576,10 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 		// Setting it to 0, proper number will be filled by `addTransactionInternal`
 		TrackedTransactionIdx:        0,
 		StakingTransaction:           serializedTx,
-		StakingScript:                txscript,
 		StakingOutputIdx:             stakingOutputIndex,
 		StakerAddress:                stakerAddress.EncodeAddress(),
+		StakingTime:                  uint32(stakingTime),
+		ValidatorBtcPk:               schnorr.SerializePubKey(validatorPubKey),
 		SlashingTxChangeAddress:      slashingTxChangeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
@@ -557,6 +601,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 		SlashingTransaction:    serializedSlashingtx,
 		SlashingTransactionSig: serializedSig,
 		StakerBabylonPk:        stakerBabylonPk.Bytes(),
+		StakerBtcPk:            schnorr.SerializePubKey(stakerBtcPk),
 	}
 
 	return c.addTransactionInternal(
@@ -652,9 +697,9 @@ func (c *TrackedTransactionStore) SetTxSpentOnBtc(txHash *chainhash.Hash) error 
 func (c *TrackedTransactionStore) SetTxUnbondingStarted(
 	txHash *chainhash.Hash,
 	unbondingTx *wire.MsgTx,
-	unbondingTxScript []byte,
+	unbondingTime uint16,
 ) error {
-	update, err := newInitialUnbondingTxData(unbondingTx, unbondingTxScript)
+	update, err := newInitialUnbondingTxData(unbondingTx, unbondingTime)
 
 	if err != nil {
 		return err
@@ -676,27 +721,19 @@ func (c *TrackedTransactionStore) SetTxUnbondingStarted(
 
 func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 	txHash *chainhash.Hash,
-	validatorUnbondingSignature *schnorr.Signature,
-	covenantUnbondingSignature *schnorr.Signature,
+	covenantSignatures []PubKeySigPair,
 ) error {
-	update, err := newUnbondingSignaturesUpdate(validatorUnbondingSignature, covenantUnbondingSignature)
-
-	if err != nil {
-		return err
-	}
-
 	setUnbondingSignaturesReceived := func(tx *proto.TrackedTransaction) error {
 		if tx.UnbondingTxData == nil {
 			return fmt.Errorf("cannot set unbonding signatures received, because unbonding tx data does not exist: %w", ErrUnbondingDataNotFound)
 		}
 
-		if tx.UnbondingTxData.UnbondingTransactionCovenantSig != nil || tx.UnbondingTxData.UnbondingTransactionValidatorSig != nil {
+		if len(tx.UnbondingTxData.CovenantSignatures) > 0 {
 			return fmt.Errorf("cannot set unbonding signatures received, because unbonding signatures already exist: %w", ErrInvalidUnbondingDataUpdate)
 		}
 
 		tx.State = proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED
-		tx.UnbondingTxData.UnbondingTransactionCovenantSig = update.UnbondingTransactionCovenantSig
-		tx.UnbondingTxData.UnbondingTransactionValidatorSig = update.UnbondingTransactionValidatorSig
+		tx.UnbondingTxData.CovenantSignatures = covenantSigsToProto(covenantSignatures)
 		return nil
 	}
 
@@ -824,15 +861,6 @@ func (c *TrackedTransactionStore) GetAllStoredTransactions() ([]StoredTransactio
 	return resp.Transactions, nil
 }
 
-func mustRetriveLockTimeFromScript(script []byte) uint16 {
-	parsed, err := staking.ParseStakingTransactionScript(script)
-	if err != nil {
-		panic(fmt.Errorf("invalid script in staking transactions db: %w", err))
-	}
-
-	return parsed.StakingTime
-}
-
 func isTimeLockExpired(confirmationBlockHeight uint32, lockTime uint16, currentBestBlockHeight uint32) bool {
 	// transaction maybe included/executed only in next possible block
 	nexBlockHeight := int64(currentBestBlockHeight) + 1
@@ -895,10 +923,10 @@ func (c *TrackedTransactionStore) QueryStoredTransactions(q StoredTransactionQue
 				}
 
 				if txFromDb.State == proto.TransactionState_SENT_TO_BABYLON {
-					scriptTimeLock = mustRetriveLockTimeFromScript(txFromDb.TxScript)
+					scriptTimeLock = txFromDb.StakingTime
 					confirmationHeight = txFromDb.StakingTxConfirmationInfo.Height
 				} else if txFromDb.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC {
-					scriptTimeLock = mustRetriveLockTimeFromScript(txFromDb.UnbondingTxData.UnbondingTxScript)
+					scriptTimeLock = txFromDb.UnbondingTxData.UnbondingTime
 					confirmationHeight = txFromDb.UnbondingTxData.UnbondingTxConfirmationInfo.Height
 				} else {
 					return false, nil

@@ -7,8 +7,6 @@ import (
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
-	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/go-bip39"
 	"github.com/jessevdk/go-flags"
 	"github.com/urfave/cli"
@@ -122,11 +120,7 @@ func createKeyRing(c *cli.Context) error {
 		options.SupportedAlgosLedger = keyring.SigningAlgoList{hd.Secp256k1}
 	})
 
-	encConf := babylonApp.GetEncodingConfig()
-	encConf.InterfaceRegistry.RegisterImplementations(
-		(*cryptotypes.PubKey)(nil),
-		&secp256k1.PubKey{},
-	)
+	app := babylonApp.NewTmpBabylonApp()
 
 	chainId := c.String(chainIdFlag)
 	backend := c.String(keyringBackendFlag)
@@ -138,7 +132,7 @@ func createKeyRing(c *cli.Context) error {
 		backend,
 		keyDir,
 		nil,
-		encConf.Marshaler,
+		app.AppCodec(),
 		keyringOptions...)
 
 	if err != nil {

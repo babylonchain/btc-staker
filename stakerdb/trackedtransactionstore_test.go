@@ -1,17 +1,18 @@
 package stakerdb_test
 
 import (
+	"bytes"
 	"errors"
 	"math/rand"
 	"testing"
 	"time"
 
-	"github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -40,21 +41,17 @@ func MakeTestStore(t *testing.T) *stakerdb.TrackedTransactionStore {
 	return store
 }
 
+func pubKeysEqual(pk1, pk2 *btcec.PublicKey) bool {
+	return bytes.Equal(schnorr.SerializePubKey(pk1), schnorr.SerializePubKey(pk2))
+}
+
 func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *stakerdb.StoredTransaction {
 	btcTx := datagen.GenRandomTx(r)
 	outputIdx := r.Uint32()
 	priv, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
 	stakingTime := r.Int31n(int32(maxStakingTime)) + 1
-	scriptData, err := btcstaking.NewStakingScriptData(
-		priv.PubKey(),
-		priv.PubKey(),
-		priv.PubKey(),
-		uint16(stakingTime),
-	)
-	require.NoError(t, err)
-	script, err := scriptData.BuildStakingScript()
-	require.NoError(t, err)
+
 	stakerAddr, err := datagen.GenRandomBTCAddress(r, &chaincfg.MainNetParams)
 	require.NoError(t, err)
 	slashingTxChangeAddr, err := datagen.GenRandomBTCAddress(r, &chaincfg.MainNetParams)
@@ -63,7 +60,8 @@ func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *st
 	return &stakerdb.StoredTransaction{
 		StakingTx:          btcTx,
 		StakingOutputIndex: outputIdx,
-		TxScript:           script,
+		StakingTime:        uint16(stakingTime),
+		ValidatorBtcPk:     priv.PubKey(),
 		Pop: &stakerdb.ProofOfPossession{
 			BabylonSigOverBtcPk:  datagen.GenRandomByteArray(r, 64),
 			BtcSigOverBabylonSig: datagen.GenRandomByteArray(r, 64),
@@ -111,7 +109,8 @@ func FuzzStoringTxs(f *testing.F) {
 			err = s.AddTransaction(
 				storedTx.StakingTx,
 				storedTx.StakingOutputIndex,
-				storedTx.TxScript,
+				storedTx.StakingTime,
+				storedTx.ValidatorBtcPk,
 				storedTx.Pop,
 				stakerAddr, slashingTxChangeAddr,
 			)
@@ -124,7 +123,8 @@ func FuzzStoringTxs(f *testing.F) {
 			require.NoError(t, err)
 			require.Equal(t, storedTx.StakingTx, tx.StakingTx)
 			require.Equal(t, storedTx.StakingOutputIndex, tx.StakingOutputIndex)
-			require.Equal(t, storedTx.TxScript, tx.TxScript)
+			require.Equal(t, storedTx.StakingTime, tx.StakingTime)
+			require.True(t, pubKeysEqual(storedTx.ValidatorBtcPk, tx.ValidatorBtcPk))
 			require.Equal(t, storedTx.Pop, tx.Pop)
 			require.Equal(t, storedTx.StakerAddress, tx.StakerAddress)
 			require.Equal(t, expectedIdx, tx.StoredTransactionIdx)
@@ -141,7 +141,8 @@ func FuzzStoringTxs(f *testing.F) {
 		for i, storedTx := range generatedStoredTxs {
 			require.Equal(t, storedTx.StakingTx, storedResult.Transactions[i].StakingTx)
 			require.Equal(t, storedTx.StakingOutputIndex, storedResult.Transactions[i].StakingOutputIndex)
-			require.Equal(t, storedTx.TxScript, storedResult.Transactions[i].TxScript)
+			require.Equal(t, storedTx.StakingTime, storedResult.Transactions[i].StakingTime)
+			require.True(t, pubKeysEqual(storedTx.ValidatorBtcPk, storedResult.Transactions[i].ValidatorBtcPk))
 			require.Equal(t, storedTx.Pop, storedResult.Transactions[i].Pop)
 			require.Equal(t, storedTx.StakerAddress, storedResult.Transactions[i].StakerAddress)
 		}
@@ -169,7 +170,8 @@ func TestStateTransitions(t *testing.T) {
 	err = s.AddTransaction(
 		tx.StakingTx,
 		tx.StakingOutputIndex,
-		tx.TxScript,
+		tx.StakingTime,
+		tx.ValidatorBtcPk,
 		tx.Pop,
 		stakerAddr, slashingTxChangeAddr,
 	)
@@ -223,7 +225,8 @@ func TestPaginator(t *testing.T) {
 		err = s.AddTransaction(
 			storedTx.StakingTx,
 			storedTx.StakingOutputIndex,
-			storedTx.TxScript,
+			storedTx.StakingTime,
+			storedTx.ValidatorBtcPk,
 			storedTx.Pop,
 			stakerAddr, slashingTxChangeAddr,
 		)
@@ -266,7 +269,8 @@ func TestPaginator(t *testing.T) {
 	for i, storedTx := range generatedStoredTxs {
 		require.Equal(t, storedTx.StakingTx, allTransactionsFromDb[i].StakingTx)
 		require.Equal(t, storedTx.StakingOutputIndex, allTransactionsFromDb[i].StakingOutputIndex)
-		require.Equal(t, storedTx.TxScript, allTransactionsFromDb[i].TxScript)
+		require.Equal(t, storedTx.StakingTime, allTransactionsFromDb[i].StakingTime)
+		require.True(t, pubKeysEqual(storedTx.ValidatorBtcPk, allTransactionsFromDb[i].ValidatorBtcPk))
 		require.Equal(t, storedTx.Pop, allTransactionsFromDb[i].Pop)
 		require.Equal(t, storedTx.StakerAddress, allTransactionsFromDb[i].StakerAddress)
 	}
@@ -292,7 +296,8 @@ func FuzzQuerySpendableTx(f *testing.F) {
 			err = s.AddTransaction(
 				storedTx.StakingTx,
 				storedTx.StakingOutputIndex,
-				storedTx.TxScript,
+				storedTx.StakingTime,
+				storedTx.ValidatorBtcPk,
 				storedTx.Pop,
 				stakerAddr, slashingTxChangeAddr,
 			)
@@ -308,9 +313,7 @@ func FuzzQuerySpendableTx(f *testing.F) {
 
 		var hashesWithExpiredTimeLock []*chainhash.Hash
 		for _, storedTx := range stored {
-			scriptData, err := btcstaking.ParseStakingTransactionScript(storedTx.TxScript)
-			require.NoError(t, err)
-			if currentBestBlock+1 >= uint32(scriptData.StakingTime)+confirmationBlock {
+			if currentBestBlock+1 >= uint32(storedTx.StakingTime)+confirmationBlock {
 				txHash := storedTx.StakingTx.TxHash()
 				hashesWithExpiredTimeLock = append(hashesWithExpiredTimeLock, &txHash)
 			}
@@ -347,7 +350,7 @@ func FuzzQuerySpendableTx(f *testing.F) {
 			err := s.SetTxUnbondingStarted(
 				&txHash,
 				storedTx.StakingTx,
-				storedTx.TxScript,
+				storedTx.StakingTime,
 			)
 			require.NoError(t, err)
 		}

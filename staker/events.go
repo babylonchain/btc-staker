@@ -2,6 +2,7 @@ package staker
 
 import (
 	cl "github.com/babylonchain/btc-staker/babylonclient"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -32,7 +33,9 @@ type stakingRequestedEvent struct {
 	stakingTx               *wire.MsgTx
 	stakingOutputIdx        uint32
 	stakingOutputPkScript   []byte
-	stakingTxScript         []byte
+	stakingTime             uint16
+	stakingValue            btcutil.Amount
+	validatorBtcPk          *btcec.PublicKey
 	requiredDepthOnBtcChain uint32
 	pop                     *cl.BabylonPop
 	watchTxData             *watchTxData
@@ -49,7 +52,9 @@ func newOwnedStakingRequest(
 	stakingTx *wire.MsgTx,
 	stakingOutputIdx uint32,
 	stakingOutputPkScript []byte,
-	stakingScript []byte,
+	stakingTime uint16,
+	stakingValue btcutil.Amount,
+	validatorBtcPk *btcec.PublicKey,
 	confirmationTimeBlocks uint32,
 	pop *cl.BabylonPop,
 ) *stakingRequestedEvent {
@@ -60,7 +65,9 @@ func newOwnedStakingRequest(
 		stakingTx:               stakingTx,
 		stakingOutputIdx:        stakingOutputIdx,
 		stakingOutputPkScript:   stakingOutputPkScript,
-		stakingTxScript:         stakingScript,
+		stakingTime:             stakingTime,
+		stakingValue:            stakingValue,
+		validatorBtcPk:          validatorBtcPk,
 		requiredDepthOnBtcChain: confirmationTimeBlocks,
 		pop:                     pop,
 		watchTxData:             nil,
@@ -73,6 +80,7 @@ type watchTxData struct {
 	slashingTx          *wire.MsgTx
 	slashingTxSig       *schnorr.Signature
 	stakerBabylonPubKey *secp256k1.PubKey
+	stakerBtcPk         *btcec.PublicKey
 }
 
 func newWatchedStakingRequest(
@@ -80,12 +88,15 @@ func newWatchedStakingRequest(
 	stakingTx *wire.MsgTx,
 	stakingOutputIdx uint32,
 	stakingOutputPkScript []byte,
-	stakingScript []byte,
+	stakingTime uint16,
+	stakingValue btcutil.Amount,
+	validatorBtcPk *btcec.PublicKey,
 	confirmationTimeBlocks uint32,
 	pop *cl.BabylonPop,
 	slashingTx *wire.MsgTx,
 	slashingTxSignature *schnorr.Signature,
 	stakerBabylonPubKey *secp256k1.PubKey,
+	stakerBtcPk *btcec.PublicKey,
 ) *stakingRequestedEvent {
 	return &stakingRequestedEvent{
 		stakerAddress:           stakerAddress,
@@ -94,13 +105,16 @@ func newWatchedStakingRequest(
 		stakingTx:               stakingTx,
 		stakingOutputIdx:        stakingOutputIdx,
 		stakingOutputPkScript:   stakingOutputPkScript,
-		stakingTxScript:         stakingScript,
+		stakingTime:             stakingTime,
+		stakingValue:            stakingValue,
+		validatorBtcPk:          validatorBtcPk,
 		requiredDepthOnBtcChain: confirmationTimeBlocks,
 		pop:                     pop,
 		watchTxData: &watchTxData{
 			slashingTx:          slashingTx,
 			slashingTxSig:       slashingTxSignature,
 			stakerBabylonPubKey: stakerBabylonPubKey,
+			stakerBtcPk:         stakerBtcPk,
 		},
 		errChan:     make(chan error, 1),
 		successChan: make(chan *chainhash.Hash, 1),
@@ -146,10 +160,10 @@ func (event *delegationSubmittedToBabylonEvent) EventDesc() string {
 }
 
 type undelegationSubmittedToBabylonEvent struct {
-	stakingTxHash              chainhash.Hash
-	unbondingTransaction       *wire.MsgTx
-	unbondingTransactionScript []byte
-	successChan                chan *chainhash.Hash
+	stakingTxHash        chainhash.Hash
+	unbondingTransaction *wire.MsgTx
+	unbondingTime        uint16
+	successChan          chan *chainhash.Hash
 }
 
 func (event *undelegationSubmittedToBabylonEvent) EventId() chainhash.Hash {
@@ -162,8 +176,7 @@ func (event *undelegationSubmittedToBabylonEvent) EventDesc() string {
 
 type unbondingTxSignaturesConfirmedOnBabylonEvent struct {
 	stakingTxHash               chainhash.Hash
-	covenantUnbondingSignature  *schnorr.Signature
-	validatorUnbondingSignature *schnorr.Signature
+	covenantUnbondingSignatures []cl.CovenantSignatureInfo
 }
 
 func (event *unbondingTxSignaturesConfirmedOnBabylonEvent) EventId() chainhash.Hash {

@@ -3,12 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/babylonchain/btc-staker/types"
 	"os"
 
-	"github.com/babylonchain/btc-staker/babylonclient"
-	"github.com/babylonchain/btc-staker/staker"
-	"github.com/babylonchain/btc-staker/walletcontroller"
 	"github.com/urfave/cli"
 )
 
@@ -35,42 +31,6 @@ const (
 	btcWalletPassphraseFlag = "btc-wallet-passphrase"
 	btcWalletBackendFlag    = "btc-wallet-backend"
 )
-
-func getStakerControllerFromCtx(ctx *cli.Context) (*staker.StakerController, error) {
-	walletHost := ctx.String(btcWalletHostFlag)
-	walletUser := ctx.String(btcWalletRpcUserFlag)
-	walletPass := ctx.String(btcWalletRpcPassFlag)
-	network := ctx.String(btcNetworkFlag)
-	backendStr := ctx.String(btcWalletBackendFlag)
-
-	if !ctx.IsSet(btcWalletPassphraseFlag) {
-		return nil, fmt.Errorf("to interact with wallet it is necesary to provide wallet passphrase")
-	}
-
-	passphrase := ctx.String(btcWalletPassphraseFlag)
-	backend, err := types.NewWalletBackend(backendStr)
-	if err != nil {
-		return nil, err
-	}
-
-	wc, err := walletcontroller.NewRpcWalletControllerFromArgs(
-		walletHost,
-		walletUser,
-		walletPass,
-		network,
-		passphrase,
-		backend,
-		true)
-
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: User real one
-	bc := babylonclient.GetMockClient()
-
-	return staker.NewStakerControllerFromClients(wc, bc)
-}
 
 func main() {
 	app := cli.NewApp()
@@ -108,8 +68,6 @@ func main() {
 		},
 	}
 
-	app.Commands = append(app.Commands, scriptsCommands...)
-	app.Commands = append(app.Commands, transactionCommands...)
 	app.Commands = append(app.Commands, daemonCommands...)
 	app.Commands = append(app.Commands, adminCommands...)
 
