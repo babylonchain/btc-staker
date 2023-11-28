@@ -7,8 +7,6 @@ import (
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
-	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/go-bip39"
 	"github.com/jessevdk/go-flags"
 	"github.com/urfave/cli"
@@ -123,11 +121,6 @@ func createKeyRing(c *cli.Context) error {
 	})
 
 	app := babylonApp.NewTmpBabylonApp()
-
-	app.AppCodec().InterfaceRegistry().RegisterImplementations(
-		(*cryptotypes.PubKey)(nil),
-		&secp256k1.PubKey{},
-	)
 
 	chainId := c.String(chainIdFlag)
 	backend := c.String(keyringBackendFlag)
