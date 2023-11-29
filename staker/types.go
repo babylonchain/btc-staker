@@ -6,8 +6,7 @@ import (
 	sdkmath "cosmossdk.io/math"
 	staking "github.com/babylonchain/babylon/btcstaking"
 
-	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
-
+	bbn "github.com/babylonchain/babylon/types"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/stakerdb"
@@ -435,7 +434,7 @@ func createWitnessToSendUnbondingTx(
 	witnessSignatures = append(witnessSignatures, covenantSigantures...)
 	witnessSignatures = append(witnessSignatures, stakerUnbondingSig.Serialize())
 
-	return staking.CreateBabylonWitness(witnessSignatures, unbondingPathInfo)
+	return unbondingPathInfo.CreateWitness(witnessSignatures)
 }
 
 func parseWatchStakingRequest(
@@ -465,7 +464,7 @@ func parseWatchStakingRequest(
 		return nil, fmt.Errorf("failed to watch staking tx due to invalid staking info: %w", err)
 	}
 
-	stakingOutputIdx, err := btcstypes.GetOutputIdx(stakingTx, stakingInfo.StakingOutput)
+	stakingOutputIdx, err := bbn.GetOutputIdxInBTCTx(stakingTx, stakingInfo.StakingOutput)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to watch staking tx due to tx not matching current data: %w", err)
