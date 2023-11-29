@@ -685,7 +685,7 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 				coventSigInfos = append(coventSigInfos, sigInfo)
 			}
 
-			tx, err := btcstypes.ParseBtcTx(resp.UndelegationInfo.UnbondingTx)
+			tx, err := bbntypes.NewBTCTxFromBytes(resp.UndelegationInfo.UnbondingTx)
 
 			if err != nil {
 				return retry.Unrecoverable(fmt.Errorf("malformed unbonding transaction: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
@@ -733,12 +733,12 @@ func (bc *BabylonController) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhas
 func (bc *BabylonController) SubmitCovenantSig(
 	covPubKey *bbntypes.BIP340PubKey,
 	stakingTxHash string,
-	sig *bbntypes.BIP340Signature) (*pv.RelayerTxResponse, error) {
+	adaptorSigs [][]byte) (*pv.RelayerTxResponse, error) {
 	msg := &btcstypes.MsgAddCovenantSig{
 		Signer:        bc.getTxSigner(),
 		Pk:            covPubKey,
 		StakingTxHash: stakingTxHash,
-		Sig:           sig,
+		Sigs:          adaptorSigs,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{msg})
@@ -748,14 +748,14 @@ func (bc *BabylonController) SubmitCovenantUnbondingSigs(
 	covPubKey *bbntypes.BIP340PubKey,
 	stakingTxHash string,
 	unbondingSig *bbntypes.BIP340Signature,
-	slashUnbondingSig *bbntypes.BIP340Signature,
+	adaptorSigs [][]byte,
 ) (*pv.RelayerTxResponse, error) {
 	msg := &btcstypes.MsgAddCovenantUnbondingSigs{
-		Signer:                 bc.getTxSigner(),
-		Pk:                     covPubKey,
-		StakingTxHash:          stakingTxHash,
-		UnbondingTxSig:         unbondingSig,
-		SlashingUnbondingTxSig: slashUnbondingSig,
+		Signer:                  bc.getTxSigner(),
+		Pk:                      covPubKey,
+		StakingTxHash:           stakingTxHash,
+		UnbondingTxSig:          unbondingSig,
+		SlashingUnbondingTxSigs: adaptorSigs,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{msg})
