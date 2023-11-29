@@ -781,13 +781,6 @@ func (app *StakerApp) checkTransactionsStatus() error {
 				"stakingState":  localInfo.stakingTxState,
 			}).Debug("Restarting unbonding process for staking request which was already sent to babylon but not registered in local db")
 
-			// TODO: Add addtional field to babylon response, with unbodning time
-			params, err := app.babylonClient.Params()
-
-			if err != nil {
-				return err
-			}
-
 			// If we are here, it means we encountered edge case where we sent undelegation successfully
 			// but staker application crashed before we could update database.
 			// we just need to restart our unbonding process just after we sent unbonding transaction.
@@ -797,9 +790,8 @@ func (app *StakerApp) checkTransactionsStatus() error {
 			confirmation := &undelegationSubmittedToBabylonEvent{
 				stakingTxHash:        *localInfo.stakingTxHash,
 				unbondingTransaction: babylonInfo.UndelegationInfo.UnbondingTransaction,
-				// TODO: Add unbonding time to babylon response
-				unbondingTime: uint16(params.FinalizationTimeoutBlocks) + 1,
-				successChan:   make(chan *chainhash.Hash, 1),
+				unbondingTime:        babylonInfo.UndelegationInfo.UnbondingTime,
+				successChan:          make(chan *chainhash.Hash, 1),
 			}
 
 			utils.PushOrQuit[*undelegationSubmittedToBabylonEvent](

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -279,6 +280,7 @@ type CovenantSignatureInfo struct {
 type UndelegationInfo struct {
 	CovenantUnbondingSignatures []CovenantSignatureInfo
 	UnbondingTransaction        *wire.MsgTx
+	UnbondingTime               uint16
 }
 
 type DelegationInfo struct {
@@ -691,9 +693,14 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 				return retry.Unrecoverable(fmt.Errorf("malformed unbonding transaction: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
 			}
 
+			if resp.UndelegationInfo.UnbondingTime > math.MaxUint16 {
+				return retry.Unrecoverable(fmt.Errorf("malformed unbonding time: %d: %w", resp.UndelegationInfo.UnbondingTime, ErrInvalidValueReceivedFromBabylonNode))
+			}
+
 			udi = &UndelegationInfo{
 				UnbondingTransaction:        tx,
 				CovenantUnbondingSignatures: coventSigInfos,
+				UnbondingTime:               uint16(resp.UndelegationInfo.UnbondingTime),
 			}
 		}
 
