@@ -1491,6 +1491,10 @@ func (app *StakerApp) WatchStaking(
 		return nil, fmt.Errorf("no validator public keys provided")
 	}
 
+	if haveDuplicates(validatorPks) {
+		return nil, fmt.Errorf("duplicate validator public keys provided")
+	}
+
 	watchedRequest, err := parseWatchStakingRequest(
 		stakingTx,
 		stakingTime,
@@ -1561,6 +1565,10 @@ func (app *StakerApp) StakeFunds(
 
 	if len(validatorPks) == 0 {
 		return nil, fmt.Errorf("no validator public keys provided")
+	}
+
+	if haveDuplicates(validatorPks) {
+		return nil, fmt.Errorf("duplicate validator public keys provided")
 	}
 
 	for _, validatorPk := range validatorPks {

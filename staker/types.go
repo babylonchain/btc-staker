@@ -1,6 +1,7 @@
 package staker
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	sdkmath "cosmossdk.io/math"
@@ -536,4 +537,20 @@ func parseWatchStakingRequest(
 	)
 
 	return req, nil
+}
+
+func haveDuplicates(btcPKs []*btcec.PublicKey) bool {
+	seen := make(map[string]struct{})
+
+	for _, btcPK := range btcPKs {
+		pkStr := hex.EncodeToString(schnorr.SerializePubKey(btcPK))
+
+		if _, found := seen[pkStr]; found {
+			return true
+		} else {
+			seen[pkStr] = struct{}{}
+		}
+	}
+
+	return false
 }

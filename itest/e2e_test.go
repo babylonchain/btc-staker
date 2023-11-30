@@ -942,6 +942,45 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	require.NoError(t, err)
 }
 
+func TestStakingFailures(t *testing.T) {
+	numMatureOutputs := uint32(200)
+	tm := StartManager(t, numMatureOutputs, 2, nil)
+	defer tm.Stop(t)
+	tm.insertAllMinedBlocksToBabylon(t)
+
+	cl := tm.Sa.BabylonController()
+	params, err := cl.Params()
+	require.NoError(t, err)
+	stakingTime := uint16(staker.GetMinStakingTime(params))
+
+	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+	validatorKey := hex.EncodeToString(schnorr.SerializePubKey(testStakingData.ValidatorBtcKey))
+
+	tm.createAndRegisterValidator(t, testStakingData)
+
+	// Duplicated validator key
+	_, err = tm.StakerClient.Stake(
+		context.Background(),
+		tm.MinerAddr.String(),
+		testStakingData.SlashingTxChangeAddress.String(),
+		testStakingData.StakingAmount,
+		[]string{validatorKey, validatorKey},
+		int64(testStakingData.StakingTime),
+	)
+	require.Error(t, err)
+
+	// No validator key
+	_, err = tm.StakerClient.Stake(
+		context.Background(),
+		tm.MinerAddr.String(),
+		testStakingData.SlashingTxChangeAddress.String(),
+		testStakingData.StakingAmount,
+		[]string{},
+		int64(testStakingData.StakingTime),
+	)
+	require.Error(t, err)
+}
+
 func TestSendingStakingTransaction(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
