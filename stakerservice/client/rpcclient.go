@@ -66,7 +66,7 @@ func (c *StakerServiceJsonRpcClient) Stake(
 	stakerAddress string,
 	slashingTxChangeAddress string,
 	stakingAmount int64,
-	validatorPk string,
+	validatorPks []string,
 	stakingTimeBlocks int64,
 ) (*service.ResultStake, error) {
 	result := new(service.ResultStake)
@@ -75,7 +75,7 @@ func (c *StakerServiceJsonRpcClient) Stake(
 	params["stakerAddress"] = stakerAddress
 	params["slashingTxChangeAddress"] = slashingTxChangeAddress
 	params["stakingAmount"] = stakingAmount
-	params["validatorPk"] = validatorPk
+	params["validatorBtcPks"] = validatorPks
 	params["stakingTimeBlocks"] = stakingTimeBlocks
 
 	_, err := c.client.Call(ctx, "stake", params, result)
@@ -157,7 +157,7 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	stakingTime int,
 	stakingValue int,
 	stakerBtcPk string,
-	validatorBtcPk string,
+	validatorBtcPks []string,
 	slashingTx string,
 	slashingTxSig string,
 	stakerBabylonPk string,
@@ -174,7 +174,7 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	params["stakingTime"] = stakingTime
 	params["stakingValue"] = stakingValue
 	params["stakerBtcPk"] = stakerBtcPk
-	params["validatorBtcPk"] = validatorBtcPk
+	params["validatorBtcPks"] = validatorBtcPks
 	params["slashingTx"] = slashingTx
 	params["slashingTxSig"] = slashingTxSig
 	params["stakerBabylonPk"] = stakerBabylonPk

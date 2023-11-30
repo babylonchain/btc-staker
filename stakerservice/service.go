@@ -83,7 +83,7 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 	stakerAddress string,
 	slashingTxChangeAddress string,
 	stakingAmount int64,
-	validatorPk string,
+	validatorBtcPks []string,
 	stakingTimeBlocks int64,
 ) (*ResultStake, error) {
 
@@ -103,14 +103,20 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 		return nil, err
 	}
 
-	validatorPkBytes, err := hex.DecodeString(validatorPk)
-	if err != nil {
-		return nil, err
-	}
+	var validatorPubKeys []*btcec.PublicKey = make([]*btcec.PublicKey, 0)
 
-	valSchnorrKey, err := schnorr.ParsePubKey(validatorPkBytes)
-	if err != nil {
-		return nil, err
+	for _, validatorPk := range validatorBtcPks {
+		validatorPkBytes, err := hex.DecodeString(validatorPk)
+		if err != nil {
+			return nil, err
+		}
+
+		valSchnorrKey, err := schnorr.ParsePubKey(validatorPkBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		validatorPubKeys = append(validatorPubKeys, valSchnorrKey)
 	}
 
 	if stakingTimeBlocks <= 0 || stakingTimeBlocks > math.MaxUint16 {
@@ -119,7 +125,7 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 
 	stakingTimeUint16 := uint16(stakingTimeBlocks)
 
-	stakingTxHash, err := s.staker.StakeFunds(stakerAddr, slashingTxChangeAddr, amount, valSchnorrKey, stakingTimeUint16)
+	stakingTxHash, err := s.staker.StakeFunds(stakerAddr, slashingTxChangeAddr, amount, validatorPubKeys, stakingTimeUint16)
 	if err != nil {
 		return nil, err
 	}
@@ -367,7 +373,7 @@ func (s *StakerService) watchStaking(
 	stakingTime int,
 	stakingValue int,
 	stakerBtcPk string,
-	validatorBtcPk string,
+	validatorBtcPks []string,
 	slashingTx string,
 	slashingTxSig string,
 	stakerBabylonPk string,
@@ -393,10 +399,20 @@ func (s *StakerService) watchStaking(
 		return nil, err
 	}
 
-	validatorBtcPkParsed, err := decodeBtcPk(validatorBtcPk)
+	var validatorPubKeys []*btcec.PublicKey = make([]*btcec.PublicKey, 0)
 
-	if err != nil {
-		return nil, err
+	for _, validatorPk := range validatorBtcPks {
+		validatorPkBytes, err := hex.DecodeString(validatorPk)
+		if err != nil {
+			return nil, err
+		}
+
+		valSchnorrKey, err := schnorr.ParsePubKey(validatorPkBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		validatorPubKeys = append(validatorPubKeys, valSchnorrKey)
 	}
 
 	stakingTimeUint16, err := parseStakingTime(stakingTime)
@@ -463,7 +479,7 @@ func (s *StakerService) watchStaking(
 		stkTx,
 		stakingTimeUint16,
 		stakingValueBtc,
-		validatorBtcPkParsed,
+		validatorPubKeys,
 		slshTx,
 		slashingTxSchnorSig,
 		&stakerBabylonPubKey,
@@ -510,7 +526,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
 		// staking API
-		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,slashingTxChangeAddress,stakingAmount,validatorPk,stakingTimeBlocks"),
+		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,slashingTxChangeAddress,stakingAmount,validatorBtcPks,stakingTimeBlocks"),
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
@@ -518,7 +534,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"withdrawable_transactions": rpc.NewRPCFunc(s.withdrawableTransactions, "offset,limit"),
 
 		// watch api
-		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingTime,stakingValue,stakerBtcPk,validatorBtcPk,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig,popType"),
+		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingTime,stakingValue,stakerBtcPk,validatorBtcPks,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig,popType"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),

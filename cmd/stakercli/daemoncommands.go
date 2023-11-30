@@ -33,7 +33,7 @@ const (
 	stakingDaemonAddressFlag   = "daemon-address"
 	offsetFlag                 = "offset"
 	limitFlag                  = "limit"
-	validatorPkFlag            = "validator-pk"
+	validatorPksFlag           = "validator-pks"
 	stakingTimeBlocksFlag      = "staking-time"
 	stakingTransactionHashFlag = "staking-transaction-hash"
 	feeRateFlag                = "fee-rate"
@@ -115,9 +115,9 @@ var stakeCmd = cli.Command{
 			Usage:    "Staking amount in satoshis",
 			Required: true,
 		},
-		cli.StringFlag{
-			Name:     validatorPkFlag,
-			Usage:    "BTC public key of the validator in hex",
+		cli.StringSliceFlag{
+			Name:     validatorPksFlag,
+			Usage:    "BTC public keys of the validators in hex",
 			Required: true,
 		},
 		cli.Int64Flag{
@@ -322,10 +322,10 @@ func stake(ctx *cli.Context) error {
 	stakerAddress := ctx.String(stakerAddressFlag)
 	slashingTxChangeAddress := ctx.String(slashingTxChangeAddressFlag)
 	stakingAmount := ctx.Int64(stakingAmountFlag)
-	validatorPk := ctx.String(validatorPkFlag)
+	validatorPks := ctx.StringSlice(validatorPksFlag)
 	stakingTimeBlocks := ctx.Int64(stakingTimeFlag)
 
-	results, err := client.Stake(sctx, stakerAddress, slashingTxChangeAddress, stakingAmount, validatorPk, stakingTimeBlocks)
+	results, err := client.Stake(sctx, stakerAddress, slashingTxChangeAddress, stakingAmount, validatorPks, stakingTimeBlocks)
 	if err != nil {
 		return err
 	}

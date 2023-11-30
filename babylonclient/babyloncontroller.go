@@ -256,7 +256,7 @@ type DelegationData struct {
 	StakingTime                          uint16
 	StakingValue                         btcutil.Amount
 	// TODO: Support multiple validators
-	ValidatorBtcPk         *btcec.PublicKey
+	ValidatorBtcPks        []*btcec.PublicKey
 	SlashingTransaction    *wire.MsgTx
 	SlashingTransactionSig *schnorr.Signature
 	BabylonPk              *secp256k1.PubKey
@@ -309,6 +309,16 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 
 	slashingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(dg.SlashingTransactionSig)
 
+	if len(dg.ValidatorBtcPks) == 0 {
+		return nil, fmt.Errorf("received delegation data with no validators")
+	}
+
+	validatorPksList := make([]bbntypes.BIP340PubKey, len(dg.ValidatorBtcPks))
+
+	for i, validatorPk := range dg.ValidatorBtcPks {
+		validatorPksList[i] = *bbntypes.NewBIP340PubKeyFromBTCPK(validatorPk)
+	}
+
 	return &btcstypes.MsgCreateBTCDelegation{
 		Signer:    signer,
 		BabylonPk: dg.BabylonPk,
@@ -319,7 +329,7 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 			BtcSig:     dg.BabylonPop.BtcSigOverBabylonSig,
 		},
 		BtcPk:        bbntypes.NewBIP340PubKeyFromBTCPK(dg.StakerBtcPk),
-		ValBtcPkList: []bbntypes.BIP340PubKey{*bbntypes.NewBIP340PubKeyFromBTCPK(dg.ValidatorBtcPk)},
+		ValBtcPkList: validatorPksList,
 		StakingTime:  uint32(dg.StakingTime),
 		StakingValue: int64(dg.StakingValue),
 		// TODO: It is super bad that this thing (TransactionInfo) spread over whole babylon codebase, and it

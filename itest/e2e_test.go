@@ -579,7 +579,7 @@ func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingD
 		tm.MinerAddr.String(),
 		testStakingData.SlashingTxChangeAddress.String(),
 		testStakingData.StakingAmount,
-		validatorKey,
+		[]string{validatorKey},
 		int64(testStakingData.StakingTime),
 	)
 	require.NoError(t, err)
@@ -616,7 +616,7 @@ func (tm *TestManager) sendMultipleStakingTx(t *testing.T, testStakingData []*te
 			tm.MinerAddr.String(),
 			data.SlashingTxChangeAddress.String(),
 			data.StakingAmount,
-			validatorKey,
+			[]string{validatorKey},
 			int64(data.StakingTime),
 		)
 		require.NoError(t, err)
@@ -732,7 +732,7 @@ func (tm *TestManager) sendWatchedStakingTx(
 		int(testStakingData.StakingTime),
 		int(testStakingData.StakingAmount),
 		hex.EncodeToString(schnorr.SerializePubKey(testStakingData.StakerKey)),
-		hex.EncodeToString(schnorr.SerializePubKey(testStakingData.ValidatorBtcKey)),
+		[]string{hex.EncodeToString(schnorr.SerializePubKey(testStakingData.ValidatorBtcKey))},
 		hex.EncodeToString(serializedSlashingTx),
 		hex.EncodeToString(slashSig.Serialize()),
 		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
