@@ -579,7 +579,7 @@ func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingD
 		tm.MinerAddr.String(),
 		testStakingData.SlashingTxChangeAddress.String(),
 		testStakingData.StakingAmount,
-		validatorKey,
+		[]string{validatorKey},
 		int64(testStakingData.StakingTime),
 	)
 	require.NoError(t, err)
@@ -616,7 +616,7 @@ func (tm *TestManager) sendMultipleStakingTx(t *testing.T, testStakingData []*te
 			tm.MinerAddr.String(),
 			data.SlashingTxChangeAddress.String(),
 			data.StakingAmount,
-			validatorKey,
+			[]string{validatorKey},
 			int64(data.StakingTime),
 		)
 		require.NoError(t, err)
@@ -732,7 +732,7 @@ func (tm *TestManager) sendWatchedStakingTx(
 		int(testStakingData.StakingTime),
 		int(testStakingData.StakingAmount),
 		hex.EncodeToString(schnorr.SerializePubKey(testStakingData.StakerKey)),
-		hex.EncodeToString(schnorr.SerializePubKey(testStakingData.ValidatorBtcKey)),
+		[]string{hex.EncodeToString(schnorr.SerializePubKey(testStakingData.ValidatorBtcKey))},
 		hex.EncodeToString(serializedSlashingTx),
 		hex.EncodeToString(slashSig.Serialize()),
 		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
@@ -940,6 +940,45 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 		[][]byte{covenantAdaptor.MustMarshal()},
 	)
 	require.NoError(t, err)
+}
+
+func TestStakingFailures(t *testing.T) {
+	numMatureOutputs := uint32(200)
+	tm := StartManager(t, numMatureOutputs, 2, nil)
+	defer tm.Stop(t)
+	tm.insertAllMinedBlocksToBabylon(t)
+
+	cl := tm.Sa.BabylonController()
+	params, err := cl.Params()
+	require.NoError(t, err)
+	stakingTime := uint16(staker.GetMinStakingTime(params))
+
+	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+	validatorKey := hex.EncodeToString(schnorr.SerializePubKey(testStakingData.ValidatorBtcKey))
+
+	tm.createAndRegisterValidator(t, testStakingData)
+
+	// Duplicated validator key
+	_, err = tm.StakerClient.Stake(
+		context.Background(),
+		tm.MinerAddr.String(),
+		testStakingData.SlashingTxChangeAddress.String(),
+		testStakingData.StakingAmount,
+		[]string{validatorKey, validatorKey},
+		int64(testStakingData.StakingTime),
+	)
+	require.Error(t, err)
+
+	// No validator key
+	_, err = tm.StakerClient.Stake(
+		context.Background(),
+		tm.MinerAddr.String(),
+		testStakingData.SlashingTxChangeAddress.String(),
+		testStakingData.StakingAmount,
+		[]string{},
+		int64(testStakingData.StakingTime),
+	)
+	require.Error(t, err)
 }
 
 func TestSendingStakingTransaction(t *testing.T) {

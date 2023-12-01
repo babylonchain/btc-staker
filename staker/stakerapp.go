@@ -1229,7 +1229,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakingTx,
 					ev.stakingOutputIdx,
 					ev.stakingTime,
-					ev.validatorBtcPk,
+					ev.validatorBtcPks,
 					babylonPopToDbPop(ev.pop),
 					ev.stakerAddress, ev.slashingTxChangeAddress,
 					ev.watchTxData.slashingTx,
@@ -1254,7 +1254,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakingTx,
 					ev.stakingOutputIdx,
 					ev.stakingTime,
-					ev.validatorBtcPk,
+					ev.validatorBtcPks,
 					babylonPopToDbPop(ev.pop),
 					ev.stakerAddress, ev.slashingTxChangeAddress,
 				)
@@ -1473,7 +1473,7 @@ func (app *StakerApp) WatchStaking(
 	stakingTx *wire.MsgTx,
 	stakingTime uint16,
 	stakingValue btcutil.Amount,
-	validatorPk *btcec.PublicKey,
+	validatorPks []*btcec.PublicKey,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
@@ -1487,11 +1487,19 @@ func (app *StakerApp) WatchStaking(
 		return nil, fmt.Errorf("failed to watch staking tx. Failed to get params: %w", err)
 	}
 
+	if len(validatorPks) == 0 {
+		return nil, fmt.Errorf("no validator public keys provided")
+	}
+
+	if haveDuplicates(validatorPks) {
+		return nil, fmt.Errorf("duplicate validator public keys provided")
+	}
+
 	watchedRequest, err := parseWatchStakingRequest(
 		stakingTx,
 		stakingTime,
 		stakingValue,
-		validatorPk,
+		validatorPks,
 		slashingTx,
 		slashingTxSig,
 		stakerBabylonPk,
@@ -1506,9 +1514,11 @@ func (app *StakerApp) WatchStaking(
 		return nil, fmt.Errorf("failed to watch staking tx. Invalid request: %w", err)
 	}
 
-	// we have valid request, check whether validator exists on babylon
-	if err := app.validatorExists(validatorPk); err != nil {
-		return nil, err
+	// we have valid request, check whether validators exists on babylon
+	for _, validatorPk := range validatorPks {
+		if err := app.validatorExists(validatorPk); err != nil {
+			return nil, err
+		}
 	}
 
 	app.logger.WithFields(logrus.Fields{
@@ -1541,7 +1551,7 @@ func (app *StakerApp) WatchStaking(
 func (app *StakerApp) StakeFunds(
 	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	stakingAmount btcutil.Amount,
-	validatorPk *btcec.PublicKey,
+	validatorPks []*btcec.PublicKey,
 	stakingTimeBlocks uint16,
 ) (*chainhash.Hash, error) {
 
@@ -1553,8 +1563,18 @@ func (app *StakerApp) StakeFunds(
 	default:
 	}
 
-	if err := app.validatorExists(validatorPk); err != nil {
-		return nil, err
+	if len(validatorPks) == 0 {
+		return nil, fmt.Errorf("no validator public keys provided")
+	}
+
+	if haveDuplicates(validatorPks) {
+		return nil, fmt.Errorf("duplicate validator public keys provided")
+	}
+
+	for _, validatorPk := range validatorPks {
+		if err := app.validatorExists(validatorPk); err != nil {
+			return nil, err
+		}
 	}
 
 	params, err := app.babylonClient.Params()
@@ -1601,7 +1621,7 @@ func (app *StakerApp) StakeFunds(
 
 	stakingInfo, err := staking.BuildStakingInfo(
 		stakerPrivKey.PubKey(),
-		[]*btcec.PublicKey{validatorPk},
+		validatorPks,
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
 		stakingTimeBlocks,
@@ -1636,7 +1656,7 @@ func (app *StakerApp) StakeFunds(
 		stakingInfo.StakingOutput.PkScript,
 		stakingTimeBlocks,
 		stakingAmount,
-		validatorPk,
+		validatorPks,
 		params.ConfirmationTimeBlocks,
 		pop,
 	)

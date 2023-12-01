@@ -52,7 +52,7 @@ message TrackedTransaction {
     uint32 staking_time = 5;
     // Public key of validator to which we delegated
     // TODO: Handle multiple validators
-    bytes validator_btc_pk = 6;
+    repeated bytes validator_btc_pks = 6;
 
     string slashing_tx_change_address = 7;
     // this data is only filed if tracked transactions state is >= CONFIRMED_ON_BTC

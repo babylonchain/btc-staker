@@ -1,6 +1,7 @@
 package staker
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	sdkmath "cosmossdk.io/math"
@@ -91,7 +92,7 @@ func buildSlashingTxAndSig(
 
 	stakingInfo, err := staking.BuildStakingInfo(
 		delegationData.stakerPrivKey.PubKey(),
-		[]*btcec.PublicKey{storedTx.ValidatorBtcPk},
+		storedTx.ValidatorBtcPks,
 		delegationData.covenantPks,
 		delegationData.covenantThreshold,
 		storedTx.StakingTime,
@@ -142,7 +143,7 @@ func createDelegationData(
 		StakingTransactionInclusionBlockHash: &inclusionBlockHash,
 		StakingTime:                          storedTx.StakingTime,
 		StakingValue:                         btcutil.Amount(storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex].Value),
-		ValidatorBtcPk:                       storedTx.ValidatorBtcPk,
+		ValidatorBtcPks:                      storedTx.ValidatorBtcPks,
 		StakerBtcPk:                          StakerBtcPk,
 		SlashingTransaction:                  slashingTx,
 		SlashingTransactionSig:               slashingTxSignature,
@@ -198,7 +199,7 @@ func createSpendStakeTxFromStoredTx(
 	if storedtx.State == proto.TransactionState_SENT_TO_BABYLON {
 		stakingInfo, err := staking.BuildStakingInfo(
 			stakerBtcPk,
-			[]*btcec.PublicKey{storedtx.ValidatorBtcPk},
+			storedtx.ValidatorBtcPks,
 			covenantPublicKeys,
 			covenantThreshold,
 			storedtx.StakingTime,
@@ -242,7 +243,7 @@ func createSpendStakeTxFromStoredTx(
 
 		unbondingInfo, err := staking.BuildUnbondingInfo(
 			stakerBtcPk,
-			[]*btcec.PublicKey{storedtx.ValidatorBtcPk},
+			storedtx.ValidatorBtcPks,
 			covenantPublicKeys,
 			covenantThreshold,
 			data.UnbondingTime,
@@ -322,7 +323,7 @@ func createUndelegationData(
 
 	unbondingInfo, err := staking.BuildUnbondingInfo(
 		stakerPrivKey.PubKey(),
-		[]*btcec.PublicKey{storedTx.ValidatorBtcPk},
+		storedTx.ValidatorBtcPks,
 		covenantPubKeys,
 		covenantThreshold,
 		unbondingTime,
@@ -399,7 +400,7 @@ func createWitnessToSendUnbondingTx(
 
 	stakingInfo, err := staking.BuildStakingInfo(
 		stakerPrivKey.PubKey(),
-		[]*btcec.PublicKey{storedTx.ValidatorBtcPk},
+		storedTx.ValidatorBtcPks,
 		covenantPublicKeys,
 		covenantThreshold,
 		storedTx.StakingTime,
@@ -441,7 +442,7 @@ func parseWatchStakingRequest(
 	stakingTx *wire.MsgTx,
 	stakingTime uint16,
 	stakingValue btcutil.Amount,
-	validatorBtcPK *btcec.PublicKey,
+	validatorBtcPks []*btcec.PublicKey,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
@@ -453,7 +454,7 @@ func parseWatchStakingRequest(
 ) (*stakingRequestedEvent, error) {
 	stakingInfo, err := staking.BuildStakingInfo(
 		stakerBtcPk,
-		[]*btcec.PublicKey{validatorBtcPK},
+		validatorBtcPks,
 		currentParams.CovenantPks,
 		currentParams.CovenantQuruomThreshold,
 		stakingTime,
@@ -526,7 +527,7 @@ func parseWatchStakingRequest(
 		stakingTx.TxOut[stakingOutputIdx].PkScript,
 		stakingTime,
 		stakingValue,
-		validatorBtcPK,
+		validatorBtcPks,
 		currentParams.ConfirmationTimeBlocks,
 		pop,
 		slashingTx,
@@ -536,4 +537,20 @@ func parseWatchStakingRequest(
 	)
 
 	return req, nil
+}
+
+func haveDuplicates(btcPKs []*btcec.PublicKey) bool {
+	seen := make(map[string]struct{})
+
+	for _, btcPK := range btcPKs {
+		pkStr := hex.EncodeToString(schnorr.SerializePubKey(btcPK))
+
+		if _, found := seen[pkStr]; found {
+			return true
+		} else {
+			seen[pkStr] = struct{}{}
+		}
+	}
+
+	return false
 }

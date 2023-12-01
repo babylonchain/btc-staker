@@ -120,7 +120,7 @@ type StoredTransaction struct {
 	StakingOutputIndex        uint32
 	StakingTxConfirmationInfo *BtcConfirmationInfo
 	StakingTime               uint16
-	ValidatorBtcPk            *btcec.PublicKey
+	ValidatorBtcPks           []*btcec.PublicKey
 	Pop                       *ProofOfPossession
 	// Returning address as string, to avoid having to know how to decode address
 	// which requires knowing the network we are on
@@ -324,10 +324,14 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 		return nil, fmt.Errorf("staking time is too large. Max value is %d", math.MaxUint16)
 	}
 
-	validatorPubkey, err := schnorr.ParsePubKey(ttx.ValidatorBtcPk)
+	var validatorPubkeys []*btcec.PublicKey = make([]*btcec.PublicKey, len(ttx.ValidatorBtcPks))
 
-	if err != nil {
-		return nil, err
+	for i, pk := range ttx.ValidatorBtcPks {
+		validatorPubkeys[i], err = schnorr.ParsePubKey(pk)
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &StoredTransaction{
@@ -336,7 +340,7 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 		StakingOutputIndex:        ttx.StakingOutputIdx,
 		StakingTxConfirmationInfo: stakingTxConfgInfo,
 		StakingTime:               uint16(ttx.StakingTime),
-		ValidatorBtcPk:            validatorPubkey,
+		ValidatorBtcPks:           validatorPubkeys,
 		Pop: &ProofOfPossession{
 			BtcSigType:           ttx.BtcSigType,
 			BabylonSigOverBtcPk:  ttx.BabylonSigBtcPk,
@@ -517,7 +521,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 	btcTx *wire.MsgTx,
 	stakingOutputIndex uint32,
 	stakingTime uint16,
-	validatorPubKey *btcec.PublicKey,
+	validatorPubKeys []*btcec.PublicKey,
 	pop *ProofOfPossession,
 	stakerAddress, slashingTxChangeAddress btcutil.Address,
 ) error {
@@ -529,6 +533,16 @@ func (c *TrackedTransactionStore) AddTransaction(
 		return err
 	}
 
+	if len(validatorPubKeys) == 0 {
+		return fmt.Errorf("cannot add transaction without validator public keys")
+	}
+
+	var validatorPubKeysBytes [][]byte = make([][]byte, len(validatorPubKeys))
+
+	for i, pk := range validatorPubKeys {
+		validatorPubKeysBytes[i] = schnorr.SerializePubKey(pk)
+	}
+
 	msg := proto.TrackedTransaction{
 		// Setting it to 0, proper number will be filled by `addTransactionInternal`
 		TrackedTransactionIdx:        0,
@@ -536,7 +550,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 		StakingOutputIdx:             stakingOutputIndex,
 		StakerAddress:                stakerAddress.EncodeAddress(),
 		StakingTime:                  uint32(stakingTime),
-		ValidatorBtcPk:               schnorr.SerializePubKey(validatorPubKey),
+		ValidatorBtcPks:              validatorPubKeysBytes,
 		SlashingTxChangeAddress:      slashingTxChangeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
@@ -556,7 +570,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	btcTx *wire.MsgTx,
 	stakingOutputIndex uint32,
 	stakingTime uint16,
-	validatorPubKey *btcec.PublicKey,
+	validatorPubKeys []*btcec.PublicKey,
 	pop *ProofOfPossession,
 	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	slashingTx *wire.MsgTx,
@@ -572,6 +586,16 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 		return err
 	}
 
+	if len(validatorPubKeys) == 0 {
+		return fmt.Errorf("cannot add transaction without validator public keys")
+	}
+
+	var validatorPubKeysBytes [][]byte = make([][]byte, len(validatorPubKeys))
+
+	for i, pk := range validatorPubKeys {
+		validatorPubKeysBytes[i] = schnorr.SerializePubKey(pk)
+	}
+
 	msg := proto.TrackedTransaction{
 		// Setting it to 0, proper number will be filled by `addTransactionInternal`
 		TrackedTransactionIdx:        0,
@@ -579,7 +603,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 		StakingOutputIdx:             stakingOutputIndex,
 		StakerAddress:                stakerAddress.EncodeAddress(),
 		StakingTime:                  uint32(stakingTime),
-		ValidatorBtcPk:               schnorr.SerializePubKey(validatorPubKey),
+		ValidatorBtcPks:              validatorPubKeysBytes,
 		SlashingTxChangeAddress:      slashingTxChangeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,

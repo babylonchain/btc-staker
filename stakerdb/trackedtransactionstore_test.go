@@ -45,6 +45,20 @@ func pubKeysEqual(pk1, pk2 *btcec.PublicKey) bool {
 	return bytes.Equal(schnorr.SerializePubKey(pk1), schnorr.SerializePubKey(pk2))
 }
 
+func pubKeysSliceEqual(pk1, pk2 []*btcec.PublicKey) bool {
+	if len(pk1) != len(pk2) {
+		return false
+	}
+
+	for i := 0; i < len(pk1); i++ {
+		if !pubKeysEqual(pk1[i], pk2[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *stakerdb.StoredTransaction {
 	btcTx := datagen.GenRandomTx(r)
 	outputIdx := r.Uint32()
@@ -57,11 +71,18 @@ func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *st
 	slashingTxChangeAddr, err := datagen.GenRandomBTCAddress(r, &chaincfg.MainNetParams)
 	require.NoError(t, err)
 
+	numPubKeys := r.Intn(3) + 1
+
+	validatorBtcPks := make([]*btcec.PublicKey, numPubKeys)
+	for i := 0; i < numPubKeys; i++ {
+		validatorBtcPks[i] = priv.PubKey()
+	}
+
 	return &stakerdb.StoredTransaction{
 		StakingTx:          btcTx,
 		StakingOutputIndex: outputIdx,
 		StakingTime:        uint16(stakingTime),
-		ValidatorBtcPk:     priv.PubKey(),
+		ValidatorBtcPks:    validatorBtcPks,
 		Pop: &stakerdb.ProofOfPossession{
 			BabylonSigOverBtcPk:  datagen.GenRandomByteArray(r, 64),
 			BtcSigOverBabylonSig: datagen.GenRandomByteArray(r, 64),
@@ -110,7 +131,7 @@ func FuzzStoringTxs(f *testing.F) {
 				storedTx.StakingTx,
 				storedTx.StakingOutputIndex,
 				storedTx.StakingTime,
-				storedTx.ValidatorBtcPk,
+				storedTx.ValidatorBtcPks,
 				storedTx.Pop,
 				stakerAddr, slashingTxChangeAddr,
 			)
@@ -124,7 +145,7 @@ func FuzzStoringTxs(f *testing.F) {
 			require.Equal(t, storedTx.StakingTx, tx.StakingTx)
 			require.Equal(t, storedTx.StakingOutputIndex, tx.StakingOutputIndex)
 			require.Equal(t, storedTx.StakingTime, tx.StakingTime)
-			require.True(t, pubKeysEqual(storedTx.ValidatorBtcPk, tx.ValidatorBtcPk))
+			require.True(t, pubKeysSliceEqual(storedTx.ValidatorBtcPks, tx.ValidatorBtcPks))
 			require.Equal(t, storedTx.Pop, tx.Pop)
 			require.Equal(t, storedTx.StakerAddress, tx.StakerAddress)
 			require.Equal(t, expectedIdx, tx.StoredTransactionIdx)
@@ -142,7 +163,7 @@ func FuzzStoringTxs(f *testing.F) {
 			require.Equal(t, storedTx.StakingTx, storedResult.Transactions[i].StakingTx)
 			require.Equal(t, storedTx.StakingOutputIndex, storedResult.Transactions[i].StakingOutputIndex)
 			require.Equal(t, storedTx.StakingTime, storedResult.Transactions[i].StakingTime)
-			require.True(t, pubKeysEqual(storedTx.ValidatorBtcPk, storedResult.Transactions[i].ValidatorBtcPk))
+			require.True(t, pubKeysSliceEqual(storedTx.ValidatorBtcPks, storedResult.Transactions[i].ValidatorBtcPks))
 			require.Equal(t, storedTx.Pop, storedResult.Transactions[i].Pop)
 			require.Equal(t, storedTx.StakerAddress, storedResult.Transactions[i].StakerAddress)
 		}
@@ -171,7 +192,7 @@ func TestStateTransitions(t *testing.T) {
 		tx.StakingTx,
 		tx.StakingOutputIndex,
 		tx.StakingTime,
-		tx.ValidatorBtcPk,
+		tx.ValidatorBtcPks,
 		tx.Pop,
 		stakerAddr, slashingTxChangeAddr,
 	)
@@ -226,7 +247,7 @@ func TestPaginator(t *testing.T) {
 			storedTx.StakingTx,
 			storedTx.StakingOutputIndex,
 			storedTx.StakingTime,
-			storedTx.ValidatorBtcPk,
+			storedTx.ValidatorBtcPks,
 			storedTx.Pop,
 			stakerAddr, slashingTxChangeAddr,
 		)
@@ -270,7 +291,7 @@ func TestPaginator(t *testing.T) {
 		require.Equal(t, storedTx.StakingTx, allTransactionsFromDb[i].StakingTx)
 		require.Equal(t, storedTx.StakingOutputIndex, allTransactionsFromDb[i].StakingOutputIndex)
 		require.Equal(t, storedTx.StakingTime, allTransactionsFromDb[i].StakingTime)
-		require.True(t, pubKeysEqual(storedTx.ValidatorBtcPk, allTransactionsFromDb[i].ValidatorBtcPk))
+		require.True(t, pubKeysSliceEqual(storedTx.ValidatorBtcPks, allTransactionsFromDb[i].ValidatorBtcPks))
 		require.Equal(t, storedTx.Pop, allTransactionsFromDb[i].Pop)
 		require.Equal(t, storedTx.StakerAddress, allTransactionsFromDb[i].StakerAddress)
 	}
@@ -297,7 +318,7 @@ func FuzzQuerySpendableTx(f *testing.F) {
 				storedTx.StakingTx,
 				storedTx.StakingOutputIndex,
 				storedTx.StakingTime,
-				storedTx.ValidatorBtcPk,
+				storedTx.ValidatorBtcPks,
 				storedTx.Pop,
 				stakerAddr, slashingTxChangeAddr,
 			)
