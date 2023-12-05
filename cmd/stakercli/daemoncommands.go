@@ -110,6 +110,11 @@ var stakeCmd = cli.Command{
 			Usage:    "BTC address of the staker in hex",
 			Required: true,
 		},
+		cli.StringFlag{
+			Name:     slashingTxChangeAddressFlag,
+			Usage:    "BTC address on which the change of the slashing transaction will go. Defaults to staker address.",
+			Required: false,
+		},
 		cli.Int64Flag{
 			Name:     stakingAmountFlag,
 			Usage:    "Staking amount in satoshis",
@@ -321,6 +326,9 @@ func stake(ctx *cli.Context) error {
 
 	stakerAddress := ctx.String(stakerAddressFlag)
 	slashingTxChangeAddress := ctx.String(slashingTxChangeAddressFlag)
+	if slashingTxChangeAddress == "" {
+		slashingTxChangeAddress = stakerAddress
+	}
 	stakingAmount := ctx.Int64(stakingAmountFlag)
 	validatorPks := ctx.StringSlice(validatorPksFlag)
 	stakingTimeBlocks := ctx.Int64(stakingTimeFlag)
