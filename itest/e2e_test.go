@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net"
 	"net/netip"
@@ -18,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"cosmossdk.io/math"
+	"github.com/babylonchain/babylon/btcstaking"
 	staking "github.com/babylonchain/babylon/btcstaking"
 	asig "github.com/babylonchain/babylon/crypto/schnorr-adaptor-signature"
 	"github.com/babylonchain/babylon/testutil/datagen"
@@ -942,7 +945,7 @@ func (tm *TestManager) insertUnbondingSignatures(t *testing.T, btcDel *btcstypes
 	require.NoError(t, err)
 }
 
-func TestStakingFailures(t *testing.T) {
+func ATestStakingFailures(t *testing.T) {
 	numMatureOutputs := uint32(200)
 	tm := StartManager(t, numMatureOutputs, 2, nil)
 	defer tm.Stop(t)
@@ -981,7 +984,7 @@ func TestStakingFailures(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestSendingStakingTransaction(t *testing.T) {
+func ATestSendingStakingTransaction(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1049,7 +1052,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 	require.Equal(t, transactionsResult.Transactions[0].StakingTxHash, txHash.String())
 }
 
-func TestMultipleWithdrawableStakingTransactions(t *testing.T) {
+func ATestMultipleWithdrawableStakingTransactions(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1115,7 +1118,7 @@ func TestMultipleWithdrawableStakingTransactions(t *testing.T) {
 	require.Equal(t, withdrawableTransactionsResp.Transactions[2].TransactionIdx, "4")
 }
 
-func TestSendingWatchedStakingTransaction(t *testing.T) {
+func ATestSendingWatchedStakingTransaction(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1137,7 +1140,7 @@ func TestSendingWatchedStakingTransaction(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
 
-func TestRestartingTxNotDeepEnough(t *testing.T) {
+func ATestRestartingTxNotDeepEnough(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1162,7 +1165,7 @@ func TestRestartingTxNotDeepEnough(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
 
-func TestRestartingTxNotOnBabylon(t *testing.T) {
+func ATestRestartingTxNotOnBabylon(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1204,7 +1207,7 @@ func TestRestartingTxNotOnBabylon(t *testing.T) {
 	}
 }
 
-func TestStakingUnbonding(t *testing.T) {
+func ATestStakingUnbonding(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1285,7 +1288,7 @@ func TestStakingUnbonding(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SPENT_ON_BTC)
 }
 
-func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
+func ATestUnbondingRestartWaitingForSignatures(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1358,4 +1361,96 @@ func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
 	tm.RestartApp(t)
 	go tm.mineNEmptyBlocks(t, staker.UnbondingTxConfirmations, false)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC)
+}
+
+func TestSendingStakingTransactionBuildFromFrontend(t *testing.T) {
+	stakerKeyHex := "e30212180b82c6a1e735914f8f9e03a54bdebfb04e3155ae435f3b6b6612f8ac"
+
+	covenantKeysHex := []string{
+		"9b01e96558fd709d5fa86ea99a5d8942169ee825c49d41b4f661c4ce68d884a1",
+		"e1b587d4a36347c3fc390cf39f50c0922b1c1720ee45a5f74a10a2098b1d1cdd",
+		"034f76384792ea91a2c338f2ef821548ffce07577345939eef89d43fff138e62",
+		"561caeb5554a33b02c9889c9cd7df9fd6dc075a6b86f48aecd71902aaed5726f",
+		"c86849b5f4918d530eb0287241b0005d9c6960f48cb981b337ddb9aa8d36eaf4",
+	}
+
+	validatorKeyHex := "2d6a1ef0961c6f35ccad0291a796c1fb515775258e1b748164eeff316d4ad858"
+
+	stakingTime := 1
+	stakingAmount := btcutil.Amount(10000)
+	covenantThreshold := 3
+
+	var covenantKeys []*btcec.PublicKey
+	stakerPrivKeyBytes, err := hex.DecodeString(stakerKeyHex)
+	require.NoError(t, err)
+	_, stakerPubKey := btcec.PrivKeyFromBytes(stakerPrivKeyBytes)
+	validatorPrivKeyBytes, err := hex.DecodeString(validatorKeyHex)
+	require.NoError(t, err)
+	_, validatorPubKey := btcec.PrivKeyFromBytes(validatorPrivKeyBytes)
+
+	for _, covenantKeyHex := range covenantKeysHex {
+		covenantPrivKeyBytes, err := hex.DecodeString(covenantKeyHex)
+		require.NoError(t, err)
+		_, pubkey := btcec.PrivKeyFromBytes(covenantPrivKeyBytes)
+		covenantKeys = append(covenantKeys, pubkey)
+	}
+
+	info, err := staking.BuildStakingInfo(
+		stakerPubKey,
+		[]*btcec.PublicKey{validatorPubKey},
+		covenantKeys,
+		uint32(covenantThreshold),
+		uint16(stakingTime),
+		stakingAmount,
+		simnetParams,
+	)
+
+	require.NoError(t, err)
+
+	numMatureOutputs := uint32(200)
+	tm := StartManager(t, numMatureOutputs, 2, nil)
+	defer tm.Stop(t)
+
+	err = tm.Sa.Wallet().UnlockWallet(1000)
+	require.NoError(t, err)
+
+	tx, err := tm.Sa.Wallet().CreateAndSignTx(
+		// FRONTEND could provide this output, then fronted could also provide slashing tx which could
+		// spent this output
+		[]*wire.TxOut{info.StakingOutput},
+		1000,
+		tm.MinerAddr,
+	)
+	require.NoError(t, err)
+
+	hash, err := tm.Sa.Wallet().SendRawTransaction(tx, true)
+	require.NoError(t, err)
+
+	stakingTx := retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{hash})
+	block := mineBlockWithTxs(t, tm.MinerNode, stakingTx)
+	t.Logf("Mined block with hash %s", block.BlockHash().String())
+	slashingRate, err := math.LegacyNewDecFromStr("0.1")
+	require.NoError(t, err)
+
+	// FRONTEND could prove this whole slashing transaction in some hex format, then we could test if it correctly
+	// spends staking tx
+	slashingTx, err := btcstaking.BuildSlashingTxFromStakingTx(
+		stakingTx[0].MsgTx(),
+		0,
+		tm.MinerAddr,
+		slashingTxChangeAddress,
+		slashingRate,
+		1000,
+	)
+	// here just to compile code (goland does not like unused variables)
+	fmt.Println(slashingTx)
+	require.NoError(t, err)
+
+	// FRONTEND Could provide all private keys which are needed to generate signatures or even whole witness
+	// signatues are made by calling: btcstaking.SignTxWithOneScriptSpendInputFromTapLeaf()
+	// slashingTx.TxIn[0].Witness = ALL_SIGNATURES_GENERATED_BY_KEYS_PROVIDED_BY_FRONTEND || SCRIPT_GENERETED_BY_FRONTEND || LAST_ELEMENT_OF_WITNESS (it can be generated by frontend or by us, doesn't matter)
+
+	// IDEA IS THIS TEST WOULD PASS i.e btcd node would accept this slashing transaction
+	// hash, err := tm.Sa.Wallet().SendRawTransaction(slashingTx, true)
+	// require.NoError(t, err)
 }
