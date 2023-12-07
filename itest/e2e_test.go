@@ -4,6 +4,7 @@
 package e2etest
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/hex"
@@ -14,12 +15,12 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	"cosmossdk.io/math"
 	"github.com/babylonchain/babylon/btcstaking"
 	staking "github.com/babylonchain/babylon/btcstaking"
 	asig "github.com/babylonchain/babylon/crypto/schnorr-adaptor-signature"
@@ -38,6 +39,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/btcutil/base58"
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -1363,8 +1365,42 @@ func ATestUnbondingRestartWaitingForSignatures(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC)
 }
 
+type SignatureInfo struct {
+	SignerPubKey *btcec.PublicKey
+	Signature    *schnorr.Signature
+}
+
+func NewSignatureInfo(
+	signerPubKey *btcec.PublicKey,
+	signature *schnorr.Signature,
+) *SignatureInfo {
+	return &SignatureInfo{
+		SignerPubKey: signerPubKey,
+		Signature:    signature,
+	}
+}
+
+// Helper function to sort all signatures in reverse lexicographical order of signing public keys
+// this way signatures are ready to be used in multisig witness with corresponding public keys
+func sortSignatureInfo(infos []*SignatureInfo) []*SignatureInfo {
+	sortedInfos := make([]*SignatureInfo, len(infos))
+	copy(sortedInfos, infos)
+	sort.SliceStable(sortedInfos, func(i, j int) bool {
+		keyIBytes := schnorr.SerializePubKey(sortedInfos[i].SignerPubKey)
+		keyJBytes := schnorr.SerializePubKey(sortedInfos[j].SignerPubKey)
+		return bytes.Compare(keyIBytes, keyJBytes) == 1
+	})
+
+	return sortedInfos
+}
+
 func TestSendingStakingTransactionBuildFromFrontend(t *testing.T) {
-	stakerKeyHex := "e30212180b82c6a1e735914f8f9e03a54bdebfb04e3155ae435f3b6b6612f8ac"
+	stakerBase58Key := base58.Decode("cQi3GAeodrXANiDK9opWfoSTbVUGoabxi1EqSNAE3B89CXqjUmAC")
+	payload := stakerBase58Key[:len(stakerBase58Key)-4]
+	stakerPrivKeyBytes := payload[1:]
+	stakerPrivKey, stakerPublicKey := btcec.PrivKeyFromBytes(stakerPrivKeyBytes)
+	fmt.Println("btcecPubKey")
+	fmt.Println(hex.EncodeToString(schnorr.SerializePubKey(stakerPublicKey)))
 
 	covenantKeysHex := []string{
 		"9b01e96558fd709d5fa86ea99a5d8942169ee825c49d41b4f661c4ce68d884a1",
@@ -1381,12 +1417,9 @@ func TestSendingStakingTransactionBuildFromFrontend(t *testing.T) {
 	covenantThreshold := 3
 
 	var covenantKeys []*btcec.PublicKey
-	stakerPrivKeyBytes, err := hex.DecodeString(stakerKeyHex)
-	require.NoError(t, err)
-	_, stakerPubKey := btcec.PrivKeyFromBytes(stakerPrivKeyBytes)
 	validatorPrivKeyBytes, err := hex.DecodeString(validatorKeyHex)
 	require.NoError(t, err)
-	_, validatorPubKey := btcec.PrivKeyFromBytes(validatorPrivKeyBytes)
+	validatorPrivKey, validatorPubKey := btcec.PrivKeyFromBytes(validatorPrivKeyBytes)
 
 	for _, covenantKeyHex := range covenantKeysHex {
 		covenantPrivKeyBytes, err := hex.DecodeString(covenantKeyHex)
@@ -1396,7 +1429,7 @@ func TestSendingStakingTransactionBuildFromFrontend(t *testing.T) {
 	}
 
 	info, err := staking.BuildStakingInfo(
-		stakerPubKey,
+		stakerPublicKey,
 		[]*btcec.PublicKey{validatorPubKey},
 		covenantKeys,
 		uint32(covenantThreshold),
@@ -1407,6 +1440,49 @@ func TestSendingStakingTransactionBuildFromFrontend(t *testing.T) {
 
 	require.NoError(t, err)
 
+	slashignPathInfo, err := info.SlashingPathSpendInfo()
+	require.NoError(t, err)
+
+	// Check that value in pk script matched the one from Govard
+	require.Equal(t,
+		"512097556c3957fd6151a5f2b7c88dfbdea2b419941c57f86340db67e2da7df620c6",
+		hex.EncodeToString(info.StakingOutput.PkScript),
+	)
+
+	// Woho it is valid!
+
+	// Check that:
+	// slashing tx is valid
+	// signature from staker on slashig tx is valid
+	signedSlashingTxHex := "02000000000101d18775e04c1176fd7cf6406d0b3d77001d2b2f4dc9891bf4ccdae7e14b2eae440000000000ffffffff012823000000000000160014aa6e2cb59074c3db4cfd8c51f31474d334eab0dc034029606741650e9a55aee03cd0be8506dca6db4211098a35541244ef3f2ae7c9ce21e6ebcc9beaa28a3ab0682d37554f2c316bf040c239581db0f1309e7dad4f7cf0202bf881f1e656160f00dd2b2474e4cfd72ef047ec2cedb3b0566504b6eebbc7abad20d3c48ce03d51cac577e34b8234f8c2f1b8dbed51d863931ce31f75b3878ec242ad201d714cb08475991d658da6772fb2ecc2d8847bc398555b68e0ef06df1b681de2ac203f685d9b5b667f7d9a52dd7658495c50a1ed365931d5a9d357068cf8eaf3b46aba2077a99c7bc44dc74c1aa20eaa34f454e371fd23408289fbe21d0d8fabdc4e180eba208b0129ce65c54a5d5956a907f8fca02a1973418046e08ae3bb99c00a76e9da9fba20c87712aae0d1ec554ed1a825f87de2f5c4549980acb9200b7a2bc8e3935c8533ba53a241c150929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac01152b9531f1bc19a2161ecdd805087eba6884c90619eb28fd7098f80128cc46200000000"
+
+	slashingTx, _, err := bbntypes.NewBTCTxFromHex(signedSlashingTxHex)
+	require.NoError(t, err)
+
+	stakerSignatureFromSlashingTransaction := slashingTx.TxIn[0].Witness[0]
+	require.Len(t, stakerSignatureFromSlashingTransaction, 64)
+	stakerSigOnSlashingTx, err := schnorr.ParseSignature(stakerSignatureFromSlashingTransaction)
+	require.NoError(t, err)
+
+	// check staker signature wchi chis in slashing tx is valid
+	err = btcstaking.VerifyTransactionSigWithOutput(
+		slashingTx,
+		info.StakingOutput,
+		slashignPathInfo.RevealedLeaf.Script,
+		stakerPublicKey,
+		stakerSigOnSlashingTx.Serialize(),
+	)
+	require.NoError(t, err)
+	// ! Woho it is valid!
+	// Now:
+	// send staking transactions
+	// point slashing tx to staking tx
+	// re-sign slashing tx with staker signature, validator signature and covenant signatures
+
+	// Now try to:
+	// 1. Send staking transacitons with our staking output
+	// 2. Send slashing transaction which spends staking output with signatures we generated and one received
+	// from frontend
 	numMatureOutputs := uint32(200)
 	tm := StartManager(t, numMatureOutputs, 2, nil)
 	defer tm.Stop(t)
@@ -1423,34 +1499,75 @@ func TestSendingStakingTransactionBuildFromFrontend(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	hash, err := tm.Sa.Wallet().SendRawTransaction(tx, true)
+	stakingTxHash, err := tm.Sa.Wallet().SendRawTransaction(tx, true)
 	require.NoError(t, err)
 
-	stakingTx := retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{hash})
+	stakingTx := retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{stakingTxHash})
 	block := mineBlockWithTxs(t, tm.MinerNode, stakingTx)
 	t.Logf("Mined block with hash %s", block.BlockHash().String())
-	slashingRate, err := math.LegacyNewDecFromStr("0.1")
-	require.NoError(t, err)
 
-	// FRONTEND could prove this whole slashing transaction in some hex format, then we could test if it correctly
-	// spends staking tx
-	slashingTx, err := btcstaking.BuildSlashingTxFromStakingTx(
-		stakingTx[0].MsgTx(),
-		0,
-		tm.MinerAddr,
-		slashingTxChangeAddress,
-		slashingRate,
-		1000,
+	slashingTx.TxIn[0].Witness = [][]byte{}
+	slashingTx.TxIn[0].PreviousOutPoint.Hash = *stakingTxHash
+
+	newStakerSigOnSlashing, err := btcstaking.SignTxWithOneScriptSpendInputFromScript(
+		slashingTx,
+		info.StakingOutput,
+		stakerPrivKey,
+		slashignPathInfo.RevealedLeaf.Script,
 	)
-	// here just to compile code (goland does not like unused variables)
-	fmt.Println(slashingTx)
 	require.NoError(t, err)
 
-	// FRONTEND Could provide all private keys which are needed to generate signatures or even whole witness
-	// signatues are made by calling: btcstaking.SignTxWithOneScriptSpendInputFromTapLeaf()
-	// slashingTx.TxIn[0].Witness = ALL_SIGNATURES_GENERATED_BY_KEYS_PROVIDED_BY_FRONTEND || SCRIPT_GENERETED_BY_FRONTEND || LAST_ELEMENT_OF_WITNESS (it can be generated by frontend or by us, doesn't matter)
+	validatorSigOnSlashingTx, err := btcstaking.SignTxWithOneScriptSpendInputFromScript(
+		slashingTx,
+		info.StakingOutput,
+		validatorPrivKey,
+		slashignPathInfo.RevealedLeaf.Script,
+	)
+	require.NoError(t, err)
 
-	// IDEA IS THIS TEST WOULD PASS i.e btcd node would accept this slashing transaction
-	// hash, err := tm.Sa.Wallet().SendRawTransaction(slashingTx, true)
-	// require.NoError(t, err)
+	var covenantSignatures []*SignatureInfo
+
+	for _, cvkHex := range covenantKeysHex {
+		covenantPrivKeyBytes, err := hex.DecodeString(cvkHex)
+		require.NoError(t, err)
+		privKey, pubkey := btcec.PrivKeyFromBytes(covenantPrivKeyBytes)
+		covenantSignatureOnSlashingTx, err := btcstaking.SignTxWithOneScriptSpendInputFromScript(
+			slashingTx,
+			info.StakingOutput,
+			privKey,
+			slashignPathInfo.RevealedLeaf.Script,
+		)
+		require.NoError(t, err)
+		covenantSignatures = append(covenantSignatures, NewSignatureInfo(pubkey, covenantSignatureOnSlashingTx))
+	}
+
+	sortedCovenantSignatures := sortSignatureInfo(covenantSignatures)
+
+	var covenantSigs [][]byte = make([][]byte, len(sortedCovenantSignatures))
+
+	for i, sigInfo := range sortedCovenantSignatures {
+		sig := sigInfo
+		covenantSigs[i] = sig.Signature.Serialize()
+	}
+
+	var signatures [][]byte
+
+	// Add all signatures to slashing transaciton
+	signatures = append(signatures, covenantSigs...)
+	signatures = append(signatures, validatorSigOnSlashingTx.Serialize())
+	signatures = append(signatures, newStakerSigOnSlashing.Serialize())
+
+	// wittness for slashing tx
+	witness, err := slashignPathInfo.CreateWitness(signatures)
+	require.NoError(t, err)
+	// set the witness
+	slashingTx.TxIn[0].Witness = witness
+
+	slashingTxHash, err := tm.Sa.Wallet().SendRawTransaction(slashingTx, true)
+	require.NoError(t, err)
+	fmt.Printf("Slashing tx hash %s\n", slashingTxHash.String())
+
+	// Mine block witn slashing tx
+	block1 := mineBlockWithTxs(t, tm.MinerNode, retrieveTransactionFromMempool(t, tm.MinerNode, []*chainhash.Hash{slashingTxHash}))
+	t.Logf("Mined block with hash %s", block1.BlockHash().String())
 }
