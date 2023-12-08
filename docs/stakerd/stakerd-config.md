@@ -37,7 +37,7 @@ $ ls /path/to/vald-home/
 If the `--config-file-dir` flag is not specified, then the default home directory
 will be used. For different operating systems, those are:
 
-- **MacOS** `~/Library/Application Support/Stakerd
+- **MacOS** `~/Library/Application Support/Stakerd`
 - **Linux** `~/.Stakerd`
 - **Windows** `C:\Users\<username>\AppData\Local\Stakerd`
 
