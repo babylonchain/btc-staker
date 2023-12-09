@@ -71,7 +71,7 @@ GRPCAddr = https://localhost:9090
 KeyringBackend = test
 
 # Directory to store staker keys in
-KeyDirectory = /Users/gurjotsingh/Library/Application Support/Stakerd
+KeyDirectory = /Users/<user>/Library/Application Support/Stakerd
 ```
 
 To change the babylon rpc/grpc address, you can set
