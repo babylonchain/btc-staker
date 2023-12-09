@@ -3,7 +3,7 @@
 Before proceeding, make sure you have installed the required binaries, configured and
 started the staker daemon and bitcoin node.
 
-The following guide will show how to stake BTC tokens, withdraw staking rewards and
+The following guide will show how to stake BTC tokens, withdraw staked BTC tokens and
 unbond BTC tokens.
 
 ### 1. Stake BTC tokens
@@ -22,6 +22,7 @@ $ stakercli daemon babylon-validators
     "total_validator_count": "1"
 }
 ```
+
 #### 2. Obtain BTC address from the BTC node that staker daemon is connected to:
 
 ```bash
@@ -39,37 +40,35 @@ $ stakercli daemon list-outputs
   ]
 }
 ```
+
 #### 3. Stake BTC tokens:
 
 ```bash
-# staker-address is the BTC address obtained from the BTC node 
-# connected to staker daemon using list-outputs cmd
-
-# validator-pks is the BTC public key of the validator 
-# obtained from babylon-validators cmd
-
+# Stake 1,000,000 sats to the validator with the specified BTC address and public key
 $ stakercli daemon stake \
   --staker-address bcrt1q56ehztys752uzg7fzpear08l5mw8w2kxgz7644 \
   --staking-amount 1000000 \
   --validator-pks 3328782c63404386d9cd905dba5a35975cba629e48192cea4a348937e865d312 \
   --staking-time 100
 
+# Transaction details
 {
   "tx_hash": "6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10"
 }
 ```
 
-### 2. Withdraw staking rewards:
-Withdrawal can only be done after the staking period is over.
+### 2. Withdraw staked funds:
 
 ```bash
+# Withdrawal can be done after the staking period is over
 $ stakercli daemon unstake \
---staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
+  --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
 
 ### 3. Unbond BTC tokens:
-Unbonding can be done anytime after staking.
 ```bash
+# Initiate the unbonding process with the staking transaction hash.
+# Unbonding can be done anytime, even before the staking period is over.
 $ stakercli daemon unbond \
---staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
+  --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
