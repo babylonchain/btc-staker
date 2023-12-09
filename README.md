@@ -34,9 +34,11 @@ the [official releases page](https://github.com/babylonchain/btcstaker/releases)
 
 ```bash  
 $ cd btc-staker # cd into the project directory$ git checkout <release-tag>```  
-  
-#### Building and installing the binary  
-  
+$ git checkout <release-tag>
+````  
+
+#### Building and installing the binary
+
 ```bash  
 # cd into the project directory  
 $ cd btc-staker   
@@ -67,10 +69,13 @@ $ ls build
 ```
 
 ## 3. Staker daemon configuration
+
 Follow the [stakerd configuration guide](docs/stakerd/stakerd-config.md).
 
 ## 4. Starting staker daemon
+
 Follow the [stakerd startup guide](docs/stakerd/stakerd-startup-guide.md).
 
 ## 5. Interacting with daemon using stakercli
+
 Follow the [stakercli usage guide](docs/interacting-with-daemon.md).
