@@ -8,7 +8,7 @@ unbond BTC tokens.
 
 ### 1. Stake BTC tokens
 
-#### 1. List current BTC validators on Babylon:
+#### 1. List active BTC validators on Babylon:
 
 ```bash
 $ stakercli daemon babylon-validators
@@ -60,6 +60,7 @@ $ stakercli daemon stake \
 ```
 
 ### 2. Withdraw staking rewards:
+Withdrawal can only be done after the staking period is over.
 
 ```bash
 $ stakercli daemon unstake \
@@ -67,7 +68,7 @@ $ stakercli daemon unstake \
 ```
 
 ### 3. Unbond BTC tokens:
-
+Unbonding can be done anytime after staking.
 ```bash
 $ stakercli daemon unbond \
 --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
