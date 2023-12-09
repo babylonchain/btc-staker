@@ -6,12 +6,12 @@
    binaries.
 
 2. **Staker Daemon Configuration:**
-   Follow the instructions in the [Staker Daemon Configuration](stakerd-config.md)
+   Follow the instructions in the [Staker Daemon Configuration](stakerd/stakerd-config.md)
    guide to configure the staker daemon.
 
 3. **Start Staker Daemon:**
    Follow the instructions in
-   the [Staker Daemon Startup Guide](stakerd-startup-guide.md)
+   the [Staker Daemon Startup Guide](stakerd/stakerd-startup-guide.md)
    guide to start the staker daemon and connect to a BTC node.
 
 ## Interacting with daemon
