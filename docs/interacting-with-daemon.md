@@ -10,6 +10,10 @@ unbond BTC tokens.
 
 #### 1. List active BTC validators on Babylon:
 
+Find the public key of the validator you want to stake to. You can stake to multiple
+validators by specifying public keys in the `--validator-pks` flag of the `stake`
+command.
+
 ```bash
 $ stakercli daemon babylon-validators
 {
@@ -24,6 +28,8 @@ $ stakercli daemon babylon-validators
 ```
 
 #### 2. Obtain BTC address from the BTC node that staker daemon is connected to:
+
+Find the BTC address that you want to stake from.
 
 ```bash
 $ stakercli daemon list-outputs
@@ -43,9 +49,12 @@ $ stakercli daemon list-outputs
 
 #### 3. Stake BTC tokens:
 
+Stake BTC tokens to the validator(s) of your choice. The `--staking-time` flag
+specifies the timelock of the staking transaction in BTC blocks.
+The `--staking-amount`
+flag specifies the amount of BTC tokens in satoshis to stake.
+
 ```bash
-# Stake 1,000,000 sats to the validator with the specified BTC address. You can stake to 
-# multiple validators by specifying multiple validator public keys.
 $ stakercli daemon stake \
   --staker-address bcrt1q56ehztys752uzg7fzpear08l5mw8w2kxgz7644 \
   --staking-amount 1000000 \
@@ -60,19 +69,20 @@ $ stakercli daemon stake \
 
 ### 2. Withdraw staked funds:
 
-```bash
-# Spends staking transaction and sends funds back to staker
-# this can only be done after timelock of staking transaction expires
+Spends staking transaction and sends funds back to staker this can only be done after
+timelock of staking transaction expires.
 
+```bash
 $ stakercli daemon unstake \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
 
 ### 3. Unbond BTC tokens:
+
+Initiates the unbonding flow: builds unbonding tx, send to babylon, wait for
+signatures, and send unbonding tx to BTC chain.
+
 ```bash
-# Initiates the unbonding flow: builds unbonding tx, send to babylon, wait for signatures,
-# and send unbonding tx to BTC chain.
-bitcoin
 $ stakercli daemon unbond \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
