@@ -3,15 +3,14 @@
 BTC-Staker is a powerful toolset designed for seamless Bitcoin staking, consisting of
 the stakerd Daemon and the stakercli Command-Line Interface (CLI).
 
-1. stakerd Daemon The stakerd Daemon manages connections to the Babylon and Bitcoin
+1. `stakerd` - The `stakerd` Daemon manages connections to the Babylon and Bitcoin
    nodes, handling all aspects of staking in the background for a hassle-free
    experience.
 
-2. stakercli Command-Line Interface (CLI)
-   The stakercli CLI facilitates interaction with the stakerd Daemon, enabling users
-   to stake funds, withdraw funds, unbond staked funds, retrieve the active validator
-   set in Babylon, and more. It serves as an intuitive interface for effortless
-   control and monitoring of your Bitcoin staking activities.
+2. `stakercli` - The `stakercli` facilitates interaction with the `stakerd` Daemon,
+   enabling users to stake funds, withdraw funds, unbond staked funds, retrieve the
+   active validator set in Babylon, and more. It serves as an intuitive interface for
+   effortless control and monitoring of your Bitcoin staking activities.
 
 ## 2. Installation
 
@@ -66,3 +65,12 @@ $ ls build
     ├── stakerd
     └── stakercli
 ```
+
+## 3. Staker daemon configuration
+Follow the [stakerd configuration guide](docs/stakerd/stakerd-config.md).
+
+## 4. Starting staker daemon
+Follow the [stakerd startup guide](docs/stakerd/stakerd-startup-guide.md).
+
+## 5. Interacting with daemon using stakercli
+Follow the [stakercli usage guide](docs/interacting-with-daemon.md).
