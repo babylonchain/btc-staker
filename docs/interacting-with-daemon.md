@@ -44,7 +44,8 @@ $ stakercli daemon list-outputs
 #### 3. Stake BTC tokens:
 
 ```bash
-# Stake 1,000,000 sats to the validator with the specified BTC address and public key
+# Stake 1,000,000 sats to the validator with the specified BTC address. You can stake to 
+# multiple validators by specifying multiple validator public keys.
 $ stakercli daemon stake \
   --staker-address bcrt1q56ehztys752uzg7fzpear08l5mw8w2kxgz7644 \
   --staking-amount 1000000 \
@@ -60,7 +61,7 @@ $ stakercli daemon stake \
 ### 2. Withdraw staked funds:
 
 ```bash
-# Withdrawal can be done after the staking period is over
+# Withdrawal can be only done after the staking period is over
 $ stakercli daemon unstake \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
