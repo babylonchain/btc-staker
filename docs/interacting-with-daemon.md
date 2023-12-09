@@ -1,7 +1,20 @@
-# Interacting with daemon
+## Prerequisites
 
-Before proceeding, make sure you have installed the required binaries, configured and
-started the staker daemon and bitcoin node.
+1. **Install Binaries:**
+   Follow the instructions in
+   the [installation section](../../README.md#2-installation) to install the required
+   binaries.
+
+2. **Staker Daemon Configuration:**
+   Follow the instructions in the [Staker Daemon Configuration](stakerd-config.md)
+   guide to configure the staker daemon.
+
+3. **Start Staker Daemon:**
+   Follow the instructions in
+   the [Staker Daemon Startup Guide](stakerd-startup-guide.md)
+   guide to start the staker daemon and connect to a BTC node.
+
+## Interacting with daemon
 
 The following guide will show how to stake BTC tokens, spend staked BTC tokens after
 timelock expiration and unbond BTC tokens.
