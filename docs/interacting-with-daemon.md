@@ -3,8 +3,8 @@
 Before proceeding, make sure you have installed the required binaries, configured and
 started the staker daemon and bitcoin node.
 
-The following guide will show how to stake BTC tokens, withdraw staked BTC tokens and
-unbond BTC tokens.
+The following guide will show how to stake BTC tokens, spend staked BTC tokens after
+timelock expiration and unbond BTC tokens.
 
 ### 1. Stake BTC tokens
 
@@ -67,7 +67,7 @@ $ stakercli daemon stake \
 }
 ```
 
-### 2. Withdraw staked funds:
+### 2. Spend staked funds:
 
 Spends staking transaction and sends funds back to staker this can only be done after
 timelock of staking transaction expires.
