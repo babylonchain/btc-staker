@@ -61,15 +61,18 @@ $ stakercli daemon stake \
 ### 2. Withdraw staked funds:
 
 ```bash
-# Withdrawal can be only done after the staking period is over
+# Spends staking transaction and sends funds back to staker
+# this can only be done after timelock of staking transaction expires
+
 $ stakercli daemon unstake \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
 
 ### 3. Unbond BTC tokens:
 ```bash
-# Initiate the unbonding process with the staking transaction hash.
-# Unbonding can be done anytime, even before the staking period is over.
+# Initiates the unbonding flow: builds unbonding tx, send to babylon, wait for signatures,
+# and send unbonding tx to BTC chain.
+bitcoin
 $ stakercli daemon unbond \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
