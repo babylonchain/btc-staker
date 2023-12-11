@@ -81,7 +81,7 @@ $ stakercli daemon stake \
 }
 ```
 
-Note: You can also self delegate i.e. stake to your own validator. Follow
+**Note**: You can self delegate i.e. stake to your own validator. Follow
 the [validator registration guide](https://github.com/babylonchain/btc-validator/blob/dev/docs/interacting-with-daemons.md#1-creating-a-btc-validator)
 to create and register a validator to Babylon. Once the validator is registered, you
 can use your validator BTC public key in the `--validator-pks` flag of the `stake`
