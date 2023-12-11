@@ -54,7 +54,7 @@ in [Create a Babylon keyring with funds](#create-a-babylon-keyring-with-funds)
 ```bash
 [babylon]
 # Name of the key in the keyring to use for signing transactions
-Key = node0
+Key = btc-staker
 
 # Chain id of the chain (Babylon)
 ChainID = chain-test
@@ -84,19 +84,19 @@ GRPCAddr = https://grpc.devnet.babylonchain.io:443
 #### BTC Node configuration
 
 ```bash
+[chain]
+# btc network to run on
+Network = regtest
+
 [btcnodebackend]
 # type of node to connect to {bitcoind, btcd}
-Nodetype = btcd
+Nodetype = bitcoind
 
 # type of wallet to connect to {bitcoind, btcwallet}
-WalletType = btcwallet
+WalletType = bitcoind
 
 # fee mode to use for fee estimation {static, dynamic}. In dynamic mode fee will be estimated using backend node
 FeeMode = static
-
-[chain]
-# btc network to run on
-Network = simnet
 ```
 
 #### BTC Wallet configuration
@@ -104,7 +104,7 @@ Network = simnet
 ```bash
 [walletconfig]
 # name of the wallet to sign Bitcoin transactions
-WalletName = wallet
+WalletName = btcstaker
 
 # passphrase to unlock the wallet
 WalletPass = walletpass
