@@ -33,7 +33,7 @@ You can choose a specific version from
 the [official releases page](https://github.com/babylonchain/btcstaker/releases)
 
 ```bash  
-$ cd btc-staker # cd into the project directory$ git checkout <release-tag>```  
+$ cd btc-staker # cd into the project directory
 $ git checkout <release-tag>
 ````  
 
