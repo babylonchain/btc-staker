@@ -6,7 +6,8 @@
    binaries.
 
 2. **Staker Daemon Configuration:**
-   Follow the instructions in the [Staker Daemon Configuration](stakerd/stakerd-config.md)
+   Follow the instructions in
+   the [Staker Daemon Configuration](stakerd/stakerd-config.md)
    guide to configure the staker daemon.
 
 3. **Start Staker Daemon:**
@@ -79,6 +80,12 @@ $ stakercli daemon stake \
   "tx_hash": "6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10"
 }
 ```
+
+Note: You can also self delegate i.e. stake to your own validator. Follow
+the [validator registration guide](https://github.com/babylonchain/btc-validator/blob/dev/docs/interacting-with-daemons.md#1-creating-a-btc-validator)
+to create and register a validator to Babylon. Once the validator is registered, you
+can use your validator BTC public key in the `--validator-pks` flag of the `stake`
+command.
 
 ### 2. Spend staked funds:
 
