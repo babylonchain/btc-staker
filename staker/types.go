@@ -56,44 +56,18 @@ func babylonCovSigsToDbSigSigs(covSigs []cl.CovenantSignatureInfo) []stakerdb.Pu
 	return sigSigs
 }
 
-type SignatureInfo struct {
-	SignerPubKey *btcec.PublicKey
-	Signature    *schnorr.Signature
-}
-
-func NewSignatureInfo(
-	signerPubKey *btcec.PublicKey,
-	signature *schnorr.Signature,
-) *SignatureInfo {
-	return &SignatureInfo{
-		SignerPubKey: signerPubKey,
-		Signature:    signature,
-	}
-}
-
 // Helper function to sort all signatures in reverse lexicographical order of signing public keys
 // this way signatures are ready to be used in multisig witness with corresponding public keys
-func sortSignatureInfo(infos []*SignatureInfo) []*SignatureInfo {
-	sortedInfos := make([]*SignatureInfo, len(infos))
+func sortPubKeysForWitness(infos []*btcec.PublicKey) []*btcec.PublicKey {
+	sortedInfos := make([]*btcec.PublicKey, len(infos))
 	copy(sortedInfos, infos)
 	sort.SliceStable(sortedInfos, func(i, j int) bool {
-		keyIBytes := schnorr.SerializePubKey(sortedInfos[i].SignerPubKey)
-		keyJBytes := schnorr.SerializePubKey(sortedInfos[j].SignerPubKey)
+		keyIBytes := schnorr.SerializePubKey(sortedInfos[i])
+		keyJBytes := schnorr.SerializePubKey(sortedInfos[j])
 		return bytes.Compare(keyIBytes, keyJBytes) == 1
 	})
 
 	return sortedInfos
-}
-
-func pubKeysToWitnessSortedSigInfo(pubKeys []*btcec.PublicKey) []*SignatureInfo {
-	sigInfos := make([]*SignatureInfo, len(pubKeys))
-
-	for i, pubKey := range pubKeys {
-		key := pubKey
-		sigInfos[i] = NewSignatureInfo(key, nil)
-	}
-
-	return sortSignatureInfo(sigInfos)
 }
 
 func pubKeyToString(pubKey *btcec.PublicKey) string {
@@ -111,13 +85,14 @@ func createWitnessSignaturesForPubKeys(
 		receivedSignatures[pubKeyToString(pair.PubKey)] = pair.Signature
 	}
 
-	sortedInfo := pubKeysToWitnessSortedSigInfo(covenantPubKeys)
+	sortedPubKeys := sortPubKeysForWitness(covenantPubKeys)
 
 	// this makes sure number of signatures is equal to number of public keys
-	signatures := make([]*schnorr.Signature, len(sortedInfo))
+	signatures := make([]*schnorr.Signature, len(sortedPubKeys))
 
-	for i, info := range sortedInfo {
-		signature, found := receivedSignatures[pubKeyToString(info.SignerPubKey)]
+	for i, key := range sortedPubKeys {
+		k := key
+		signature, found := receivedSignatures[pubKeyToString(k)]
 
 		if found {
 			// we only fill signatures that we have received
