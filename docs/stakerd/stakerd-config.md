@@ -87,7 +87,7 @@ GRPCAddr = https://grpc.devnet.babylonchain.io:443
 ```bash
 [chain]
 # btc network to run on
-Network = regtest
+Network = testnet
 
 [btcnodebackend]
 # type of node to connect to {bitcoind, btcd}
