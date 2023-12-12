@@ -31,7 +31,7 @@ $ stakercli admin dump-config --config-file-dir /path/to/stakerd-home/
 After initialization, the home directory will have the following structure
 
 ```bash
-$ ls /path/to/vald-home/
+$ ls /path/to/stakerd-home/
     ├── stakerd.conf
 ```
 
