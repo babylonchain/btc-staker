@@ -974,8 +974,7 @@ func (app *StakerApp) sendUnbondingTxToBtcWithWitness(
 		privkey,
 		storedTx,
 		unbondingData,
-		params.CovenantPks,
-		params.CovenantQuruomThreshold,
+		params,
 		app.network,
 	)
 

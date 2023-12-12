@@ -117,13 +117,19 @@ type BabylonNodeHandler struct {
 	babylonNode *babylonNode
 }
 
-func NewBabylonNodeHandler(covenantPk *btcec.PublicKey) (*BabylonNodeHandler, error) {
+func NewBabylonNodeHandler(
+	covenantPk1 *btcec.PublicKey,
+	covenantPk2 *btcec.PublicKey,
+	covenantPk3 *btcec.PublicKey,
+) (*BabylonNodeHandler, error) {
 	testDir, err := baseDirBabylondir()
 	if err != nil {
 		return nil, err
 	}
 
-	pubBabylon := types.NewBIP340PubKeyFromBTCPK(covenantPk)
+	pubBabylon1 := types.NewBIP340PubKeyFromBTCPK(covenantPk1)
+	pubBabylon2 := types.NewBIP340PubKeyFromBTCPK(covenantPk2)
+	pubBabylon3 := types.NewBIP340PubKeyFromBTCPK(covenantPk3)
 
 	initTestnetCmd := exec.Command(
 		"babylond",
@@ -136,8 +142,8 @@ func NewBabylonNodeHandler(covenantPk *btcec.PublicKey) (*BabylonNodeHandler, er
 		"--btc-finalization-timeout=4",
 		"--btc-confirmation-depth=2",
 		"--additional-sender-account",
-		"--covenant-quorum=1",
-		fmt.Sprintf("--covenant-pks=%s", pubBabylon.MarshalHex()),
+		"--covenant-quorum=2",
+		fmt.Sprintf("--covenant-pks=%s,%s,%s", pubBabylon1.MarshalHex(), pubBabylon2.MarshalHex(), pubBabylon3.MarshalHex()),
 	)
 
 	var stderr bytes.Buffer

@@ -85,19 +85,44 @@ func sortSignatureInfo(infos []*SignatureInfo) []*SignatureInfo {
 	return sortedInfos
 }
 
-func pubKeySigPairsToSortedSignatures(pairs []stakerdb.PubKeySigPair) []*schnorr.Signature {
-	var sigInfos []*SignatureInfo = make([]*SignatureInfo, len(pairs))
+func pubKeysToWitnessSortedSigInfo(pubKeys []*btcec.PublicKey) []*SignatureInfo {
+	sigInfos := make([]*SignatureInfo, len(pubKeys))
 
-	for i, pair := range pairs {
-		sigInfos[i] = NewSignatureInfo(pair.PubKey, pair.Signature)
+	for i, pubKey := range pubKeys {
+		key := pubKey
+		sigInfos[i] = NewSignatureInfo(key, nil)
 	}
 
-	sorted := sortSignatureInfo(sigInfos)
+	return sortSignatureInfo(sigInfos)
+}
 
-	signatures := make([]*schnorr.Signature, len(sorted))
+func pubKeyToString(pubKey *btcec.PublicKey) string {
+	return hex.EncodeToString(schnorr.SerializePubKey(pubKey))
+}
 
-	for i, sigInfo := range sorted {
-		signatures[i] = sigInfo.Signature
+func createWitnessSignaturesForPubKeys(
+	covenantPubKeys []*btcec.PublicKey,
+	receivedSignaturePairs []stakerdb.PubKeySigPair,
+) []*schnorr.Signature {
+	// create map of received signatures
+	receivedSignatures := make(map[string]*schnorr.Signature)
+
+	for _, pair := range receivedSignaturePairs {
+		receivedSignatures[pubKeyToString(pair.PubKey)] = pair.Signature
+	}
+
+	sortedInfo := pubKeysToWitnessSortedSigInfo(covenantPubKeys)
+
+	// this makes sure number of signatures is equal to number of public keys
+	signatures := make([]*schnorr.Signature, len(sortedInfo))
+
+	for i, info := range sortedInfo {
+		signature, found := receivedSignatures[pubKeyToString(info.SignerPubKey)]
+
+		if found {
+			// we only fill signatures that we have received
+			signatures[i] = signature
+		}
 	}
 
 	return signatures
@@ -413,8 +438,7 @@ func createWitnessToSendUnbondingTx(
 	stakerPrivKey *btcec.PrivateKey,
 	storedTx *stakerdb.StoredTransaction,
 	unbondingData *stakerdb.UnbondingStoreData,
-	covenantPublicKeys []*btcec.PublicKey,
-	covenantThreshold uint32,
+	params *cl.StakingParams,
 	net *chaincfg.Params,
 ) (wire.TxWitness, error) {
 	if storedTx.State < proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED {
@@ -425,15 +449,15 @@ func createWitnessToSendUnbondingTx(
 		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain unbonding transaction")
 	}
 
-	if len(unbondingData.CovenantSignatures) == 0 {
-		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain all necessary signatures")
+	if len(unbondingData.CovenantSignatures) < int(params.CovenantQuruomThreshold) {
+		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Unbonding data does not contain all necessary signatures. Required: %d, received: %d", params.CovenantQuruomThreshold, len(unbondingData.CovenantSignatures))
 	}
 
 	stakingInfo, err := staking.BuildStakingInfo(
 		stakerPrivKey.PubKey(),
 		storedTx.ValidatorBtcPks,
-		covenantPublicKeys,
-		covenantThreshold,
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
 		storedTx.StakingTime,
 		btcutil.Amount(storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex].Value),
 		net,
@@ -460,7 +484,10 @@ func createWitnessToSendUnbondingTx(
 		return nil, err
 	}
 
-	covenantSigantures := pubKeySigPairsToSortedSignatures(unbondingData.CovenantSignatures)
+	covenantSigantures := createWitnessSignaturesForPubKeys(
+		params.CovenantPks,
+		unbondingData.CovenantSignatures,
+	)
 
 	return unbondingPathInfo.CreateUnbondingPathWitness(
 		covenantSigantures,

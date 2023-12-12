@@ -432,6 +432,18 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 		return nil, err
 	}
 
+	// check this early than covenant config makes sense, so that rest of the
+	// code can assume that:
+	// 1. covenant quorum is less or equal to number of covenant pks
+	// 2. covenant pks are not empty
+	if len(response.Params.CovenantPks) == 0 {
+		return nil, fmt.Errorf("empty list of covenant pks: %w", ErrInvalidValueReceivedFromBabylonNode)
+	}
+
+	if response.Params.CovenantQuorum > uint32(len(response.Params.CovenantPks)) {
+		return nil, fmt.Errorf("covenant quorum is bigger than number of covenant pks: %w", ErrInvalidValueReceivedFromBabylonNode)
+	}
+
 	var covenantPks []*btcec.PublicKey
 
 	for _, covenantPk := range response.Params.CovenantPks {
@@ -670,19 +682,18 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 		var udi *UndelegationInfo = nil
 
 		if resp.UndelegationInfo != nil {
-			var coventSigInfos []CovenantSignatureInfo = make([]CovenantSignatureInfo, 0)
+			var coventSigInfos []CovenantSignatureInfo
 
 			for _, covenantSigInfo := range resp.UndelegationInfo.CovenantUnbondingSigList {
-				sig, err := covenantSigInfo.Sig.ToBTCSig()
+				covSig := covenantSigInfo
+				sig, err := covSig.Sig.ToBTCSig()
 
 				if err != nil {
-					if err != nil {
-						return retry.Unrecoverable(fmt.Errorf("malformed covenant sig: %s : %w", err.Error(),
-							ErrInvalidValueReceivedFromBabylonNode))
-					}
+					return retry.Unrecoverable(fmt.Errorf("malformed covenant sig: %s : %w", err.Error(),
+						ErrInvalidValueReceivedFromBabylonNode))
 				}
 
-				pk, err := covenantSigInfo.Pk.ToBTCPK()
+				pk, err := covSig.Pk.ToBTCPK()
 
 				if err != nil {
 					return retry.Unrecoverable(fmt.Errorf("malformed covenant pk: %s : %w", err.Error(),
