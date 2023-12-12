@@ -91,6 +91,8 @@ command.
 The staker can withdraw the staked funds after the timelock of the staking
 transaction expires.
 
+`--staking-transaction-hash` is the hash from response of `stake` command.
+
 ```bash
 $ stakercli daemon unstake \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
@@ -98,8 +100,14 @@ $ stakercli daemon unstake \
 
 ### 3. Unbond staked funds
 
-Initiates the unbonding flow: builds unbonding tx, send to babylon, wait for
-signatures, and send unbonding tx to BTC chain.
+The `unbond` cmd initiates unbonding flow which involves communication with the
+Babylon chain, Covenant emulators, and the BTC chain. It
+
+1. Build the unbonding transaction and send it to the Babylon chain
+2. Wait for the signatures from the covenant emulators
+3. Send the unbonding transaction to the BTC chain
+
+`--staking-transaction-hash` is the hash from response of `stake` command.
 
 ```bash
 $ stakercli daemon unbond \
