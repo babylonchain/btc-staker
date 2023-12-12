@@ -161,6 +161,7 @@ func createDelegationData(
 	slashingTxSignature *schnorr.Signature,
 	babylonPubKey *secp256k1.PubKey,
 	stakingTxInclusionProof []byte,
+	undelegationData *cl.UndelegationData,
 ) *cl.DelegationData {
 	inclusionBlockHash := inclusionBlock.BlockHash()
 
@@ -177,6 +178,7 @@ func createDelegationData(
 		SlashingTransactionSig:               slashingTxSignature,
 		BabylonPk:                            babylonPubKey,
 		BabylonPop:                           storedTx.Pop,
+		Ud:                                   undelegationData,
 	}
 
 	return &dg
@@ -413,7 +415,7 @@ func createWitnessToSendUnbondingTx(
 	params *cl.StakingParams,
 	net *chaincfg.Params,
 ) (wire.TxWitness, error) {
-	if storedTx.State < proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED {
+	if storedTx.State < proto.TransactionState_DELEGATION_ACTIVE {
 		return nil, fmt.Errorf("cannot create witness for sending unbonding tx. Staking transaction is in invalid state: %s", storedTx.State)
 	}
 

@@ -700,9 +700,24 @@ func (c *TrackedTransactionStore) SetTxConfirmed(
 	return c.setTxState(txHash, setTxConfirmed)
 }
 
-func (c *TrackedTransactionStore) SetTxSentToBabylon(txHash *chainhash.Hash) error {
+func (c *TrackedTransactionStore) SetTxSentToBabylon(
+	txHash *chainhash.Hash,
+	unbondingTx *wire.MsgTx,
+	unbondingTime uint16,
+) error {
+	update, err := newInitialUnbondingTxData(unbondingTx, unbondingTime)
+
+	if err != nil {
+		return err
+	}
+
 	setTxSentToBabylon := func(tx *proto.TrackedTransaction) error {
+		if tx.UnbondingTxData != nil {
+			return fmt.Errorf("cannot set unbonding started, because unbonding tx data already exists: %w", ErrInvalidUnbondingDataUpdate)
+		}
+
 		tx.State = proto.TransactionState_SENT_TO_BABYLON
+		tx.UnbondingTxData = update
 		return nil
 	}
 
@@ -718,31 +733,6 @@ func (c *TrackedTransactionStore) SetTxSpentOnBtc(txHash *chainhash.Hash) error 
 	return c.setTxState(txHash, setTxSpentOnBtc)
 }
 
-func (c *TrackedTransactionStore) SetTxUnbondingStarted(
-	txHash *chainhash.Hash,
-	unbondingTx *wire.MsgTx,
-	unbondingTime uint16,
-) error {
-	update, err := newInitialUnbondingTxData(unbondingTx, unbondingTime)
-
-	if err != nil {
-		return err
-	}
-
-	setUnbondingStarted := func(tx *proto.TrackedTransaction) error {
-		if tx.UnbondingTxData != nil {
-			return fmt.Errorf("cannot set unbonding started, because unbonding tx data already exists: %w", ErrInvalidUnbondingDataUpdate)
-		}
-
-		tx.State = proto.TransactionState_UNBONDING_STARTED
-		tx.UnbondingTxData = update
-
-		return nil
-	}
-
-	return c.setTxState(txHash, setUnbondingStarted)
-}
-
 func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 	txHash *chainhash.Hash,
 	covenantSignatures []PubKeySigPair,
@@ -756,7 +746,7 @@ func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 			return fmt.Errorf("cannot set unbonding signatures received, because unbonding signatures already exist: %w", ErrInvalidUnbondingDataUpdate)
 		}
 
-		tx.State = proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED
+		tx.State = proto.TransactionState_DELEGATION_ACTIVE
 		tx.UnbondingTxData.CovenantSignatures = covenantSigsToProto(covenantSignatures)
 		return nil
 	}

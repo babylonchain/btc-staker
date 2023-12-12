@@ -47,7 +47,7 @@ type BabylonClient interface {
 	SingleKeyKeyring
 	Params() (*StakingParams, error)
 	Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error)
-	Undelegate(ud *UndelegationData) (*pv.RelayerTxResponse, error)
+	Undelegate(req *UndelegationRequest) (*pv.RelayerTxResponse, error)
 	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
 	QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error)
 	QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error)
@@ -136,7 +136,8 @@ func (m *MockBabylonClient) QueryDelegationInfo(stakingTxHash *chainhash.Hash) (
 	return nil, fmt.Errorf("delegation do not exist")
 }
 
-func (m *MockBabylonClient) Undelegate(ud *UndelegationData) (*pv.RelayerTxResponse, error) {
+func (m *MockBabylonClient) Undelegate(
+	req *UndelegationRequest) (*pv.RelayerTxResponse, error) {
 	return &pv.RelayerTxResponse{Code: 0}, nil
 }
 

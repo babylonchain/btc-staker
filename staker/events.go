@@ -20,7 +20,6 @@ type StakingEvent interface {
 var _ StakingEvent = (*stakingRequestedEvent)(nil)
 var _ StakingEvent = (*stakingTxBtcConfirmedEvent)(nil)
 var _ StakingEvent = (*delegationSubmittedToBabylonEvent)(nil)
-var _ StakingEvent = (*undelegationSubmittedToBabylonEvent)(nil)
 var _ StakingEvent = (*unbondingTxSignaturesConfirmedOnBabylonEvent)(nil)
 var _ StakingEvent = (*unbondingTxConfirmedOnBtcEvent)(nil)
 var _ StakingEvent = (*spendStakeTxConfirmedOnBtcEvent)(nil)
@@ -149,6 +148,8 @@ func (event *stakingTxBtcConfirmedEvent) EventDesc() string {
 
 type delegationSubmittedToBabylonEvent struct {
 	stakingTxHash chainhash.Hash
+	unbondingTx   *wire.MsgTx
+	unbondingTime uint16
 }
 
 func (event *delegationSubmittedToBabylonEvent) EventId() chainhash.Hash {
@@ -157,21 +158,6 @@ func (event *delegationSubmittedToBabylonEvent) EventId() chainhash.Hash {
 
 func (event *delegationSubmittedToBabylonEvent) EventDesc() string {
 	return "DELEGATION_SUBMITTED_TO_BABYLON"
-}
-
-type undelegationSubmittedToBabylonEvent struct {
-	stakingTxHash        chainhash.Hash
-	unbondingTransaction *wire.MsgTx
-	unbondingTime        uint16
-	successChan          chan *chainhash.Hash
-}
-
-func (event *undelegationSubmittedToBabylonEvent) EventId() chainhash.Hash {
-	return event.stakingTxHash
-}
-
-func (event *undelegationSubmittedToBabylonEvent) EventDesc() string {
-	return "UNDELEGATION_SUBMITTED_TO_BABYLON"
 }
 
 type unbondingTxSignaturesConfirmedOnBabylonEvent struct {

@@ -36,17 +36,16 @@ func newSendDelegationRequest(
 type sendUndelegationRequest struct {
 	utils.Request[*pv.RelayerTxResponse]
 	stakingTxHash *chainhash.Hash
-	ud            *UndelegationData
+	ur            *UndelegationRequest
 }
 
 func newSendUndelegationRequest(
-	ud *UndelegationData,
-	stakingTxHash *chainhash.Hash,
+	ur *UndelegationRequest,
 ) sendUndelegationRequest {
 	return sendUndelegationRequest{
 		Request:       utils.NewRequest[*pv.RelayerTxResponse](),
-		ud:            ud,
-		stakingTxHash: stakingTxHash,
+		ur:            ur,
+		stakingTxHash: &ur.StakingTxHash,
 	}
 }
 
@@ -180,7 +179,7 @@ func (m *BabylonMsgSender) handleSentToBabylon() {
 				continue
 			}
 
-			txResp, err := m.cl.Undelegate(req.ud)
+			txResp, err := m.cl.Undelegate(req.ur)
 
 			if err != nil {
 				if errors.Is(err, ErrInvalidBabylonExecution) {
@@ -225,11 +224,12 @@ func (m *BabylonMsgSender) SendDelegation(
 
 }
 
+// TODO: Curenttly not used.
+// We may introduce the option for staker to self report unbonding tx to babylon.
 func (m *BabylonMsgSender) SendUndelegation(
-	ud *UndelegationData,
-	stakingTxHash *chainhash.Hash,
+	ur *UndelegationRequest,
 ) (*pv.RelayerTxResponse, error) {
-	req := newSendUndelegationRequest(ud, stakingTxHash)
+	req := newSendUndelegationRequest(ur)
 
 	return utils.SendRequestAndWaitForResponseOrQuit[*pv.RelayerTxResponse, *sendUndelegationRequest](
 		&req,

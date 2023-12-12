@@ -217,7 +217,7 @@ func TestStateTransitions(t *testing.T) {
 	require.Equal(t, height, storedTx.StakingTxConfirmationInfo.Height)
 
 	// Sent to Babylon
-	err = s.SetTxSentToBabylon(&txHash)
+	err = s.SetTxSentToBabylon(&txHash, tx.StakingTx, tx.StakingTime)
 	require.NoError(t, err)
 	storedTx, err = s.GetTransaction(&txHash)
 	require.NoError(t, err)
@@ -229,6 +229,9 @@ func TestStateTransitions(t *testing.T) {
 	storedTx, err = s.GetTransaction(&txHash)
 	require.NoError(t, err)
 	require.Equal(t, proto.TransactionState_SPENT_ON_BTC, storedTx.State)
+	require.NotNil(t, storedTx.UnbondingTxData)
+	require.Equal(t, tx.StakingTx, storedTx.UnbondingTxData.UnbondingTx)
+	require.Equal(t, tx.StakingTime, storedTx.UnbondingTxData.UnbondingTime)
 }
 
 func TestPaginator(t *testing.T) {
@@ -357,18 +360,7 @@ func FuzzQuerySpendableTx(f *testing.F) {
 
 		for _, storedTx := range stored {
 			txHash := storedTx.StakingTx.TxHash()
-			err := s.SetTxSentToBabylon(&txHash)
-			require.NoError(t, err)
-		}
-
-		storedResult, err = s.QueryStoredTransactions(filteredQuery)
-		require.NoError(t, err)
-		require.Len(t, storedResult.Transactions, len(hashesWithExpiredTimeLock))
-		require.Equal(t, storedResult.Total, uint64(maxCreatedTx))
-
-		for _, storedTx := range stored {
-			txHash := storedTx.StakingTx.TxHash()
-			err := s.SetTxUnbondingStarted(
+			err := s.SetTxSentToBabylon(
 				&txHash,
 				storedTx.StakingTx,
 				storedTx.StakingTime,
@@ -378,7 +370,8 @@ func FuzzQuerySpendableTx(f *testing.F) {
 
 		storedResult, err = s.QueryStoredTransactions(filteredQuery)
 		require.NoError(t, err)
-		require.Len(t, storedResult.Transactions, 0)
+		require.Len(t, storedResult.Transactions, len(hashesWithExpiredTimeLock))
+		require.Equal(t, storedResult.Total, uint64(maxCreatedTx))
 
 		for _, storedTx := range stored {
 			txHash := storedTx.StakingTx.TxHash()
