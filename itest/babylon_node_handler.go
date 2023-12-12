@@ -136,7 +136,8 @@ func NewBabylonNodeHandler(covenantPk *btcec.PublicKey) (*BabylonNodeHandler, er
 		"--btc-finalization-timeout=4",
 		"--btc-confirmation-depth=2",
 		"--additional-sender-account",
-		fmt.Sprintf("--covenant-pk=%s", pubBabylon.MarshalHex()),
+		"--covenant-quorum=1",
+		fmt.Sprintf("--covenant-pks=%s", pubBabylon.MarshalHex()),
 	)
 
 	var stderr bytes.Buffer

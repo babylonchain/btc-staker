@@ -1845,8 +1845,8 @@ func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash
 		return nil, nil, fmt.Errorf("cannot spend staking output. Error building signature: %w", err)
 	}
 
-	witness, err := spendStakeTxInfo.fundingOutputSpendInfo.CreateWitness(
-		[][]byte{stakerSig.Serialize()},
+	witness, err := spendStakeTxInfo.fundingOutputSpendInfo.CreateTimeLockPathWitness(
+		stakerSig,
 	)
 
 	if err != nil {

@@ -1,8 +1,10 @@
 package staker
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
+	"sort"
 
 	sdkmath "cosmossdk.io/math"
 	staking "github.com/babylonchain/babylon/btcstaking"
@@ -54,16 +56,45 @@ func babylonCovSigsToDbSigSigs(covSigs []cl.CovenantSignatureInfo) []stakerdb.Pu
 	return sigSigs
 }
 
-func pubKeySigPairsToSortedSignatures(pairs []stakerdb.PubKeySigPair) [][]byte {
-	var sigInfos []*staking.SignatureInfo = make([]*staking.SignatureInfo, len(pairs))
+type SignatureInfo struct {
+	SignerPubKey *btcec.PublicKey
+	Signature    *schnorr.Signature
+}
+
+func NewSignatureInfo(
+	signerPubKey *btcec.PublicKey,
+	signature *schnorr.Signature,
+) *SignatureInfo {
+	return &SignatureInfo{
+		SignerPubKey: signerPubKey,
+		Signature:    signature,
+	}
+}
+
+// Helper function to sort all signatures in reverse lexicographical order of signing public keys
+// this way signatures are ready to be used in multisig witness with corresponding public keys
+func sortSignatureInfo(infos []*SignatureInfo) []*SignatureInfo {
+	sortedInfos := make([]*SignatureInfo, len(infos))
+	copy(sortedInfos, infos)
+	sort.SliceStable(sortedInfos, func(i, j int) bool {
+		keyIBytes := schnorr.SerializePubKey(sortedInfos[i].SignerPubKey)
+		keyJBytes := schnorr.SerializePubKey(sortedInfos[j].SignerPubKey)
+		return bytes.Compare(keyIBytes, keyJBytes) == 1
+	})
+
+	return sortedInfos
+}
+
+func pubKeySigPairsToSortedSignatures(pairs []stakerdb.PubKeySigPair) []*schnorr.Signature {
+	var sigInfos []*SignatureInfo = make([]*SignatureInfo, len(pairs))
 
 	for i, pair := range pairs {
-		sigInfos[i] = staking.NewSignatureInfo(pair.PubKey, pair.Signature.Serialize())
+		sigInfos[i] = NewSignatureInfo(pair.PubKey, pair.Signature)
 	}
 
-	sorted := staking.SortSignatureInfo(sigInfos)
+	sorted := sortSignatureInfo(sigInfos)
 
-	signatures := make([][]byte, len(sorted))
+	signatures := make([]*schnorr.Signature, len(sorted))
 
 	for i, sigInfo := range sorted {
 		signatures[i] = sigInfo.Signature
@@ -431,11 +462,10 @@ func createWitnessToSendUnbondingTx(
 
 	covenantSigantures := pubKeySigPairsToSortedSignatures(unbondingData.CovenantSignatures)
 
-	var witnessSignatures [][]byte
-	witnessSignatures = append(witnessSignatures, covenantSigantures...)
-	witnessSignatures = append(witnessSignatures, stakerUnbondingSig.Serialize())
-
-	return unbondingPathInfo.CreateWitness(witnessSignatures)
+	return unbondingPathInfo.CreateUnbondingPathWitness(
+		covenantSigantures,
+		stakerUnbondingSig,
+	)
 }
 
 func parseWatchStakingRequest(

@@ -289,8 +289,8 @@ github.com/aws/aws-sdk-go v1.44.122/go.mod h1:y4AeaBuwd2Lk+GepC1E9v0qOiTws0MIWAX
 github.com/aws/aws-sdk-go v1.44.312 h1:llrElfzeqG/YOLFFKjg1xNpZCFJ2xraIi3PqSuP+95k=
 github.com/aws/aws-sdk-go v1.44.312/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
 github.com/aws/aws-sdk-go-v2 v0.18.0/go.mod h1:JWVYvqSMppoMJC0x5wdwiImzgXTI9FuZwxzkQq9wy+g=
-github.com/babylonchain/babylon-private v0.0.0-20231129064956-8ad04811f959 h1:DbDrHk6UXI9Og0tnQscfJriTSseyD81DYTALQ9bnO1M=
-github.com/babylonchain/babylon-private v0.0.0-20231129064956-8ad04811f959/go.mod h1:hUJ0eyIpD9p9S+weU48es4P0FYDgIo2Nfg39AFiKj8Q=
+github.com/babylonchain/babylon-private v0.0.0-20231206153933-83d72c602dad h1:kLpZbHL3bH+PiGlr1evNdAwh3pfG8yZTY0dqtOgLIIY=
+github.com/babylonchain/babylon-private v0.0.0-20231206153933-83d72c602dad/go.mod h1:hUJ0eyIpD9p9S+weU48es4P0FYDgIo2Nfg39AFiKj8Q=
 github.com/babylonchain/rpc-client-private v0.7.0-rc0.0.20231124142452-c4ed1331b6af h1:qzjmuFWgiamSvTXUQT/uDJEn4PA2ndV2Srq0qZauL1c=
 github.com/babylonchain/rpc-client-private v0.7.0-rc0.0.20231124142452-c4ed1331b6af/go.mod h1:2Dwjgml0C7vO/JSFs2ZJtgGrnP1oa5G21+DDQ6IqQTk=
 github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
@@ -505,6 +505,8 @@ github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 h1:fAjc9m62+UWV/WA
 github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13/go.mod h1:SqUrOPUnsFjfmXRMNPybcSiG0BgUW2AuFH8PAnS2iTw=
 github.com/distribution/reference v0.5.0 h1:/FUIFXtfc/x2gpa5/VGfiGLuOIdYa1t65IKK2OFGvA0=
 github.com/distribution/reference v0.5.0/go.mod h1:BbU0aIcezP1/5jX/8MP0YiH4SdvB5Y4f/wlDRiLyi3E=
+github.com/docker/docker v23.0.1+incompatible h1:vjgvJZxprTTE1A37nm+CLNAdwu6xZekyoiVlUZEINcY=
+github.com/docker/docker v23.0.1+incompatible/go.mod h1:eEKB0N0r5NX/I1kEveEz05bcu8tLC/8azJZsviup8Sk=
 github.com/docker/go-connections v0.4.0 h1:El9xVISelRB7BuFusrZozjnkIM5YnzCViNKohAFqRJQ=
 github.com/docker/go-connections v0.4.0/go.mod h1:Gbd7IOopHjR8Iph03tsViu4nIes5XhDvyHbTtUxmeec=
 github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4=
