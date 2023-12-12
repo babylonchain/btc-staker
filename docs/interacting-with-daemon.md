@@ -15,14 +15,13 @@
    the [Staker Daemon Startup Guide](stakerd/stakerd-startup-guide.md)
    guide to start the staker daemon and connect to a BTC node.
 
-## Interacting with daemon
+## Staking operations
 
-The following guide will show how to stake BTC tokens, spend staked BTC tokens after
-timelock expiration and unbond BTC tokens.
+The following guide will show how to stake, withdraw, and unbond Bitcoin.
 
-### 1. Stake BTC tokens
+### 1. Stake Bitcoin
 
-#### 1. List active BTC validators on Babylon:
+#### 1. List active BTC validators on Babylon
 
 Find the public key of the validator you want to stake to. You can stake to multiple
 validators by specifying public keys in the `--validator-pks` flag of the `stake`
@@ -41,9 +40,9 @@ $ stakercli daemon babylon-validators
 }
 ```
 
-#### 2. Obtain BTC address from the BTC node that staker daemon is connected to:
+#### 2. Obtain the BTC address from the BTC wallet
 
-Find the BTC address that you want to stake from.
+Find the BTC address that has sufficient Bitcoin balance that you want to stake from.
 
 ```bash
 $ stakercli daemon list-outputs
@@ -61,7 +60,7 @@ $ stakercli daemon list-outputs
 }
 ```
 
-#### 3. Stake BTC tokens:
+#### 3. Stake Bitcoin
 
 Stake BTC tokens to the validator(s) of your choice. The `--staking-time` flag
 specifies the timelock of the staking transaction in BTC blocks.
@@ -87,17 +86,17 @@ to create and register a validator to Babylon. Once the validator is registered,
 can use your validator BTC public key in the `--validator-pks` flag of the `stake`
 command.
 
-### 2. Spend staked funds:
+### 2. Withdraw staked funds
 
-Spends staking transaction and sends funds back to staker this can only be done after
-timelock of staking transaction expires.
+The staker can withdraw the staked funds after the timelock of the staking
+transaction expires.
 
 ```bash
 $ stakercli daemon unstake \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
 
-### 3. Unbond BTC tokens:
+### 3. Unbond staked funds
 
 Initiates the unbonding flow: builds unbonding tx, send to babylon, wait for
 signatures, and send unbonding tx to BTC chain.
