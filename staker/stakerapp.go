@@ -974,8 +974,7 @@ func (app *StakerApp) sendUnbondingTxToBtcWithWitness(
 		privkey,
 		storedTx,
 		unbondingData,
-		params.CovenantPks,
-		params.CovenantQuruomThreshold,
+		params,
 		app.network,
 	)
 
@@ -1845,8 +1844,8 @@ func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash
 		return nil, nil, fmt.Errorf("cannot spend staking output. Error building signature: %w", err)
 	}
 
-	witness, err := spendStakeTxInfo.fundingOutputSpendInfo.CreateWitness(
-		[][]byte{stakerSig.Serialize()},
+	witness, err := spendStakeTxInfo.fundingOutputSpendInfo.CreateTimeLockPathWitness(
+		stakerSig,
 	)
 
 	if err != nil {

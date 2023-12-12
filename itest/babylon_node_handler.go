@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 
 	"github.com/babylonchain/babylon/types"
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -117,13 +118,21 @@ type BabylonNodeHandler struct {
 	babylonNode *babylonNode
 }
 
-func NewBabylonNodeHandler(covenantPk *btcec.PublicKey) (*BabylonNodeHandler, error) {
+func NewBabylonNodeHandler(
+	coventantQUorum int,
+	covenantPk1 *btcec.PublicKey,
+	covenantPk2 *btcec.PublicKey,
+	covenantPk3 *btcec.PublicKey,
+) (*BabylonNodeHandler, error) {
 	testDir, err := baseDirBabylondir()
 	if err != nil {
 		return nil, err
 	}
 
-	pubBabylon := types.NewBIP340PubKeyFromBTCPK(covenantPk)
+	quorumString := strconv.Itoa(coventantQUorum)
+	pubBabylon1 := types.NewBIP340PubKeyFromBTCPK(covenantPk1)
+	pubBabylon2 := types.NewBIP340PubKeyFromBTCPK(covenantPk2)
+	pubBabylon3 := types.NewBIP340PubKeyFromBTCPK(covenantPk3)
 
 	initTestnetCmd := exec.Command(
 		"babylond",
@@ -136,7 +145,8 @@ func NewBabylonNodeHandler(covenantPk *btcec.PublicKey) (*BabylonNodeHandler, er
 		"--btc-finalization-timeout=4",
 		"--btc-confirmation-depth=2",
 		"--additional-sender-account",
-		fmt.Sprintf("--covenant-pk=%s", pubBabylon.MarshalHex()),
+		fmt.Sprintf("--covenant-quorum=%s", quorumString),
+		fmt.Sprintf("--covenant-pks=%s,%s,%s", pubBabylon1.MarshalHex(), pubBabylon2.MarshalHex(), pubBabylon3.MarshalHex()),
 	)
 
 	var stderr bytes.Buffer
