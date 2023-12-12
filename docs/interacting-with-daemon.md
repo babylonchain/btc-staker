@@ -13,7 +13,7 @@
 3. **Start Staker Daemon:**
    Follow the instructions in
    the [Staker Daemon Startup Guide](stakerd/stakerd-startup-guide.md)
-   guide to start the staker daemon and connect to a BTC node.
+   to start the staker daemon and connect to a BTC node.
 
 ## Staking operations
 
