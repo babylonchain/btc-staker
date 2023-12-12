@@ -62,10 +62,9 @@ $ stakercli daemon list-outputs
 
 #### 3. Stake Bitcoin
 
-Stake BTC tokens to the validator(s) of your choice. The `--staking-time` flag
-specifies the timelock of the staking transaction in BTC blocks.
-The `--staking-amount`
-flag specifies the amount of BTC tokens in satoshis to stake.
+Stake Bitcoin to the validator(s) of your choice. The `--staking-time` flag specifies
+the timelock of the staking transaction in BTC blocks. The `--staking-amount`
+flag specifies the amount in satoshis to stake.
 
 ```bash
 $ stakercli daemon stake \
