@@ -87,8 +87,8 @@ command.
 
 ### 2. Withdraw staked funds
 
-The staker can withdraw the staked funds after the timelock of the staking
-transaction expires.
+The staker can withdraw the staked funds after the timelock of the staking or
+unbonding transaction expires.
 
 `--staking-transaction-hash` is the hash from response of `stake` command.
 
