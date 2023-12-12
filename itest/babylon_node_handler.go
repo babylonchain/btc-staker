@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 
 	"github.com/babylonchain/babylon/types"
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -118,6 +119,7 @@ type BabylonNodeHandler struct {
 }
 
 func NewBabylonNodeHandler(
+	coventantQUorum int,
 	covenantPk1 *btcec.PublicKey,
 	covenantPk2 *btcec.PublicKey,
 	covenantPk3 *btcec.PublicKey,
@@ -127,6 +129,7 @@ func NewBabylonNodeHandler(
 		return nil, err
 	}
 
+	quorumString := strconv.Itoa(coventantQUorum)
 	pubBabylon1 := types.NewBIP340PubKeyFromBTCPK(covenantPk1)
 	pubBabylon2 := types.NewBIP340PubKeyFromBTCPK(covenantPk2)
 	pubBabylon3 := types.NewBIP340PubKeyFromBTCPK(covenantPk3)
@@ -142,7 +145,7 @@ func NewBabylonNodeHandler(
 		"--btc-finalization-timeout=4",
 		"--btc-confirmation-depth=2",
 		"--additional-sender-account",
-		"--covenant-quorum=2",
+		fmt.Sprintf("--covenant-quorum=%s", quorumString),
 		fmt.Sprintf("--covenant-pks=%s,%s,%s", pubBabylon1.MarshalHex(), pubBabylon2.MarshalHex(), pubBabylon3.MarshalHex()),
 	)
 

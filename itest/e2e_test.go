@@ -278,6 +278,7 @@ func StartManager(
 	err = wh.Start()
 	require.NoError(t, err)
 
+	quorum := 2
 	numCovenants := 3
 	var coventantPrivKeys []*btcec.PrivateKey
 	for i := 0; i < numCovenants; i++ {
@@ -287,6 +288,7 @@ func StartManager(
 	}
 
 	bh, err := NewBabylonNodeHandler(
+		quorum,
 		coventantPrivKeys[0].PubKey(),
 		coventantPrivKeys[1].PubKey(),
 		coventantPrivKeys[2].PubKey(),

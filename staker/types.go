@@ -92,10 +92,7 @@ func createWitnessSignaturesForPubKeys(
 
 	for i, key := range sortedPubKeys {
 		k := key
-		signature, found := receivedSignatures[pubKeyToString(k)]
-
-		if found {
-			// we only fill signatures that we have received
+		if signature, found := receivedSignatures[pubKeyToString(k)]; found {
 			signatures[i] = signature
 		}
 	}
