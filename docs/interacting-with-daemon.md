@@ -5,15 +5,24 @@
    the [installation section](../../README.md#2-installation) to install the required
    binaries.
 
-2. **Staker Daemon Configuration:**
-   Follow the instructions in
-   the [Staker Daemon Configuration](stakerd/stakerd-config.md)
-   guide to configure the staker daemon.
+2. **Start Bitcoin and Babylon Node:**
+   The Staker daemon requires connection to both a running Bitcoin node and a Babylon
+   node with a wallet to facilitate transactions.
 
-3. **Start Staker Daemon:**
-   Follow the instructions in
-   the [Staker Daemon Startup Guide](stakerd/stakerd-startup-guide.md)
-   to start the staker daemon and connect to a BTC node.
+    - Ensure a Bitcoin node is running, and a wallet loaded with testnet bitcoin is
+      available.
+    - Establish a connection to a Babylon node equipped with a keyring containing
+      loaded funds. For enhanced security, consider running your own Babylon node.
+
+   For detailed instructions, refer
+   to [Staker Daemon Configuration](stakerd/stakerd-config.md#2-start-bitcoin-node-with-wallet)
+   guide.
+
+3. **Configure Staker Daemon:**
+   Follow the [Staker Daemon Configuration](stakerd/stakerd-config.md) guide.
+
+4. **Start Staker Daemon:**
+   Follow the [Staker Daemon Startup Guide](stakerd/stakerd-startup-guide.md)
 
 ## Staking operations
 

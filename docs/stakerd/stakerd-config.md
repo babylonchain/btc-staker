@@ -9,8 +9,9 @@ to create a keyring and request funds.
 
 #### 2. Start Bitcoin node with wallet
 
-The `stakerd` daemon requires a running Bitcoin node with a wallet. You can configure
-the daemon to connect to either `bitcoind` or `btcd` node types.
+The `stakerd` daemon requires a running Bitcoin node and a wallet loaded with testnet
+Bitcoins. You can configure the daemon to connect to either `bitcoind`
+or `btcd` node types.
 
 Follow the official guides to install and run the Bitcoin node:
 
