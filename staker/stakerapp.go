@@ -505,14 +505,6 @@ func (app *StakerApp) handleBtcTxInfo(
 	return nil
 }
 
-func (app *StakerApp) waitForUnbondingTxConfirmationWithWg(
-	waitEv *notifier.ConfirmationEvent,
-	unbondingData *stakerdb.UnbondingStoreData,
-	stakingTxHash *chainhash.Hash) {
-	defer app.wg.Done()
-	app.waitForUnbondingTxConfirmation(waitEv, unbondingData, stakingTxHash)
-}
-
 // TODO: We should also handle case when btc node or babylon node lost data and start from scratch
 // i.e keep track what is last known block height on both chains and detect if after restart
 // for some reason they are behind staker
