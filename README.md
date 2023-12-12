@@ -76,6 +76,6 @@ Follow the [stakerd configuration guide](docs/stakerd/stakerd-config.md).
 
 Follow the [stakerd startup guide](docs/stakerd/stakerd-startup-guide.md).
 
-## 5. Interacting with daemon using stakercli
+## 5. Staking operations with stakercli
 
-Follow the [stakercli usage guide](docs/interacting-with-daemon.md).
+Follow the [operations guide](docs/staking-operations.md).
