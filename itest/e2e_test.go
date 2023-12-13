@@ -727,6 +727,50 @@ func (tm *TestManager) sendWatchedStakingTx(
 	require.NoError(t, err)
 	serializedSlashingTx, err := utils.SerializeBtcTransaction(slashingTx)
 	require.NoError(t, err)
+	// Build unbonding related data
+	unbondingFee := btcutil.Amount(1000)
+	unbondingAmount := btcutil.Amount(testStakingData.StakingAmount) - unbondingFee
+	unbondingTme := uint16(params.FinalizationTimeoutBlocks) + 1
+
+	unbondingInfo, err := staking.BuildUnbondingInfo(
+		testStakingData.StakerKey,
+		[]*btcec.PublicKey{testStakingData.ValidatorBtcKey},
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
+		unbondingTme,
+		unbondingAmount,
+		simnetParams,
+	)
+	require.NoError(t, err)
+
+	unbondingSlashingPathInfo, err := unbondingInfo.SlashingPathSpendInfo()
+	require.NoError(t, err)
+
+	unbondingTx := wire.NewMsgTx(2)
+	unbondingTx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&txHash, uint32(stakingOutputIdx)), nil, nil))
+	unbondingTx.AddTxOut(unbondingInfo.UnbondingOutput)
+
+	slashUnbondingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
+		unbondingTx,
+		0,
+		params.SlashingAddress, testStakingData.SlashingTxChangeAddress,
+		int64(params.MinSlashingTxFeeSat)+10,
+		params.SlashingRate,
+		simnetParams,
+	)
+	require.NoError(t, err)
+
+	slashUnbondingSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
+		slashUnbondingTx,
+		unbondingTx.TxOut[0],
+		tm.WalletPrivKey,
+		unbondingSlashingPathInfo.RevealedLeaf.Script,
+	)
+
+	serializedUnbondingTx, err := utils.SerializeBtcTransaction(unbondingTx)
+	require.NoError(t, err)
+	serializedSlashUnbondingTx, err := utils.SerializeBtcTransaction(slashUnbondingTx)
+	require.NoError(t, err)
 
 	// TODO: Update pop when new version will be ready, for now using schnorr as we don't have
 	// easy way to generate bip322 sig on backend side
@@ -749,6 +793,10 @@ func (tm *TestManager) sendWatchedStakingTx(
 		tm.MinerAddr.String(),
 		hex.EncodeToString(pop.BabylonSig),
 		hex.EncodeToString(pop.BtcSig),
+		hex.EncodeToString(serializedUnbondingTx),
+		hex.EncodeToString(serializedSlashUnbondingTx),
+		hex.EncodeToString(slashUnbondingSig.Serialize()),
+		int(unbondingTme),
 		// Use schnor verification
 		int(btcstypes.BTCSigType_BIP340),
 	)
@@ -1126,7 +1174,6 @@ func TestMultipleWithdrawableStakingTransactions(t *testing.T) {
 }
 
 func TestSendingWatchedStakingTransaction(t *testing.T) {
-	t.Skip("TODO Re-enable it after adding new arguments to watch staking")
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks

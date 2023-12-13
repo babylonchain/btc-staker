@@ -80,6 +80,11 @@ type watchTxData struct {
 	slashingTxSig       *schnorr.Signature
 	stakerBabylonPubKey *secp256k1.PubKey
 	stakerBtcPk         *btcec.PublicKey
+	// unbodning related data
+	unbondingTx         *wire.MsgTx
+	slashUnbondingTx    *wire.MsgTx
+	slashUnbondingTxSig *schnorr.Signature
+	unbondingTime       uint16
 }
 
 func newWatchedStakingRequest(
@@ -96,6 +101,10 @@ func newWatchedStakingRequest(
 	slashingTxSignature *schnorr.Signature,
 	stakerBabylonPubKey *secp256k1.PubKey,
 	stakerBtcPk *btcec.PublicKey,
+	unbondingTx *wire.MsgTx,
+	slashUnbondingTx *wire.MsgTx,
+	slashUnbondingTxSig *schnorr.Signature,
+	unbondingTime uint16,
 ) *stakingRequestedEvent {
 	return &stakingRequestedEvent{
 		stakerAddress:           stakerAddress,
@@ -114,6 +123,10 @@ func newWatchedStakingRequest(
 			slashingTxSig:       slashingTxSignature,
 			stakerBabylonPubKey: stakerBabylonPubKey,
 			stakerBtcPk:         stakerBtcPk,
+			unbondingTx:         unbondingTx,
+			slashUnbondingTx:    slashUnbondingTx,
+			slashUnbondingTxSig: slashUnbondingTxSig,
+			unbondingTime:       unbondingTime,
 		},
 		errChan:     make(chan error, 1),
 		successChan: make(chan *chainhash.Hash, 1),

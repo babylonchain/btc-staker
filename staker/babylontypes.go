@@ -109,6 +109,14 @@ func (app *StakerApp) buildDelegation(
 			}).Fatalf("Failed to build delegation data for already confirmed staking transaction")
 		}
 
+		undelegationData := cl.UndelegationData{
+			UnbondingTransaction:         watchedData.UnbondingTx,
+			UnbondingTxValue:             btcutil.Amount(watchedData.UnbondingTx.TxOut[0].Value),
+			UnbondingTxUnbondingTime:     watchedData.UnbondingTime,
+			SlashUnbondingTransaction:    watchedData.SlashingUnbondingTx,
+			SlashUnbondingTransactionSig: watchedData.SlashingUnbondingTxSig,
+		}
+
 		dg := createDelegationData(
 			watchedData.StakerBtcPubKey,
 			req.inclusionBlock,
@@ -118,8 +126,7 @@ func (app *StakerApp) buildDelegation(
 			watchedData.SlashingTxSig,
 			watchedData.StakerBabylonPubKey,
 			stakingTxInclusionProof,
-			// TODO: Support for pre-sign unbonding tx for watched transactions, it requires storing more data in database
-			nil,
+			&undelegationData,
 		)
 		return dg, nil
 	} else {

@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	sdkmath "cosmossdk.io/math"
+	"github.com/babylonchain/babylon/btcstaking"
 	staking "github.com/babylonchain/babylon/btcstaking"
 
 	bbn "github.com/babylonchain/babylon/types"
@@ -480,6 +481,10 @@ func parseWatchStakingRequest(
 	stakerBtcPk *btcec.PublicKey,
 	stakerAddress btcutil.Address,
 	pop *cl.BabylonPop,
+	unbondingTx *wire.MsgTx,
+	slashUnbondingTx *wire.MsgTx,
+	slashUnbondingTxSig *schnorr.Signature,
+	unbondingTime uint16,
 	currentParams *cl.StakingParams,
 	network *chaincfg.Params,
 ) (*stakingRequestedEvent, error) {
@@ -551,6 +556,96 @@ func parseWatchStakingRequest(
 	}
 	slashingTxChangeAddress := outAddrs[0]
 
+	//  7. Validate unbonding related data
+	if err := btcstaking.IsSimpleTransfer(unbondingTx); err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid unbonding tx: %w", err)
+	}
+
+	if unbondingTime <= uint16(currentParams.FinalizationTimeoutBlocks) {
+		return nil, fmt.Errorf("failed to watch staking tx. Unbonding time must be greater than finalization timeout. Unbonding time: %d, finalization timeout: %d", unbondingTime, currentParams.FinalizationTimeoutBlocks)
+	}
+
+	unbondingTxValue := unbondingTx.TxOut[0].Value
+	unbondingTxPkScript := unbondingTx.TxOut[0].PkScript
+
+	unbondingValue := btcutil.Amount(unbondingTxValue)
+
+	unbondingInfo, err := staking.BuildUnbondingInfo(
+		stakerBtcPk,
+		validatorBtcPks,
+		currentParams.CovenantPks,
+		currentParams.CovenantQuruomThreshold,
+		unbondingTime,
+		unbondingValue,
+		network,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Failed to build unbonding scripts: %w", err)
+	}
+
+	if unbondingInfo.UnbondingOutput.Value != unbondingTxValue || !bytes.Equal(unbondingInfo.UnbondingOutput.PkScript, unbondingTxPkScript) {
+		return nil, fmt.Errorf("failed to watch staking tx. Unbonding output does not match output produced from provided values")
+	}
+
+	err = staking.CheckTransactions(
+		slashUnbondingTx,
+		unbondingTx,
+		0,
+		int64(currentParams.MinSlashingTxFeeSat),
+		currentParams.SlashingRate,
+		currentParams.SlashingAddress,
+		network,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid slash-unbonding transaction: %w", err)
+	}
+
+	unbondingSlashingInfo, err := unbondingInfo.SlashingPathSpendInfo()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid unbonding slashing path info: %w", err)
+	}
+
+	err = staking.VerifyTransactionSigWithOutputData(
+		slashUnbondingTx,
+		unbondingTx.TxOut[0].PkScript,
+		unbondingTx.TxOut[0].Value,
+		unbondingSlashingInfo.RevealedLeaf.Script,
+		stakerBtcPk,
+		slashUnbondingTxSig.Serialize(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx sig: %w", err)
+	}
+
+	if unbondingTx.TxOut[0].Value >= stakingTx.TxOut[stakingOutputIdx].Value {
+		return nil, fmt.Errorf("failed to watch staking tx. Unbonding tx value must be less than staking output value")
+	}
+
+	stakingTxHash := stakingTx.TxHash()
+	unbondingTxPointsToStakingTxHash := unbondingTx.TxIn[0].PreviousOutPoint.Hash.IsEqual(&stakingTxHash)
+	unbondingTxPointsToStakingOutputIdx := unbondingTx.TxIn[0].PreviousOutPoint.Index == stakingOutputIdx
+
+	if !unbondingTxPointsToStakingTxHash || !unbondingTxPointsToStakingOutputIdx {
+		return nil, fmt.Errorf("failed to watch staking tx. Unbonding tx do not point to staking tx")
+	}
+
+	// Extract unbonding slashing tx change address
+	_, outAddrsSlashUnbonding, _, err := txscript.ExtractPkScriptAddrs(slashUnbondingTx.TxOut[1].PkScript, network)
+	if err != nil {
+		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx change address: %w", err)
+	}
+	if len(outAddrsSlashUnbonding) != 1 {
+		return nil, fmt.Errorf("failed to watch staking tx. Only one slashing tx change address is allowed")
+	}
+	slashUnbondingChangeAddress := outAddrs[0]
+
+	// TODO: Consider allowing different slashing tx change address
+	if slashingTxChangeAddress.EncodeAddress() != slashUnbondingChangeAddress.EncodeAddress() {
+		return nil, fmt.Errorf("failed to watch staking tx. Slashing tx and slash-unbonding tx change addresses must equal")
+	}
+
 	req := newWatchedStakingRequest(
 		stakerAddress, slashingTxChangeAddress,
 		stakingTx,
@@ -565,6 +660,10 @@ func parseWatchStakingRequest(
 		slashingTxSig,
 		stakerBabylonPk,
 		stakerBtcPk,
+		unbondingTx,
+		slashUnbondingTx,
+		slashUnbondingTxSig,
+		unbondingTime,
 	)
 
 	return req, nil

@@ -18,6 +18,13 @@ message WatchedTxData {
     bytes slashing_transaction_sig = 2;
     bytes staker_babylon_pk = 3;
     bytes staker_btc_pk = 4;
+    // TODO: Consider imporoving data model as currently for watched transactions
+    // unbonding_transaction and unbonding_time are duplicated with UnbondingTxData
+    // which is stored in TrackedTransaction
+    bytes unbonding_transaction = 5;
+    bytes slashing_unbonding_transaction = 6;
+    bytes slashing_unbonding_transaction_sig = 7;
+    uint32 unbonding_time = 8;
 }
 
 // Contains information about btc confirmation
@@ -61,6 +68,6 @@ message TrackedTransaction {
     bytes btc_sig_babylon_sig = 11;
     TransactionState state = 12;
     bool watched = 13;
-    // this data is only filed if tracked transactions state is >= UNBONDING_STARTED
+    // this data is only filed if tracked transactions state is >= SENT_TO_BABYLON
     UnbondingTxData unbonding_tx_data = 14;
 }

@@ -1107,6 +1107,10 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.watchTxData.slashingTxSig,
 					ev.watchTxData.stakerBabylonPubKey,
 					ev.watchTxData.stakerBtcPk,
+					ev.watchTxData.unbondingTx,
+					ev.watchTxData.slashUnbondingTx,
+					ev.watchTxData.slashUnbondingTxSig,
+					ev.watchTxData.unbondingTime,
 				)
 
 				if err != nil {
@@ -1329,6 +1333,10 @@ func (app *StakerApp) WatchStaking(
 	stakerBtcPk *btcec.PublicKey,
 	stakerAddress btcutil.Address,
 	pop *cl.BabylonPop,
+	unbondingTx *wire.MsgTx,
+	slashUnbondingTx *wire.MsgTx,
+	slashUnbondingTxSig *schnorr.Signature,
+	unbondingTime uint16,
 ) (*chainhash.Hash, error) {
 	currentParams, err := app.babylonClient.Params()
 
@@ -1355,6 +1363,10 @@ func (app *StakerApp) WatchStaking(
 		stakerBtcPk,
 		stakerAddress,
 		pop,
+		unbondingTx,
+		slashUnbondingTx,
+		slashUnbondingTxSig,
+		unbondingTime,
 		currentParams,
 		app.network,
 	)
