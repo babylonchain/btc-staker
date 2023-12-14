@@ -80,7 +80,7 @@ type watchTxData struct {
 	slashingTxSig       *schnorr.Signature
 	stakerBabylonPubKey *secp256k1.PubKey
 	stakerBtcPk         *btcec.PublicKey
-	// unbodning related data
+	// unbonding related data
 	unbondingTx         *wire.MsgTx
 	slashUnbondingTx    *wire.MsgTx
 	slashUnbondingTxSig *schnorr.Signature

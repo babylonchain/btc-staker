@@ -87,7 +87,7 @@ type WatchedTxData struct {
 	SlashingTransactionSig []byte `protobuf:"bytes,2,opt,name=slashing_transaction_sig,json=slashingTransactionSig,proto3" json:"slashing_transaction_sig,omitempty"`
 	StakerBabylonPk        []byte `protobuf:"bytes,3,opt,name=staker_babylon_pk,json=stakerBabylonPk,proto3" json:"staker_babylon_pk,omitempty"`
 	StakerBtcPk            []byte `protobuf:"bytes,4,opt,name=staker_btc_pk,json=stakerBtcPk,proto3" json:"staker_btc_pk,omitempty"`
-	// TODO: Consider imporoving data model as currently for watched transactions
+	// TODO: Consider improving data model as currently for watched transactions
 	// unbonding_transaction and unbonding_time are duplicated with UnbondingTxData
 	// which is stored in TrackedTransaction
 	UnbondingTransaction            []byte `protobuf:"bytes,5,opt,name=unbonding_transaction,json=unbondingTransaction,proto3" json:"unbonding_transaction,omitempty"`
@@ -392,7 +392,7 @@ type TrackedTransaction struct {
 	BtcSigBabylonSig             []byte               `protobuf:"bytes,11,opt,name=btc_sig_babylon_sig,json=btcSigBabylonSig,proto3" json:"btc_sig_babylon_sig,omitempty"`
 	State                        TransactionState     `protobuf:"varint,12,opt,name=state,proto3,enum=proto.TransactionState" json:"state,omitempty"`
 	Watched                      bool                 `protobuf:"varint,13,opt,name=watched,proto3" json:"watched,omitempty"`
-	// this data is only filed if tracked transactions state is >= SENT_TO_BABYLON
+	// this data is only filled if tracked transactions state is >= SENT_TO_BABYLON
 	UnbondingTxData *UnbondingTxData `protobuf:"bytes,14,opt,name=unbonding_tx_data,json=unbondingTxData,proto3" json:"unbonding_tx_data,omitempty"`
 }
 

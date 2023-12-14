@@ -1358,7 +1358,7 @@ func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 	require.NoError(t, err)
 
-	// restart app, tx was sent to babylon but we did not receive covenenat signatures yet
+	// restart app, tx was sent to babylon but we did not receive covenant signatures yet
 	tm.RestartApp(t)
 
 	pend, err := tm.BabylonClient.QueryPendingBTCDelegations()

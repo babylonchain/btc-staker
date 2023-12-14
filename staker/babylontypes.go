@@ -96,7 +96,6 @@ func (app *StakerApp) buildDelegation(
 	stakingTxInclusionProof := app.mustBuildInclusionProof(req)
 
 	if storedTx.Watched {
-		// TODO: Add support of pre-sign unbonding tx for watchted transactions
 		watchedData, err := app.txTracker.GetWatchedTransactionData(&req.txHash)
 
 		if err != nil {
