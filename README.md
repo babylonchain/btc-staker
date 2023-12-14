@@ -1,3 +1,5 @@
+# BTC Staker
+
 ## 1. Overview
 
 BTC-Staker is a toolset designed for seamless Bitcoin staking. It consists of two
