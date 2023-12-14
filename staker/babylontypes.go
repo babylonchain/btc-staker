@@ -32,12 +32,12 @@ func (app *StakerApp) buildOwnedDelegation(
 	storedTx *stakerdb.StoredTransaction,
 	stakingTxInclusionProof []byte,
 ) (*cl.DelegationData, error) {
-	delegationData, err := app.retrieveExternalDelegationData(stakerAddress, storedTx.SlashingTxChangeAddress)
+	externalData, err := app.retrieveExternalDelegationData(stakerAddress, storedTx.SlashingTxChangeAddress)
 	if err != nil {
 		return nil, err
 	}
 
-	slashingTx, slashingTxSig, err := buildSlashingTxAndSig(delegationData, storedTx, app.network)
+	slashingTx, slashingTxSig, err := buildSlashingTxAndSig(externalData, storedTx, app.network)
 	if err != nil {
 		// This is truly unexpected, most probably programming error we have
 		// valid and btc confirmed staking transacion, but for some reason we cannot
@@ -49,15 +49,40 @@ func (app *StakerApp) buildOwnedDelegation(
 		}).Fatalf("Failed to build delegation data for already confirmed staking transaction")
 	}
 
+	// TODO: Option to use custom fee rate, as estimator uses pretty big value for fee
+	// in case of estimation failure (25 sat/byte)
+	unbondingTxFeeRatePerKb := btcutil.Amount(app.feeEstimator.EstimateFeePerKb())
+
+	undelegationData, err := createUndelegationData(
+		storedTx,
+		externalData.stakerPrivKey,
+		externalData.covenantPks,
+		externalData.covenantThreshold,
+		externalData.slashingAddress,
+		externalData.slashingTxChangeAddress,
+		unbondingTxFeeRatePerKb,
+		// TODO: Possiblity to customize finalization time
+		uint16(externalData.babylonFinalizationTimeBlocks)+1,
+		externalData.slashingFee,
+		externalData.slashingRate,
+		app.network,
+	)
+
+	if err != nil {
+		// TODO: Most probable couse for this error would be some kind of problem with fees
+		return nil, fmt.Errorf("error creating undelegation data: %w", err)
+	}
+
 	dg := createDelegationData(
-		delegationData.stakerPrivKey.PubKey(),
+		externalData.stakerPrivKey.PubKey(),
 		req.inclusionBlock,
 		req.txIndex,
 		storedTx,
 		slashingTx,
 		slashingTxSig,
-		delegationData.babylonPubKey,
+		externalData.babylonPubKey,
 		stakingTxInclusionProof,
+		undelegationData,
 	)
 
 	return dg, nil
@@ -83,6 +108,14 @@ func (app *StakerApp) buildDelegation(
 			}).Fatalf("Failed to build delegation data for already confirmed staking transaction")
 		}
 
+		undelegationData := cl.UndelegationData{
+			UnbondingTransaction:         watchedData.UnbondingTx,
+			UnbondingTxValue:             btcutil.Amount(watchedData.UnbondingTx.TxOut[0].Value),
+			UnbondingTxUnbondingTime:     watchedData.UnbondingTime,
+			SlashUnbondingTransaction:    watchedData.SlashingUnbondingTx,
+			SlashUnbondingTransactionSig: watchedData.SlashingUnbondingTxSig,
+		}
+
 		dg := createDelegationData(
 			watchedData.StakerBtcPubKey,
 			req.inclusionBlock,
@@ -92,6 +125,7 @@ func (app *StakerApp) buildDelegation(
 			watchedData.SlashingTxSig,
 			watchedData.StakerBabylonPubKey,
 			stakingTxInclusionProof,
+			&undelegationData,
 		)
 		return dg, nil
 	} else {
@@ -106,7 +140,7 @@ func (app *StakerApp) buildDelegation(
 
 // TODO for now we launch this handler indefinitly. At some point we may introduce
 // timeout, and if signatures are not find in this timeout, then we may submit
-// evidence that validator or covenant are censoring our unbonding
+// evidence that validator or covenant are censoring our staking transactions
 func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chainhash.Hash) {
 	checkSigTicker := time.NewTicker(app.config.StakerConfig.UnbondingTxCheckInterval)
 	defer checkSigTicker.Stop()
@@ -158,7 +192,7 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 				continue
 			}
 
-			// we have enough signatures to submit unbonding tx
+			// we have enough signatures to submit unbonding tx this means that delegation is active
 			if len(di.UndelegationInfo.CovenantUnbondingSignatures) >= int(params.CovenantQuruomThreshold) {
 				app.logger.WithFields(logrus.Fields{
 					"stakingTxHash": stakingTxHash,

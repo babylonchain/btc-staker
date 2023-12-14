@@ -347,16 +347,16 @@ func decodeBtcPk(pkHex string) (*btcec.PublicKey, error) {
 	return pk, nil
 }
 
-func parseStakingTime(stakingTime int) (uint16, error) {
-	if stakingTime <= 0 {
+func parseTimeBtcLock(timelockTime int) (uint16, error) {
+	if timelockTime <= 0 {
 		return 0, fmt.Errorf("staking time must be positive")
 	}
 
-	if stakingTime > math.MaxUint16 {
-		return 0, fmt.Errorf("staking time %d is too big", stakingTime)
+	if timelockTime > math.MaxUint16 {
+		return 0, fmt.Errorf("staking time %d is too big", timelockTime)
 	}
 
-	return uint16(stakingTime), nil
+	return uint16(timelockTime), nil
 }
 
 func parseStakingValue(stakingValue int) (btcutil.Amount, error) {
@@ -380,6 +380,10 @@ func (s *StakerService) watchStaking(
 	stakerAddress string,
 	stakerBabylonSig string,
 	stakerBtcSig string,
+	unbondingTx string,
+	slashUnbondingTx string,
+	slashUnbondingTxSig string,
+	unbondingTime int,
 	popType int,
 ) (*ResultStake, error) {
 
@@ -415,7 +419,7 @@ func (s *StakerService) watchStaking(
 		validatorPubKeys = append(validatorPubKeys, valSchnorrKey)
 	}
 
-	stakingTimeUint16, err := parseStakingTime(stakingTime)
+	stakingTimeUint16, err := parseTimeBtcLock(stakingTime)
 
 	if err != nil {
 		return nil, err
@@ -475,6 +479,33 @@ func (s *StakerService) watchStaking(
 		return nil, err
 	}
 
+	// Unbonding related data
+	unbTx, err := decodeBtcTx(unbondingTx)
+	if err != nil {
+		return nil, err
+	}
+
+	slshUnbTx, err := decodeBtcTx(slashUnbondingTx)
+	if err != nil {
+		return nil, err
+	}
+
+	slashUnbTxSigBytes, err := hex.DecodeString(slashUnbondingTxSig)
+	if err != nil {
+		return nil, err
+	}
+
+	slashUnbTxSig, err := schnorr.ParseSignature(slashUnbTxSigBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	unbTime, err := parseTimeBtcLock(unbondingTime)
+
+	if err != nil {
+		return nil, err
+	}
+
 	hash, err := s.staker.WatchStaking(
 		stkTx,
 		stakingTimeUint16,
@@ -486,6 +517,10 @@ func (s *StakerService) watchStaking(
 		stakerBtcPkParsed,
 		stakerAddr,
 		proofOfPossesion,
+		unbTx,
+		slshUnbTx,
+		slashUnbTxSig,
+		unbTime,
 	)
 	if err != nil {
 		return nil, err
@@ -532,9 +567,8 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
 		"unbond_staking":            rpc.NewRPCFunc(s.unbondStaking, "stakingTxHash,feeRate"),
 		"withdrawable_transactions": rpc.NewRPCFunc(s.withdrawableTransactions, "offset,limit"),
-
 		// watch api
-		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingTime,stakingValue,stakerBtcPk,validatorBtcPks,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig,popType"),
+		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingTime,stakingValue,stakerBtcPk,validatorBtcPks,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig,unbondingTx,slashUnbondingTx,slashUnbondingTxSig,unbondingTime,popType"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),

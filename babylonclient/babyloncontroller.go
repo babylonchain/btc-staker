@@ -262,6 +262,7 @@ type DelegationData struct {
 	BabylonPk              *secp256k1.PubKey
 	StakerBtcPk            *btcec.PublicKey
 	BabylonPop             *stakerdb.ProofOfPossession
+	Ud                     *UndelegationData
 }
 
 type UndelegationData struct {
@@ -270,6 +271,11 @@ type UndelegationData struct {
 	UnbondingTxUnbondingTime     uint16
 	SlashUnbondingTransaction    *wire.MsgTx
 	SlashUnbondingTransactionSig *schnorr.Signature
+}
+
+type UndelegationRequest struct {
+	StakingTxHash      chainhash.Hash
+	StakerUnbondingSig *schnorr.Signature
 }
 
 type CovenantSignatureInfo struct {
@@ -291,6 +297,10 @@ type DelegationInfo struct {
 func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
 	if dg == nil {
 		return nil, fmt.Errorf("nil delegation data")
+	}
+
+	if dg.Ud == nil {
+		return nil, fmt.Errorf("nil undelegation data")
 	}
 
 	serizalizedStakingTransaction, err := utils.SerializeBtcTransaction(dg.StakingTransaction)
@@ -319,6 +329,27 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 		validatorPksList[i] = *bbntypes.NewBIP340PubKeyFromBTCPK(validatorPk)
 	}
 
+	// Prepare undelegation data to be sent in message
+	if dg.Ud.SlashUnbondingTransaction == nil ||
+		dg.Ud.SlashUnbondingTransactionSig == nil ||
+		dg.Ud.UnbondingTransaction == nil {
+		return nil, fmt.Errorf("received unbonding data with nil field")
+	}
+
+	serializedUnbondingTransaction, err := utils.SerializeBtcTransaction(dg.Ud.UnbondingTransaction)
+
+	if err != nil {
+		return nil, err
+	}
+
+	slashUnbondingTx, err := btcstypes.NewBTCSlashingTxFromMsgTx(dg.Ud.SlashUnbondingTransaction)
+
+	if err != nil {
+		return nil, err
+	}
+
+	slashUnbondingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(dg.Ud.SlashUnbondingTransactionSig)
+
 	return &btcstypes.MsgCreateBTCDelegation{
 		Signer:    signer,
 		BabylonPk: dg.BabylonPk,
@@ -342,43 +373,14 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 			Transaction: serizalizedStakingTransaction,
 			Proof:       dg.StakingTransactionInclusionProof,
 		},
-		SlashingTx:   slashingTx,
-		DelegatorSig: &slashingTxSig,
-	}, nil
-}
-
-func undelegationDataToMsg(signer string, ud *UndelegationData) (*btcstypes.MsgBTCUndelegate, error) {
-	if ud == nil {
-		return nil, fmt.Errorf("nil unbonding data")
-	}
-
-	if ud.SlashUnbondingTransaction == nil ||
-		ud.SlashUnbondingTransactionSig == nil ||
-		ud.UnbondingTransaction == nil {
-		return nil, fmt.Errorf("received unbonding data with nil field")
-	}
-
-	serializedUnbondingTransaction, err := utils.SerializeBtcTransaction(ud.UnbondingTransaction)
-
-	if err != nil {
-		return nil, err
-	}
-
-	slashUnbondindTx, err := btcstypes.NewBTCSlashingTxFromMsgTx(ud.SlashUnbondingTransaction)
-
-	if err != nil {
-		return nil, err
-	}
-
-	slashingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(ud.SlashUnbondingTransactionSig)
-
-	return &btcstypes.MsgBTCUndelegate{
-		Signer:               signer,
-		UnbondingTx:          serializedUnbondingTransaction,
-		UnbondingValue:       int64(ud.UnbondingTxValue),
-		UnbondingTime:        uint32(ud.UnbondingTxUnbondingTime),
-		SlashingTx:           slashUnbondindTx,
-		DelegatorSlashingSig: &slashingTxSig,
+		SlashingTx: slashingTx,
+		// Data related to unbonding
+		DelegatorSlashingSig:          slashingTxSig,
+		UnbondingTx:                   serializedUnbondingTransaction,
+		UnbondingTime:                 uint32(dg.Ud.UnbondingTxUnbondingTime),
+		UnbondingValue:                int64(dg.Ud.UnbondingTxValue),
+		UnbondingSlashingTx:           slashUnbondingTx,
+		DelegatorUnbondingSlashingSig: slashUnbondingTxSig,
 	}, nil
 }
 
@@ -401,13 +403,19 @@ func (bc *BabylonController) Delegate(dg *DelegationData) (*pv.RelayerTxResponse
 	return bc.reliablySendMsgs([]sdk.Msg{delegateMsg})
 }
 
-func (bc *BabylonController) Undelegate(ud *UndelegationData) (*pv.RelayerTxResponse, error) {
-	unbondMsg, err := undelegationDataToMsg(bc.getTxSigner(), ud)
+func (bc *BabylonController) Undelegate(
+	req *UndelegationRequest,
+) (*pv.RelayerTxResponse, error) {
 
-	if err != nil {
-		return nil, err
+	ubSig := bbntypes.NewBIP340SignatureFromBTCSig(req.StakerUnbondingSig)
+
+	msg := &btcstypes.MsgBTCUndelegate{
+		Signer:         bc.getTxSigner(),
+		StakingTxHash:  req.StakingTxHash.String(),
+		UnbondingTxSig: ubSig,
 	}
-	return bc.reliablySendMsgs([]sdk.Msg{unbondMsg})
+
+	return bc.reliablySendMsgs([]sdk.Msg{msg})
 }
 
 func getQueryContext(timeout time.Duration) (context.Context, context.CancelFunc) {
@@ -761,29 +769,18 @@ func (bc *BabylonController) IsTxAlreadyPartOfDelegation(stakingTxHash *chainhas
 func (bc *BabylonController) SubmitCovenantSig(
 	covPubKey *bbntypes.BIP340PubKey,
 	stakingTxHash string,
-	adaptorSigs [][]byte) (*pv.RelayerTxResponse, error) {
-	msg := &btcstypes.MsgAddCovenantSig{
-		Signer:        bc.getTxSigner(),
-		Pk:            covPubKey,
-		StakingTxHash: stakingTxHash,
-		Sigs:          adaptorSigs,
-	}
+	slashStakingAdaptorSigs [][]byte,
+	unbondindgSig *bbntypes.BIP340Signature,
+	slashUnbondingAdaptorSigs [][]byte,
 
-	return bc.reliablySendMsgs([]sdk.Msg{msg})
-}
-
-func (bc *BabylonController) SubmitCovenantUnbondingSigs(
-	covPubKey *bbntypes.BIP340PubKey,
-	stakingTxHash string,
-	unbondingSig *bbntypes.BIP340Signature,
-	adaptorSigs [][]byte,
 ) (*pv.RelayerTxResponse, error) {
-	msg := &btcstypes.MsgAddCovenantUnbondingSigs{
+	msg := &btcstypes.MsgAddCovenantSigs{
 		Signer:                  bc.getTxSigner(),
 		Pk:                      covPubKey,
 		StakingTxHash:           stakingTxHash,
-		UnbondingTxSig:          unbondingSig,
-		SlashingUnbondingTxSigs: adaptorSigs,
+		SlashingTxSigs:          slashStakingAdaptorSigs,
+		UnbondingTxSig:          unbondindgSig,
+		SlashingUnbondingTxSigs: slashUnbondingAdaptorSigs,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{msg})

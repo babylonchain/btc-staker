@@ -136,6 +136,11 @@ type WatchedTransactionData struct {
 	SlashingTxSig       *schnorr.Signature
 	StakerBabylonPubKey *secp256k1.PubKey
 	StakerBtcPubKey     *btcec.PublicKey
+	// Unbonding Related data
+	UnbondingTx            *wire.MsgTx
+	SlashingUnbondingTx    *wire.MsgTx
+	SlashingUnbondingTxSig *schnorr.Signature
+	UnbondingTime          uint16
 }
 
 type UnbondingStoreData struct {
@@ -377,11 +382,41 @@ func protoWatchedDataToWatchedTransactionData(wd *proto.WatchedTxData) (*Watched
 		return nil, err
 	}
 
+	var unbondingTx wire.MsgTx
+	err = unbondingTx.Deserialize(bytes.NewReader(wd.UnbondingTransaction))
+	if err != nil {
+		return nil, err
+	}
+
+	var slashingUnbondingTx wire.MsgTx
+	err = slashingUnbondingTx.Deserialize(bytes.NewReader(wd.SlashingUnbondingTransaction))
+	if err != nil {
+		return nil, err
+	}
+
+	slashUnbondingTxSig, err := schnorr.ParseSignature(wd.SlashingUnbondingTransactionSig)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var unbondingTime uint16
+
+	if wd.UnbondingTime > math.MaxUint16 {
+		return nil, fmt.Errorf("unbonding time is too large. Max value is %d", math.MaxUint16)
+	} else {
+		unbondingTime = uint16(wd.UnbondingTime)
+	}
+
 	return &WatchedTransactionData{
-		SlashingTx:          &slashingTx,
-		SlashingTxSig:       schnorSig,
-		StakerBabylonPubKey: &stakerBabylonKey,
-		StakerBtcPubKey:     stakerBtcKey,
+		SlashingTx:             &slashingTx,
+		SlashingTxSig:          schnorSig,
+		StakerBabylonPubKey:    &stakerBabylonKey,
+		StakerBtcPubKey:        stakerBtcKey,
+		UnbondingTx:            &unbondingTx,
+		SlashingUnbondingTx:    &slashingUnbondingTx,
+		SlashingUnbondingTxSig: slashUnbondingTxSig,
+		UnbondingTime:          unbondingTime,
 	}, nil
 }
 
@@ -577,6 +612,10 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
 	stakerBtcPk *btcec.PublicKey,
+	unbondingTx *wire.MsgTx,
+	slashUnbondingTx *wire.MsgTx,
+	slashUnbondingTxSig *schnorr.Signature,
+	unbondingTime uint16,
 ) error {
 	txHash := btcTx.TxHash()
 	txHashBytes := txHash[:]
@@ -621,11 +660,28 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 
 	serializedSig := slashingTxSig.Serialize()
 
+	serializedUnbondingTx, err := utils.SerializeBtcTransaction(unbondingTx)
+	if err != nil {
+		return err
+	}
+
+	serializedSlashUnbondingTx, err := utils.SerializeBtcTransaction(slashUnbondingTx)
+
+	if err != nil {
+		return err
+	}
+
+	serializedSlashUnbondingTxSig := slashUnbondingTxSig.Serialize()
+
 	watchedData := proto.WatchedTxData{
-		SlashingTransaction:    serializedSlashingtx,
-		SlashingTransactionSig: serializedSig,
-		StakerBabylonPk:        stakerBabylonPk.Bytes(),
-		StakerBtcPk:            schnorr.SerializePubKey(stakerBtcPk),
+		SlashingTransaction:             serializedSlashingtx,
+		SlashingTransactionSig:          serializedSig,
+		StakerBabylonPk:                 stakerBabylonPk.Bytes(),
+		StakerBtcPk:                     schnorr.SerializePubKey(stakerBtcPk),
+		UnbondingTransaction:            serializedUnbondingTx,
+		SlashingUnbondingTransaction:    serializedSlashUnbondingTx,
+		SlashingUnbondingTransactionSig: serializedSlashUnbondingTxSig,
+		UnbondingTime:                   uint32(unbondingTime),
 	}
 
 	return c.addTransactionInternal(
@@ -700,9 +756,24 @@ func (c *TrackedTransactionStore) SetTxConfirmed(
 	return c.setTxState(txHash, setTxConfirmed)
 }
 
-func (c *TrackedTransactionStore) SetTxSentToBabylon(txHash *chainhash.Hash) error {
+func (c *TrackedTransactionStore) SetTxSentToBabylon(
+	txHash *chainhash.Hash,
+	unbondingTx *wire.MsgTx,
+	unbondingTime uint16,
+) error {
+	update, err := newInitialUnbondingTxData(unbondingTx, unbondingTime)
+
+	if err != nil {
+		return err
+	}
+
 	setTxSentToBabylon := func(tx *proto.TrackedTransaction) error {
+		if tx.UnbondingTxData != nil {
+			return fmt.Errorf("cannot set unbonding started, because unbonding tx data already exists: %w", ErrInvalidUnbondingDataUpdate)
+		}
+
 		tx.State = proto.TransactionState_SENT_TO_BABYLON
+		tx.UnbondingTxData = update
 		return nil
 	}
 
@@ -718,31 +789,6 @@ func (c *TrackedTransactionStore) SetTxSpentOnBtc(txHash *chainhash.Hash) error 
 	return c.setTxState(txHash, setTxSpentOnBtc)
 }
 
-func (c *TrackedTransactionStore) SetTxUnbondingStarted(
-	txHash *chainhash.Hash,
-	unbondingTx *wire.MsgTx,
-	unbondingTime uint16,
-) error {
-	update, err := newInitialUnbondingTxData(unbondingTx, unbondingTime)
-
-	if err != nil {
-		return err
-	}
-
-	setUnbondingStarted := func(tx *proto.TrackedTransaction) error {
-		if tx.UnbondingTxData != nil {
-			return fmt.Errorf("cannot set unbonding started, because unbonding tx data already exists: %w", ErrInvalidUnbondingDataUpdate)
-		}
-
-		tx.State = proto.TransactionState_UNBONDING_STARTED
-		tx.UnbondingTxData = update
-
-		return nil
-	}
-
-	return c.setTxState(txHash, setUnbondingStarted)
-}
-
 func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 	txHash *chainhash.Hash,
 	covenantSignatures []PubKeySigPair,
@@ -756,7 +802,7 @@ func (c *TrackedTransactionStore) SetTxUnbondingSignaturesReceived(
 			return fmt.Errorf("cannot set unbonding signatures received, because unbonding signatures already exist: %w", ErrInvalidUnbondingDataUpdate)
 		}
 
-		tx.State = proto.TransactionState_UNBONDING_SIGNATURES_RECEIVED
+		tx.State = proto.TransactionState_DELEGATION_ACTIVE
 		tx.UnbondingTxData.CovenantSignatures = covenantSigsToProto(covenantSignatures)
 		return nil
 	}
