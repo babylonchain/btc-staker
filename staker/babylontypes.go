@@ -140,7 +140,7 @@ func (app *StakerApp) buildDelegation(
 
 // TODO for now we launch this handler indefinitly. At some point we may introduce
 // timeout, and if signatures are not find in this timeout, then we may submit
-// evidence that validator or covenant are censoring our staking transactions
+// evidence that covenant members are censoring our staking transactions
 func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chainhash.Hash) {
 	checkSigTicker := time.NewTicker(app.config.StakerConfig.UnbondingTxCheckInterval)
 	defer checkSigTicker.Stop()
@@ -225,15 +225,15 @@ func (app *StakerApp) checkForUnbondingTxSignaturesOnBabylon(stakingTxHash *chai
 	}
 }
 
-func (app *StakerApp) validatorExists(validatorPk *btcec.PublicKey) error {
-	if validatorPk == nil {
-		return fmt.Errorf("provided validator public key is nil")
+func (app *StakerApp) finalityProviderExists(fpPk *btcec.PublicKey) error {
+	if fpPk == nil {
+		return fmt.Errorf("provided finality provider public key is nil")
 	}
 
-	_, err := app.babylonClient.QueryValidator(validatorPk)
+	_, err := app.babylonClient.QueryFinalityProvider(fpPk)
 
 	if err != nil {
-		return fmt.Errorf("error checking if validator exists on babylon chain: %w", err)
+		return fmt.Errorf("error checking if finality provider exists on babylon chain: %w", err)
 	}
 
 	return nil

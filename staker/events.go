@@ -34,7 +34,7 @@ type stakingRequestedEvent struct {
 	stakingOutputPkScript   []byte
 	stakingTime             uint16
 	stakingValue            btcutil.Amount
-	validatorBtcPks         []*btcec.PublicKey
+	fpBtcPks                []*btcec.PublicKey
 	requiredDepthOnBtcChain uint32
 	pop                     *cl.BabylonPop
 	watchTxData             *watchTxData
@@ -53,7 +53,7 @@ func newOwnedStakingRequest(
 	stakingOutputPkScript []byte,
 	stakingTime uint16,
 	stakingValue btcutil.Amount,
-	validatorBtcPks []*btcec.PublicKey,
+	fpBtcPks []*btcec.PublicKey,
 	confirmationTimeBlocks uint32,
 	pop *cl.BabylonPop,
 ) *stakingRequestedEvent {
@@ -66,7 +66,7 @@ func newOwnedStakingRequest(
 		stakingOutputPkScript:   stakingOutputPkScript,
 		stakingTime:             stakingTime,
 		stakingValue:            stakingValue,
-		validatorBtcPks:         validatorBtcPks,
+		fpBtcPks:                fpBtcPks,
 		requiredDepthOnBtcChain: confirmationTimeBlocks,
 		pop:                     pop,
 		watchTxData:             nil,
@@ -94,7 +94,7 @@ func newWatchedStakingRequest(
 	stakingOutputPkScript []byte,
 	stakingTime uint16,
 	stakingValue btcutil.Amount,
-	validatorBtcPks []*btcec.PublicKey,
+	fpBtcPks []*btcec.PublicKey,
 	confirmationTimeBlocks uint32,
 	pop *cl.BabylonPop,
 	slashingTx *wire.MsgTx,
@@ -115,7 +115,7 @@ func newWatchedStakingRequest(
 		stakingOutputPkScript:   stakingOutputPkScript,
 		stakingTime:             stakingTime,
 		stakingValue:            stakingValue,
-		validatorBtcPks:         validatorBtcPks,
+		fpBtcPks:                fpBtcPks,
 		requiredDepthOnBtcChain: confirmationTimeBlocks,
 		pop:                     pop,
 		watchTxData: &watchTxData{

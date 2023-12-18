@@ -48,8 +48,8 @@ type BabylonClient interface {
 	Params() (*StakingParams, error)
 	Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error)
 	Undelegate(req *UndelegationRequest) (*pv.RelayerTxResponse, error)
-	QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error)
-	QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error)
+	QueryFinalityProviders(limit uint64, offset uint64) (*FinalityProvidersClientResponse, error)
+	QueryFinalityProvider(btcPubKey *btcec.PublicKey) (*FinalityProviderClientResponse, error)
 	QueryHeaderDepth(headerHash *chainhash.Hash) (uint64, error)
 	IsTxAlreadyPartOfDelegation(stakingTxHash *chainhash.Hash) (bool, error)
 	QueryDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error)
@@ -59,7 +59,7 @@ type MockBabylonClient struct {
 	ClientParams    *StakingParams
 	babylonKey      *secp256k1.PrivKey
 	SentMessages    chan *types.MsgCreateBTCDelegation
-	ActiveValidator *ValidatorInfo
+	ActiveFinalityProvider *FinalityProviderInfo
 }
 
 var _ BabylonClient = (*MockBabylonClient)(nil)
@@ -106,20 +106,20 @@ func (m *MockBabylonClient) Delegate(dg *DelegationData) (*pv.RelayerTxResponse,
 	return &pv.RelayerTxResponse{Code: 0}, nil
 }
 
-func (m *MockBabylonClient) QueryValidators(limit uint64, offset uint64) (*ValidatorsClientResponse, error) {
-	return &ValidatorsClientResponse{
-		Validators: []ValidatorInfo{*m.ActiveValidator},
-		Total:      1,
+func (m *MockBabylonClient) QueryFinalityProviders(limit uint64, offset uint64) (*FinalityProvidersClientResponse, error) {
+	return &FinalityProvidersClientResponse{
+		FinalityProviders: []FinalityProviderInfo{*m.ActiveFinalityProvider},
+		Total:             1,
 	}, nil
 }
 
-func (m *MockBabylonClient) QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error) {
-	if m.ActiveValidator.BtcPk.IsEqual(btcPubKey) {
-		return &ValidatorClientResponse{
-			Validator: *m.ActiveValidator,
+func (m *MockBabylonClient) QueryFinalityProvider(btcPubKey *btcec.PublicKey) (*FinalityProviderClientResponse, error) {
+	if m.ActiveFinalityProvider.BtcPk.IsEqual(btcPubKey) {
+		return &FinalityProviderClientResponse{
+			FinalityProvider: *m.ActiveFinalityProvider,
 		}, nil
 	} else {
-		return nil, ErrValidatorDoesNotExist
+		return nil, ErrFinalityProviderDoesNotExist
 	}
 }
 
@@ -151,17 +151,17 @@ func GetMockClient() *MockBabylonClient {
 
 	slashingAddress, _ := btcutil.NewAddressPubKey(covenantPk.PubKey().SerializeCompressed(), &chaincfg.SimNetParams)
 
-	validatorBtcPrivKey, err := btcec.NewPrivateKey()
+	fpBtcPrivKey, err := btcec.NewPrivateKey()
 	if err != nil {
 		panic(err)
 	}
 
-	validatorBabylonPrivKey := secp256k1.GenPrivKey()
-	validatorBabylonPubKey := validatorBabylonPrivKey.PubKey().(*secp256k1.PubKey)
+	fpBabylonPrivKey := secp256k1.GenPrivKey()
+	fpBabylonPubKey := fpBabylonPrivKey.PubKey().(*secp256k1.PubKey)
 
-	vi := ValidatorInfo{
-		BabylonPk: *validatorBabylonPubKey,
-		BtcPk:     *validatorBtcPrivKey.PubKey(),
+	vi := FinalityProviderInfo{
+		BabylonPk: *fpBabylonPubKey,
+		BtcPk:     *fpBtcPrivKey.PubKey(),
 	}
 
 	return &MockBabylonClient{
@@ -175,6 +175,6 @@ func GetMockClient() *MockBabylonClient {
 		},
 		babylonKey:      priv,
 		SentMessages:    make(chan *types.MsgCreateBTCDelegation),
-		ActiveValidator: &vi,
+		ActiveFinalityProvider: &vi,
 	}
 }

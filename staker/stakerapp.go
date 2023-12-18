@@ -120,7 +120,7 @@ const (
 	// Transaction is quite big as witness to spend is composed of:
 	// 1. StakerSig
 	// 2. CovenantSig
-	// 3. ValidatorSig
+	// 3. FinalityProviderSig
 	// 4. StakingScript
 	// 5. Taproot control block
 	slashingPathSpendTxVSize = 180
@@ -1102,7 +1102,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakingTx,
 					ev.stakingOutputIdx,
 					ev.stakingTime,
-					ev.validatorBtcPks,
+					ev.fpBtcPks,
 					babylonPopToDbPop(ev.pop),
 					ev.stakerAddress, ev.slashingTxChangeAddress,
 					ev.watchTxData.slashingTx,
@@ -1131,7 +1131,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakingTx,
 					ev.stakingOutputIdx,
 					ev.stakingTime,
-					ev.validatorBtcPks,
+					ev.fpBtcPks,
 					babylonPopToDbPop(ev.pop),
 					ev.stakerAddress, ev.slashingTxChangeAddress,
 				)
@@ -1328,7 +1328,7 @@ func (app *StakerApp) WatchStaking(
 	stakingTx *wire.MsgTx,
 	stakingTime uint16,
 	stakingValue btcutil.Amount,
-	validatorPks []*btcec.PublicKey,
+	fpPks []*btcec.PublicKey,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
@@ -1346,19 +1346,19 @@ func (app *StakerApp) WatchStaking(
 		return nil, fmt.Errorf("failed to watch staking tx. Failed to get params: %w", err)
 	}
 
-	if len(validatorPks) == 0 {
-		return nil, fmt.Errorf("no validator public keys provided")
+	if len(fpPks) == 0 {
+		return nil, fmt.Errorf("no finality provider public keys provided")
 	}
 
-	if haveDuplicates(validatorPks) {
-		return nil, fmt.Errorf("duplicate validator public keys provided")
+	if haveDuplicates(fpPks) {
+		return nil, fmt.Errorf("duplicate finality provider public keys provided")
 	}
 
 	watchedRequest, err := parseWatchStakingRequest(
 		stakingTx,
 		stakingTime,
 		stakingValue,
-		validatorPks,
+		fpPks,
 		slashingTx,
 		slashingTxSig,
 		stakerBabylonPk,
@@ -1377,9 +1377,9 @@ func (app *StakerApp) WatchStaking(
 		return nil, fmt.Errorf("failed to watch staking tx. Invalid request: %w", err)
 	}
 
-	// we have valid request, check whether validators exists on babylon
-	for _, validatorPk := range validatorPks {
-		if err := app.validatorExists(validatorPk); err != nil {
+	// we have valid request, check whether finality providers exists on babylon
+	for _, fpPk := range fpPks {
+		if err := app.finalityProviderExists(fpPk); err != nil {
 			return nil, err
 		}
 	}
@@ -1414,7 +1414,7 @@ func (app *StakerApp) WatchStaking(
 func (app *StakerApp) StakeFunds(
 	stakerAddress, slashingTxChangeAddress btcutil.Address,
 	stakingAmount btcutil.Amount,
-	validatorPks []*btcec.PublicKey,
+	fpPks []*btcec.PublicKey,
 	stakingTimeBlocks uint16,
 ) (*chainhash.Hash, error) {
 
@@ -1426,16 +1426,16 @@ func (app *StakerApp) StakeFunds(
 	default:
 	}
 
-	if len(validatorPks) == 0 {
-		return nil, fmt.Errorf("no validator public keys provided")
+	if len(fpPks) == 0 {
+		return nil, fmt.Errorf("no finality providers public keys provided")
 	}
 
-	if haveDuplicates(validatorPks) {
-		return nil, fmt.Errorf("duplicate validator public keys provided")
+	if haveDuplicates(fpPks) {
+		return nil, fmt.Errorf("duplicate finality provider public keys provided")
 	}
 
-	for _, validatorPk := range validatorPks {
-		if err := app.validatorExists(validatorPk); err != nil {
+	for _, fpPk := range fpPks {
+		if err := app.finalityProviderExists(fpPk); err != nil {
 			return nil, err
 		}
 	}
@@ -1484,7 +1484,7 @@ func (app *StakerApp) StakeFunds(
 
 	stakingInfo, err := staking.BuildStakingInfo(
 		stakerPrivKey.PubKey(),
-		validatorPks,
+		fpPks,
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
 		stakingTimeBlocks,
@@ -1519,7 +1519,7 @@ func (app *StakerApp) StakeFunds(
 		stakingInfo.StakingOutput.PkScript,
 		stakingTimeBlocks,
 		stakingAmount,
-		validatorPks,
+		fpPks,
 		params.ConfirmationTimeBlocks,
 		pop,
 	)
@@ -1759,8 +1759,8 @@ func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash
 	return spendTxHash, &spendTxValue, nil
 }
 
-func (app *StakerApp) ListActiveValidators(limit uint64, offset uint64) (*cl.ValidatorsClientResponse, error) {
-	return app.babylonClient.QueryValidators(limit, offset)
+func (app *StakerApp) ListActiveFinalityProviders(limit uint64, offset uint64) (*cl.FinalityProvidersClientResponse, error) {
+	return app.babylonClient.QueryFinalityProviders(limit, offset)
 }
 
 // Initiates whole unbonding process. Whole process looks like this:
@@ -1769,7 +1769,7 @@ func (app *StakerApp) ListActiveValidators(limit uint64, offset uint64) (*cl.Val
 // 3. If request is successful, unbonding transaction is registred in db and
 // staking transaction is marked as unbonded
 // 4. Staker program starts watching for unbodning transactions signatures from
-// covenant and validator
+// covenant and finality provider
 // 5. After gathering all signatures, unbonding transaction is sent to bitcoin
 // This function returns control to the caller after step 3. Later is up to the caller
 // to check what is state of unbonding transaction

@@ -49,8 +49,8 @@ var (
 	ErrInvalidBabylonExecution             = errors.New("message send to babylon was executed with error")
 	ErrHeaderNotKnownToBabylon             = errors.New("btc header not known to babylon")
 	ErrHeaderOnBabylonLCFork               = errors.New("btc header is on babylon btc light client fork")
-	ErrValidatorDoesNotExist               = errors.New("validator does not exist")
-	ErrValidatorIsSlashed                  = errors.New("validator is slashed")
+	ErrFinalityProviderDoesNotExist        = errors.New("finality provider does not exist")
+	ErrFinalityProviderIsSlashed           = errors.New("finality provider is slashed")
 	ErrDelegationNotFound                  = errors.New("delegation not found")
 	ErrInvalidValueReceivedFromBabylonNode = errors.New("invalid value received from babylon node")
 )
@@ -106,18 +106,18 @@ type StakingTrackerResponse struct {
 	MinSlashingFee          btcutil.Amount
 }
 
-type ValidatorInfo struct {
+type FinalityProviderInfo struct {
 	BabylonPk secp256k1.PubKey
 	BtcPk     btcec.PublicKey
 }
 
-type ValidatorsClientResponse struct {
-	Validators []ValidatorInfo
-	Total      uint64
+type FinalityProvidersClientResponse struct {
+	FinalityProviders []FinalityProviderInfo
+	Total             uint64
 }
 
-type ValidatorClientResponse struct {
-	Validator ValidatorInfo
+type FinalityProviderClientResponse struct {
+	FinalityProvider FinalityProviderInfo
 }
 
 // Copied from vigilante. Weirdly, there is only Stop function (no Start function ?)
@@ -257,14 +257,13 @@ type DelegationData struct {
 	StakingTransactionInclusionBlockHash *chainhash.Hash
 	StakingTime                          uint16
 	StakingValue                         btcutil.Amount
-	// TODO: Support multiple validators
-	ValidatorBtcPks        []*btcec.PublicKey
-	SlashingTransaction    *wire.MsgTx
-	SlashingTransactionSig *schnorr.Signature
-	BabylonPk              *secp256k1.PubKey
-	StakerBtcPk            *btcec.PublicKey
-	BabylonPop             *stakerdb.ProofOfPossession
-	Ud                     *UndelegationData
+	FinalityProvidersBtcPks              []*btcec.PublicKey
+	SlashingTransaction                  *wire.MsgTx
+	SlashingTransactionSig               *schnorr.Signature
+	BabylonPk                            *secp256k1.PubKey
+	StakerBtcPk                          *btcec.PublicKey
+	BabylonPop                           *stakerdb.ProofOfPossession
+	Ud                                   *UndelegationData
 }
 
 type UndelegationData struct {
@@ -321,14 +320,14 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 
 	slashingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(dg.SlashingTransactionSig)
 
-	if len(dg.ValidatorBtcPks) == 0 {
-		return nil, fmt.Errorf("received delegation data with no validators")
+	if len(dg.FinalityProvidersBtcPks) == 0 {
+		return nil, fmt.Errorf("received delegation data with no finality providers")
 	}
 
-	validatorPksList := make([]bbntypes.BIP340PubKey, len(dg.ValidatorBtcPks))
+	fpPksList := make([]bbntypes.BIP340PubKey, len(dg.FinalityProvidersBtcPks))
 
-	for i, validatorPk := range dg.ValidatorBtcPks {
-		validatorPksList[i] = *bbntypes.NewBIP340PubKeyFromBTCPK(validatorPk)
+	for i, fpPk := range dg.FinalityProvidersBtcPks {
+		fpPksList[i] = *bbntypes.NewBIP340PubKeyFromBTCPK(fpPk)
 	}
 
 	// Prepare undelegation data to be sent in message
@@ -362,7 +361,7 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 			BtcSig:     dg.BabylonPop.BtcSigOverBabylonSig,
 		},
 		BtcPk:        bbntypes.NewBIP340PubKeyFromBTCPK(dg.StakerBtcPk),
-		FpBtcPkList:  validatorPksList,
+		FpBtcPkList:  fpPksList,
 		StakingTime:  uint32(dg.StakingTime),
 		StakingValue: int64(dg.StakingValue),
 		// TODO: It is super bad that this thing (TransactionInfo) spread over whole babylon codebase, and it
@@ -474,9 +473,9 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 	}, nil
 }
 
-func (bc *BabylonController) QueryValidators(
+func (bc *BabylonController) QueryFinalityProviders(
 	limit uint64,
-	offset uint64) (*ValidatorsClientResponse, error) {
+	offset uint64) (*FinalityProvidersClientResponse, error) {
 	ctx, cancel := getQueryContext(bc.cfg.Timeout)
 	defer cancel()
 
@@ -505,41 +504,41 @@ func (bc *BabylonController) QueryValidators(
 			"attempt":      n + 1,
 			"max_attempts": RtyAttNum,
 			"error":        err,
-		}).Error("Failed to query babylon for the list of registered validators")
+		}).Error("Failed to query babylon for the list of registered finality providers")
 	})); err != nil {
 		return nil, err
 	}
 
-	var validators []ValidatorInfo
-	for _, validator := range response.FinalityProviders {
-		// TODO: We actually need to use a query for ActiveBTCValidators
+	var finalityProviders []FinalityProviderInfo
+	for _, finalityProvider := range response.FinalityProviders {
+		// TODO: We actually need to use a query for ActiveFinalityProviders
 		// instead of checking for the slashing condition
-		if validator.SlashedBabylonHeight > 0 {
+		if finalityProvider.SlashedBabylonHeight > 0 {
 			continue
 		}
-		validatorBtcKey, err := validator.BtcPk.ToBTCPK()
+		fpBtcKey, err := finalityProvider.BtcPk.ToBTCPK()
 		if err != nil {
-			return nil, fmt.Errorf("query validators error: %w", err)
+			return nil, fmt.Errorf("query finality providers error: %w", err)
 		}
-		validatorBabylonPk := validator.BabylonPk
+		fpBabylonPk := finalityProvider.BabylonPk
 
-		validatorInfo := ValidatorInfo{
-			BabylonPk: *validatorBabylonPk,
-			BtcPk:     *validatorBtcKey,
+		fpInfo := FinalityProviderInfo{
+			BabylonPk: *fpBabylonPk,
+			BtcPk:     *fpBtcKey,
 		}
 
-		validators = append(validators, validatorInfo)
+		finalityProviders = append(finalityProviders, fpInfo)
 	}
 
-	return &ValidatorsClientResponse{
-		Validators: validators,
-		Total:      response.Pagination.Total,
+	return &FinalityProvidersClientResponse{
+		FinalityProviders: finalityProviders,
+		Total:             response.Pagination.Total,
 	}, nil
 }
 
-func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*ValidatorClientResponse, error) {
+func (bc *BabylonController) QueryFinalityProvider(btcPubKey *btcec.PublicKey) (*FinalityProviderClientResponse, error) {
 	if btcPubKey == nil {
-		return nil, fmt.Errorf("cannot query validator with nil btc public key")
+		return nil, fmt.Errorf("cannot query finality provider with nil btc public key")
 	}
 
 	ctx, cancel := getQueryContext(bc.cfg.Timeout)
@@ -560,8 +559,8 @@ func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*Valida
 		)
 		if err != nil {
 			if strings.Contains(err.Error(), btcstypes.ErrFpNotFound.Error()) {
-				// if there is no validator with such key, we return unrecoverable error, as we not need to retry any more
-				return retry.Unrecoverable(fmt.Errorf("failed to get validator with key: %s: %w", hexPubKey, ErrValidatorDoesNotExist))
+				// if there is no finality provider with such key, we return unrecoverable error, as we not need to retry any more
+				return retry.Unrecoverable(fmt.Errorf("failed to get finality provider with key: %s: %w", hexPubKey, ErrFinalityProviderDoesNotExist))
 			}
 
 			return err
@@ -572,15 +571,15 @@ func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*Valida
 		bc.logger.WithFields(logrus.Fields{
 			"attempt":      n + 1,
 			"max_attempts": RtyAttNum,
-			"validator":    hexPubKey,
+			"fpKey":        hexPubKey,
 			"error":        err,
-		}).Error("Failed to query babylon for the validator")
+		}).Error("Failed to query babylon for the finality provider")
 	})); err != nil {
 		return nil, err
 	}
 
 	if response.FinalityProvider.SlashedBabylonHeight > 0 {
-		return nil, fmt.Errorf("failed to get validator with key: %s: %w", hexPubKey, ErrValidatorIsSlashed)
+		return nil, fmt.Errorf("failed to get finality provider with key: %s: %w", hexPubKey, ErrFinalityProviderIsSlashed)
 	}
 
 	btcPk, err := response.FinalityProvider.BtcPk.ToBTCPK()
@@ -589,8 +588,8 @@ func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*Valida
 		return nil, fmt.Errorf("received malformed btc pk in babylon response: %w", err)
 	}
 
-	return &ValidatorClientResponse{
-		Validator: ValidatorInfo{
+	return &FinalityProviderClientResponse{
+		FinalityProvider: FinalityProviderInfo{
 			BabylonPk: *response.FinalityProvider.BabylonPk,
 			BtcPk:     *btcPk,
 		},
@@ -651,9 +650,9 @@ func chainToChainBytes(chain []*wire.BlockHeader) []bbntypes.BTCHeaderBytes {
 	return chainBytes
 }
 
-// RegisterValidator registers a BTC validator via a MsgCreateBTCValidator to Babylon
+// RegisterFinalityProvider registers a BTC finality provider via a MsgCreateFinalityProvider to Babylon
 // it returns tx hash and error
-func (bc *BabylonController) RegisterValidator(
+func (bc *BabylonController) RegisterFinalityProvider(
 	bbnPubKey *secp256k1.PubKey, btcPubKey *bbntypes.BIP340PubKey, commission *sdkmath.LegacyDec,
 	description *sttypes.Description, pop *btcstypes.ProofOfPossession) (*pv.RelayerTxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateFinalityProvider{
@@ -806,33 +805,4 @@ func (bc *BabylonController) QueryPendingBTCDelegations() ([]*btcstypes.BTCDeleg
 	}
 
 	return res.BtcDelegations, nil
-}
-
-func (bc *BabylonController) QueryValidatorDelegations(validatorBtcPubKey *btcec.PublicKey) ([]*btcstypes.BTCDelegation, error) {
-	ctx, cancel := getQueryContext(bc.cfg.Timeout)
-	defer cancel()
-
-	clientCtx := client.Context{Client: bc.bbnClient.RPCClient}
-
-	queryClient := btcstypes.NewQueryClient(clientCtx)
-
-	key := bbntypes.NewBIP340PubKeyFromBTCPK(validatorBtcPubKey)
-
-	// query all the unsigned delegations
-
-	queryRequest := &btcstypes.QueryFinalityProviderDelegationsRequest{
-		FpBtcPkHex: key.MarshalHex(),
-	}
-	res, err := queryClient.FinalityProviderDelegations(ctx, queryRequest)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query BTC delegations: %v", err)
-	}
-
-	var delegations []*btcstypes.BTCDelegation
-
-	for _, dels := range res.BtcDelegatorDelegations {
-		delegations = append(delegations, dels.Dels...)
-	}
-
-	return delegations, nil
 }

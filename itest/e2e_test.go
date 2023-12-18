@@ -173,16 +173,16 @@ type TestManager struct {
 }
 
 type testStakingData struct {
-	StakerKey                 *btcec.PublicKey
-	StakerBabylonPrivKey      *secp256k1.PrivKey
-	StakerBabylonPubKey       *secp256k1.PubKey
-	ValidatorBabylonPrivKey   *secp256k1.PrivKey
-	ValidatorBabylonPublicKey *secp256k1.PubKey
-	ValidatorBtcPrivKey       *btcec.PrivateKey
-	ValidatorBtcKey           *btcec.PublicKey
-	SlashingTxChangeAddress   btcutil.Address
-	StakingTime               uint16
-	StakingAmount             int64
+	StakerKey                        *btcec.PublicKey
+	StakerBabylonPrivKey             *secp256k1.PrivKey
+	StakerBabylonPubKey              *secp256k1.PubKey
+	FinalityProviderBabylonPrivKey   *secp256k1.PrivKey
+	FinalityProviderBabylonPublicKey *secp256k1.PubKey
+	FinalityProviderBtcPrivKey       *btcec.PrivateKey
+	FinalityProviderBtcKey           *btcec.PublicKey
+	SlashingTxChangeAddress          btcutil.Address
+	StakingTime                      uint16
+	StakingAmount                    int64
 }
 
 func (tm *TestManager) getTestStakingData(
@@ -192,23 +192,23 @@ func (tm *TestManager) getTestStakingData(
 	stakingAmount int64) *testStakingData {
 	delegatarPrivKey, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
-	validatorBabylonPrivKey := secp256k1.GenPrivKey()
-	validatorBabylonPubKey := validatorBabylonPrivKey.PubKey().(*secp256k1.PubKey)
+	finalityProviderBabylonPrivKey := secp256k1.GenPrivKey()
+	finalityProviderBabylonPubKey := finalityProviderBabylonPrivKey.PubKey().(*secp256k1.PubKey)
 
 	stakerBabylonPrivKey := secp256k1.GenPrivKey()
 	stakerBabylonPubKey := stakerBabylonPrivKey.PubKey().(*secp256k1.PubKey)
 
 	return &testStakingData{
-		StakerKey:                 stakerKey,
-		StakerBabylonPrivKey:      stakerBabylonPrivKey,
-		StakerBabylonPubKey:       stakerBabylonPubKey,
-		ValidatorBabylonPrivKey:   validatorBabylonPrivKey,
-		ValidatorBabylonPublicKey: validatorBabylonPubKey,
-		ValidatorBtcPrivKey:       delegatarPrivKey,
-		ValidatorBtcKey:           delegatarPrivKey.PubKey(),
-		SlashingTxChangeAddress:   slashingTxChangeAddress,
-		StakingTime:               stakingTime,
-		StakingAmount:             stakingAmount,
+		StakerKey:                        stakerKey,
+		StakerBabylonPrivKey:             stakerBabylonPrivKey,
+		StakerBabylonPubKey:              stakerBabylonPubKey,
+		FinalityProviderBabylonPrivKey:   finalityProviderBabylonPrivKey,
+		FinalityProviderBabylonPublicKey: finalityProviderBabylonPubKey,
+		FinalityProviderBtcPrivKey:       delegatarPrivKey,
+		FinalityProviderBtcKey:           delegatarPrivKey.PubKey(),
+		SlashingTxChangeAddress:          slashingTxChangeAddress,
+		StakingTime:                      stakingTime,
+		StakingAmount:                    stakingAmount,
 	}
 }
 
@@ -528,26 +528,26 @@ func GetAllMinedBtcHeadersSinceGenesis(t *testing.T, h *rpctest.Harness) []*wire
 	return headers
 }
 
-func (tm *TestManager) createAndRegisterValidator(t *testing.T, testStakingData *testStakingData) {
-	resp, err := tm.BabylonClient.QueryValidators(100, 0)
+func (tm *TestManager) createAndRegisterFinalityProvider(t *testing.T, testStakingData *testStakingData) {
+	resp, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
 	require.NoError(t, err)
-	// No validators yet
-	require.Len(t, resp.Validators, 0)
-	valResp, err := tm.BabylonClient.QueryValidator(testStakingData.ValidatorBtcKey)
+	// No providers yet
+	require.Len(t, resp.FinalityProviders, 0)
+	valResp, err := tm.BabylonClient.QueryFinalityProvider(testStakingData.FinalityProviderBtcKey)
 	require.Nil(t, valResp)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, babylonclient.ErrValidatorDoesNotExist))
+	require.True(t, errors.Is(err, babylonclient.ErrFinalityProviderDoesNotExist))
 
-	pop, err := btcstypes.NewPoP(testStakingData.ValidatorBabylonPrivKey, testStakingData.ValidatorBtcPrivKey)
+	pop, err := btcstypes.NewPoP(testStakingData.FinalityProviderBabylonPrivKey, testStakingData.FinalityProviderBtcPrivKey)
 	require.NoError(t, err)
 
-	btcValKey := bbntypes.NewBIP340PubKeyFromBTCPK(testStakingData.ValidatorBtcKey)
+	btcValKey := bbntypes.NewBIP340PubKeyFromBTCPK(testStakingData.FinalityProviderBtcKey)
 
 	params, err := tm.BabylonClient.QueryStakingTracker()
 	require.NoError(t, err)
 
-	_, err = tm.BabylonClient.RegisterValidator(
-		testStakingData.ValidatorBabylonPublicKey,
+	_, err = tm.BabylonClient.RegisterFinalityProvider(
+		testStakingData.FinalityProviderBabylonPublicKey,
 		btcValKey,
 		&params.MinComissionRate,
 		&sttypes.Description{
@@ -556,10 +556,10 @@ func (tm *TestManager) createAndRegisterValidator(t *testing.T, testStakingData 
 		pop,
 	)
 
-	resp, err = tm.BabylonClient.QueryValidators(100, 0)
+	resp, err = tm.BabylonClient.QueryFinalityProviders(100, 0)
 	require.NoError(t, err)
-	// After registration we should have one validator
-	require.Len(t, resp.Validators, 1)
+	// After registration we should have one finality provider
+	require.Len(t, resp.FinalityProviders, 1)
 }
 
 func (tm *TestManager) sendHeadersToBabylon(t *testing.T, headers []*wire.BlockHeader) {
@@ -583,13 +583,13 @@ func (tm *TestManager) mineNEmptyBlocks(t *testing.T, numHeaders uint32, sendToB
 }
 
 func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingData) *chainhash.Hash {
-	validatorKey := hex.EncodeToString(schnorr.SerializePubKey(testStakingData.ValidatorBtcKey))
+	fpKey := hex.EncodeToString(schnorr.SerializePubKey(testStakingData.FinalityProviderBtcKey))
 	res, err := tm.StakerClient.Stake(
 		context.Background(),
 		tm.MinerAddr.String(),
 		testStakingData.SlashingTxChangeAddress.String(),
 		testStakingData.StakingAmount,
-		[]string{validatorKey},
+		[]string{fpKey},
 		int64(testStakingData.StakingTime),
 	)
 	require.NoError(t, err)
@@ -620,13 +620,13 @@ func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingD
 func (tm *TestManager) sendMultipleStakingTx(t *testing.T, testStakingData []*testStakingData) []*chainhash.Hash {
 	var hashes []*chainhash.Hash
 	for _, data := range testStakingData {
-		validatorKey := hex.EncodeToString(schnorr.SerializePubKey(data.ValidatorBtcKey))
+		fpKey := hex.EncodeToString(schnorr.SerializePubKey(data.FinalityProviderBtcKey))
 		res, err := tm.StakerClient.Stake(
 			context.Background(),
 			tm.MinerAddr.String(),
 			data.SlashingTxChangeAddress.String(),
 			data.StakingAmount,
-			[]string{validatorKey},
+			[]string{fpKey},
 			int64(data.StakingTime),
 		)
 		require.NoError(t, err)
@@ -659,7 +659,7 @@ func (tm *TestManager) sendWatchedStakingTx(
 ) *chainhash.Hash {
 	stakingInfo, err := staking.BuildStakingInfo(
 		testStakingData.StakerKey,
-		[]*btcec.PublicKey{testStakingData.ValidatorBtcKey},
+		[]*btcec.PublicKey{testStakingData.FinalityProviderBtcKey},
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
 		testStakingData.StakingTime,
@@ -734,7 +734,7 @@ func (tm *TestManager) sendWatchedStakingTx(
 
 	unbondingInfo, err := staking.BuildUnbondingInfo(
 		testStakingData.StakerKey,
-		[]*btcec.PublicKey{testStakingData.ValidatorBtcKey},
+		[]*btcec.PublicKey{testStakingData.FinalityProviderBtcKey},
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
 		unbondingTme,
@@ -786,7 +786,7 @@ func (tm *TestManager) sendWatchedStakingTx(
 		int(testStakingData.StakingTime),
 		int(testStakingData.StakingAmount),
 		hex.EncodeToString(schnorr.SerializePubKey(testStakingData.StakerKey)),
-		[]string{hex.EncodeToString(schnorr.SerializePubKey(testStakingData.ValidatorBtcKey))},
+		[]string{hex.EncodeToString(schnorr.SerializePubKey(testStakingData.FinalityProviderBtcKey))},
 		hex.EncodeToString(serializedSlashingTx),
 		hex.EncodeToString(slashSig.Serialize()),
 		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
@@ -889,7 +889,7 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 
 	stakingInfo, err := staking.BuildStakingInfo(
 		btcDel.BtcPk.MustToBTCPK(),
-		// TODO: Handle multplie validators
+		// TODO: Handle multplie providers
 		[]*btcec.PublicKey{btcDel.FpBtcPkList[0].MustToBTCPK()},
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
@@ -1012,22 +1012,22 @@ func TestStakingFailures(t *testing.T) {
 	stakingTime := uint16(staker.GetMinStakingTime(params))
 
 	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
-	validatorKey := hex.EncodeToString(schnorr.SerializePubKey(testStakingData.ValidatorBtcKey))
+	fpKey := hex.EncodeToString(schnorr.SerializePubKey(testStakingData.FinalityProviderBtcKey))
 
-	tm.createAndRegisterValidator(t, testStakingData)
+	tm.createAndRegisterFinalityProvider(t, testStakingData)
 
-	// Duplicated validator key
+	// Duplicated provider key
 	_, err = tm.StakerClient.Stake(
 		context.Background(),
 		tm.MinerAddr.String(),
 		testStakingData.SlashingTxChangeAddress.String(),
 		testStakingData.StakingAmount,
-		[]string{validatorKey, validatorKey},
+		[]string{fpKey, fpKey},
 		int64(testStakingData.StakingTime),
 	)
 	require.Error(t, err)
 
-	// No validator key
+	// No provider key
 	_, err = tm.StakerClient.Stake(
 		context.Background(),
 		tm.MinerAddr.String(),
@@ -1064,7 +1064,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 	require.NoError(t, erro)
 	require.Equal(t, st, walletcontroller.TxNotFound)
 
-	tm.createAndRegisterValidator(t, testStakingData)
+	tm.createAndRegisterFinalityProvider(t, testStakingData)
 
 	txHash := tm.sendStakingTx(t, testStakingData)
 
@@ -1132,7 +1132,7 @@ func TestMultipleWithdrawableStakingTransactions(t *testing.T) {
 	testStakingData4 := testStakingData1.withStakingTime(stakingTime4)
 	testStakingData5 := testStakingData1.withStakingTime(stakingTime5)
 
-	tm.createAndRegisterValidator(t, testStakingData1)
+	tm.createAndRegisterFinalityProvider(t, testStakingData1)
 	txHashes := tm.sendMultipleStakingTx(t, []*testStakingData{
 		testStakingData1,
 		testStakingData2,
@@ -1188,7 +1188,7 @@ func TestSendingWatchedStakingTransaction(t *testing.T) {
 	stakingTime := uint16(staker.GetMinStakingTime(params))
 	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
-	tm.createAndRegisterValidator(t, testStakingData)
+	tm.createAndRegisterFinalityProvider(t, testStakingData)
 
 	txHash := tm.sendWatchedStakingTx(t, testStakingData, params)
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
@@ -1210,7 +1210,7 @@ func TestRestartingTxNotDeepEnough(t *testing.T) {
 	stakingTime := uint16(staker.GetMinStakingTime(params))
 	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 
-	tm.createAndRegisterValidator(t, testStakingData)
+	tm.createAndRegisterFinalityProvider(t, testStakingData)
 	txHash := tm.sendStakingTx(t, testStakingData)
 
 	// restart app when tx is not deep enough
@@ -1237,7 +1237,7 @@ func TestRestartingTxNotOnBabylon(t *testing.T) {
 	testStakingData1 := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
 	testStakingData2 := testStakingData1.withStakingAmout(11000)
 
-	tm.createAndRegisterValidator(t, testStakingData1)
+	tm.createAndRegisterFinalityProvider(t, testStakingData1)
 
 	txHashes := tm.sendMultipleStakingTx(t, []*testStakingData{
 		testStakingData1,
@@ -1278,7 +1278,7 @@ func TestStakingUnbonding(t *testing.T) {
 	stakingTime := uint16(1000)
 	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 50000)
 
-	tm.createAndRegisterValidator(t, testStakingData)
+	tm.createAndRegisterFinalityProvider(t, testStakingData)
 
 	txHash := tm.sendStakingTx(t, testStakingData)
 
@@ -1350,7 +1350,7 @@ func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
 	stakingTime := uint16(1000)
 	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 50000)
 
-	tm.createAndRegisterValidator(t, testStakingData)
+	tm.createAndRegisterFinalityProvider(t, testStakingData)
 
 	txHash := tm.sendStakingTx(t, testStakingData)
 

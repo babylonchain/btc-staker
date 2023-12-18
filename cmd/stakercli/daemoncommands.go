@@ -18,7 +18,7 @@ var daemonCommands = []cli.Command{
 		Subcommands: []cli.Command{
 			checkDaemonHealthCmd,
 			listOutputsCmd,
-			babylonValidatorsCmd,
+			babylonFinalityProvidersCmd,
 			stakeCmd,
 			unstakeCmd,
 			stakingDetailsCmd,
@@ -33,7 +33,7 @@ const (
 	stakingDaemonAddressFlag   = "daemon-address"
 	offsetFlag                 = "offset"
 	limitFlag                  = "limit"
-	validatorPksFlag           = "validator-pks"
+	fpPksFlag                  = "finality-providers-pks"
 	stakingTimeBlocksFlag      = "staking-time"
 	stakingTransactionHashFlag = "staking-transaction-hash"
 	feeRateFlag                = "fee-rate"
@@ -71,10 +71,10 @@ var listOutputsCmd = cli.Command{
 	Action: listOutputs,
 }
 
-var babylonValidatorsCmd = cli.Command{
-	Name:      "babylon-validators",
+var babylonFinalityProvidersCmd = cli.Command{
+	Name:      "babylon-finality-providers",
 	ShortName: "bv",
-	Usage:     "List current BTC validators on Babylon chain",
+	Usage:     "List current BTC finality providers on Babylon chain",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  stakingDaemonAddressFlag,
@@ -83,16 +83,16 @@ var babylonValidatorsCmd = cli.Command{
 		},
 		cli.IntFlag{
 			Name:  offsetFlag,
-			Usage: "offset of the first validator to return",
+			Usage: "offset of the first finality provider to return",
 			Value: 0,
 		},
 		cli.IntFlag{
 			Name:  limitFlag,
-			Usage: "maximum number of validators to return",
+			Usage: "maximum number of finality providers to return",
 			Value: 100,
 		},
 	},
-	Action: babylonValidators,
+	Action: babylonFinalityProviders,
 }
 
 var stakeCmd = cli.Command{
@@ -121,8 +121,8 @@ var stakeCmd = cli.Command{
 			Required: true,
 		},
 		cli.StringSliceFlag{
-			Name:     validatorPksFlag,
-			Usage:    "BTC public keys of the validators in hex",
+			Name:     fpPksFlag,
+			Usage:    "BTC public keys of the finality providers in hex",
 			Required: true,
 		},
 		cli.Int64Flag{
@@ -283,7 +283,7 @@ func listOutputs(ctx *cli.Context) error {
 	return nil
 }
 
-func babylonValidators(ctx *cli.Context) error {
+func babylonFinalityProviders(ctx *cli.Context) error {
 	daemonAddress := ctx.String(stakingDaemonAddressFlag)
 	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
 	if err != nil {
@@ -304,13 +304,13 @@ func babylonValidators(ctx *cli.Context) error {
 		return cli.NewExitError("Limit must be non-negative", 1)
 	}
 
-	validators, err := client.BabylonValidators(sctx, &offset, &limit)
+	finalityProviders, err := client.BabylonFinalityProviders(sctx, &offset, &limit)
 
 	if err != nil {
 		return err
 	}
 
-	printRespJSON(validators)
+	printRespJSON(finalityProviders)
 
 	return nil
 }
@@ -330,10 +330,10 @@ func stake(ctx *cli.Context) error {
 		slashingTxChangeAddress = stakerAddress
 	}
 	stakingAmount := ctx.Int64(stakingAmountFlag)
-	validatorPks := ctx.StringSlice(validatorPksFlag)
+	fpPks := ctx.StringSlice(fpPksFlag)
 	stakingTimeBlocks := ctx.Int64(stakingTimeFlag)
 
-	results, err := client.Stake(sctx, stakerAddress, slashingTxChangeAddress, stakingAmount, validatorPks, stakingTimeBlocks)
+	results, err := client.Stake(sctx, stakerAddress, slashingTxChangeAddress, stakingAmount, fpPks, stakingTimeBlocks)
 	if err != nil {
 		return err
 	}
