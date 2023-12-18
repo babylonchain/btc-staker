@@ -34,6 +34,7 @@ import (
 	sttypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	pv "github.com/cosmos/relayer/v2/relayer/provider"
 	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 var (
@@ -67,6 +68,7 @@ func NewBabylonController(
 	cfg *stakercfg.BBNConfig,
 	btcParams *chaincfg.Params,
 	logger *logrus.Logger,
+	clientLogger *zap.Logger,
 ) (*BabylonController, error) {
 	babylonConfig := stakercfg.BBNConfigToBabylonConfig(cfg)
 
@@ -77,7 +79,7 @@ func NewBabylonController(
 
 	bc, err := bbnclient.New(
 		&babylonConfig,
-		logger,
+		clientLogger,
 	)
 
 	if err != nil {
@@ -360,7 +362,7 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 			BtcSig:     dg.BabylonPop.BtcSigOverBabylonSig,
 		},
 		BtcPk:        bbntypes.NewBIP340PubKeyFromBTCPK(dg.StakerBtcPk),
-		ValBtcPkList: validatorPksList,
+		FpBtcPkList:  validatorPksList,
 		StakingTime:  uint32(dg.StakingTime),
 		StakingValue: int64(dg.StakingValue),
 		// TODO: It is super bad that this thing (TransactionInfo) spread over whole babylon codebase, and it
@@ -481,11 +483,11 @@ func (bc *BabylonController) QueryValidators(
 	clientCtx := client.Context{Client: bc.bbnClient.RPCClient}
 	queryClient := btcstypes.NewQueryClient(clientCtx)
 
-	var response *btcstypes.QueryBTCValidatorsResponse
+	var response *btcstypes.QueryFinalityProvidersResponse
 	if err := retry.Do(func() error {
-		resp, err := queryClient.BTCValidators(
+		resp, err := queryClient.FinalityProviders(
 			ctx,
-			&btcstypes.QueryBTCValidatorsRequest{
+			&btcstypes.QueryFinalityProvidersRequest{
 				Pagination: &bq.PageRequest{
 					Offset:     offset,
 					Limit:      limit,
@@ -509,7 +511,7 @@ func (bc *BabylonController) QueryValidators(
 	}
 
 	var validators []ValidatorInfo
-	for _, validator := range response.BtcValidators {
+	for _, validator := range response.FinalityProviders {
 		// TODO: We actually need to use a query for ActiveBTCValidators
 		// instead of checking for the slashing condition
 		if validator.SlashedBabylonHeight > 0 {
@@ -548,16 +550,16 @@ func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*Valida
 
 	hexPubKey := hex.EncodeToString(schnorr.SerializePubKey(btcPubKey))
 
-	var response *btcstypes.QueryBTCValidatorResponse
+	var response *btcstypes.QueryFinalityProviderResponse
 	if err := retry.Do(func() error {
-		resp, err := queryClient.BTCValidator(
+		resp, err := queryClient.FinalityProvider(
 			ctx,
-			&btcstypes.QueryBTCValidatorRequest{
-				ValBtcPkHex: hexPubKey,
+			&btcstypes.QueryFinalityProviderRequest{
+				FpBtcPkHex: hexPubKey,
 			},
 		)
 		if err != nil {
-			if strings.Contains(err.Error(), btcstypes.ErrBTCValNotFound.Error()) {
+			if strings.Contains(err.Error(), btcstypes.ErrFpNotFound.Error()) {
 				// if there is no validator with such key, we return unrecoverable error, as we not need to retry any more
 				return retry.Unrecoverable(fmt.Errorf("failed to get validator with key: %s: %w", hexPubKey, ErrValidatorDoesNotExist))
 			}
@@ -577,11 +579,11 @@ func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*Valida
 		return nil, err
 	}
 
-	if response.BtcValidator.SlashedBabylonHeight > 0 {
+	if response.FinalityProvider.SlashedBabylonHeight > 0 {
 		return nil, fmt.Errorf("failed to get validator with key: %s: %w", hexPubKey, ErrValidatorIsSlashed)
 	}
 
-	btcPk, err := response.BtcValidator.BtcPk.ToBTCPK()
+	btcPk, err := response.FinalityProvider.BtcPk.ToBTCPK()
 
 	if err != nil {
 		return nil, fmt.Errorf("received malformed btc pk in babylon response: %w", err)
@@ -589,7 +591,7 @@ func (bc *BabylonController) QueryValidator(btcPubKey *btcec.PublicKey) (*Valida
 
 	return &ValidatorClientResponse{
 		Validator: ValidatorInfo{
-			BabylonPk: *response.BtcValidator.BabylonPk,
+			BabylonPk: *response.FinalityProvider.BabylonPk,
 			BtcPk:     *btcPk,
 		},
 	}, nil
@@ -654,7 +656,7 @@ func chainToChainBytes(chain []*wire.BlockHeader) []bbntypes.BTCHeaderBytes {
 func (bc *BabylonController) RegisterValidator(
 	bbnPubKey *secp256k1.PubKey, btcPubKey *bbntypes.BIP340PubKey, commission *sdkmath.LegacyDec,
 	description *sttypes.Description, pop *btcstypes.ProofOfPossession) (*pv.RelayerTxResponse, error) {
-	registerMsg := &btcstypes.MsgCreateBTCValidator{
+	registerMsg := &btcstypes.MsgCreateFinalityProvider{
 		Signer:      bc.getTxSigner(),
 		Commission:  commission,
 		BabylonPk:   bbnPubKey,
@@ -817,10 +819,11 @@ func (bc *BabylonController) QueryValidatorDelegations(validatorBtcPubKey *btcec
 	key := bbntypes.NewBIP340PubKeyFromBTCPK(validatorBtcPubKey)
 
 	// query all the unsigned delegations
-	queryRequest := &btcstypes.QueryBTCValidatorDelegationsRequest{
-		ValBtcPkHex: key.MarshalHex(),
+
+	queryRequest := &btcstypes.QueryFinalityProviderDelegationsRequest{
+		FpBtcPkHex: key.MarshalHex(),
 	}
-	res, err := queryClient.BTCValidatorDelegations(ctx, queryRequest)
+	res, err := queryClient.FinalityProviderDelegations(ctx, queryRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query BTC delegations: %v", err)
 	}

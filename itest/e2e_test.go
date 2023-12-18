@@ -326,10 +326,10 @@ func StartManager(
 	dbbackend, err := stakercfg.GetDbBackend(cfg.DBConfig)
 	require.NoError(t, err)
 
-	stakerApp, err := staker.NewStakerAppFromConfig(cfg, logger, dbbackend)
+	stakerApp, err := staker.NewStakerAppFromConfig(cfg, logger, zapLogger, dbbackend)
 	require.NoError(t, err)
 	// we require separate client to send BTC headers to babylon node (interface does not need this method?)
-	bl, err := babylonclient.NewBabylonController(cfg.BabylonConfig, &cfg.ActiveNetParams, logger)
+	bl, err := babylonclient.NewBabylonController(cfg.BabylonConfig, &cfg.ActiveNetParams, logger, zapLogger)
 	require.NoError(t, err)
 
 	initBtcWalletClient(
@@ -416,7 +416,7 @@ func (tm *TestManager) RestartApp(t *testing.T) {
 	dbbackend, err := stakercfg.GetDbBackend(tm.Config.DBConfig)
 	require.NoError(t, err)
 
-	stakerApp, err := staker.NewStakerAppFromConfig(tm.Config, logger, dbbackend)
+	stakerApp, err := staker.NewStakerAppFromConfig(tm.Config, logger, zapLogger, dbbackend)
 	require.NoError(t, err)
 
 	interceptor, err := signal.Intercept()
@@ -890,7 +890,7 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 	stakingInfo, err := staking.BuildStakingInfo(
 		btcDel.BtcPk.MustToBTCPK(),
 		// TODO: Handle multplie validators
-		[]*btcec.PublicKey{btcDel.ValBtcPkList[0].MustToBTCPK()},
+		[]*btcec.PublicKey{btcDel.FpBtcPkList[0].MustToBTCPK()},
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
 		btcDel.GetStakingTime(),
@@ -907,14 +907,14 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 	slashingPathInfo, err := stakingInfo.SlashingPathSpendInfo()
 	require.NoError(t, err)
 	// get covenant private key from the keyring
-	valEncKey, err := asig.NewEncryptionKeyFromBTCPK(btcDel.ValBtcPkList[0].MustToBTCPK())
+	valEncKey, err := asig.NewEncryptionKeyFromBTCPK(btcDel.FpBtcPkList[0].MustToBTCPK())
 	require.NoError(t, err)
 
 	unbondingMsgTx, err := bbntypes.NewBTCTxFromBytes(btcDel.BtcUndelegation.UnbondingTx)
 	require.NoError(t, err)
 	unbondingInfo, err := staking.BuildUnbondingInfo(
 		btcDel.BtcPk.MustToBTCPK(),
-		[]*btcec.PublicKey{btcDel.ValBtcPkList[0].MustToBTCPK()},
+		[]*btcec.PublicKey{btcDel.FpBtcPkList[0].MustToBTCPK()},
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
 		uint16(btcDel.BtcUndelegation.UnbondingTime),

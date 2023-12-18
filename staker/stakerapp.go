@@ -9,6 +9,7 @@ import (
 	"time"
 
 	pv "github.com/cosmos/relayer/v2/relayer/provider"
+	"go.uber.org/zap"
 
 	sdkmath "cosmossdk.io/math"
 	"github.com/avast/retry-go/v4"
@@ -165,6 +166,7 @@ type StakerApp struct {
 func NewStakerAppFromConfig(
 	config *scfg.Config,
 	logger *logrus.Logger,
+	rpcClientLogger *zap.Logger,
 	db kvdb.Backend,
 ) (*StakerApp, error) {
 	// TODO: If we want to support multiple wallet types, this is most probably the place to decide
@@ -180,7 +182,7 @@ func NewStakerAppFromConfig(
 		return nil, err
 	}
 
-	babylonClient, err := cl.NewBabylonController(config.BabylonConfig, &config.ActiveNetParams, logger)
+	babylonClient, err := cl.NewBabylonController(config.BabylonConfig, &config.ActiveNetParams, logger, rpcClientLogger)
 
 	if err != nil {
 		return nil, err
