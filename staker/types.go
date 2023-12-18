@@ -121,7 +121,7 @@ func buildSlashingTxAndSig(
 
 	stakingInfo, err := staking.BuildStakingInfo(
 		delegationData.stakerPrivKey.PubKey(),
-		storedTx.ValidatorBtcPks,
+		storedTx.FinalityProvidersBtcPks,
 		delegationData.covenantPks,
 		delegationData.covenantThreshold,
 		storedTx.StakingTime,
@@ -173,7 +173,7 @@ func createDelegationData(
 		StakingTransactionInclusionBlockHash: &inclusionBlockHash,
 		StakingTime:                          storedTx.StakingTime,
 		StakingValue:                         btcutil.Amount(storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex].Value),
-		ValidatorBtcPks:                      storedTx.ValidatorBtcPks,
+		FinalityProvidersBtcPks:              storedTx.FinalityProvidersBtcPks,
 		StakerBtcPk:                          StakerBtcPk,
 		SlashingTransaction:                  slashingTx,
 		SlashingTransactionSig:               slashingTxSignature,
@@ -230,7 +230,7 @@ func createSpendStakeTxFromStoredTx(
 	if storedtx.State == proto.TransactionState_SENT_TO_BABYLON {
 		stakingInfo, err := staking.BuildStakingInfo(
 			stakerBtcPk,
-			storedtx.ValidatorBtcPks,
+			storedtx.FinalityProvidersBtcPks,
 			covenantPublicKeys,
 			covenantThreshold,
 			storedtx.StakingTime,
@@ -274,7 +274,7 @@ func createSpendStakeTxFromStoredTx(
 
 		unbondingInfo, err := staking.BuildUnbondingInfo(
 			stakerBtcPk,
-			storedtx.ValidatorBtcPks,
+			storedtx.FinalityProvidersBtcPks,
 			covenantPublicKeys,
 			covenantThreshold,
 			data.UnbondingTime,
@@ -354,7 +354,7 @@ func createUndelegationData(
 
 	unbondingInfo, err := staking.BuildUnbondingInfo(
 		stakerPrivKey.PubKey(),
-		storedTx.ValidatorBtcPks,
+		storedTx.FinalityProvidersBtcPks,
 		covenantPubKeys,
 		covenantThreshold,
 		unbondingTime,
@@ -430,7 +430,7 @@ func createWitnessToSendUnbondingTx(
 
 	stakingInfo, err := staking.BuildStakingInfo(
 		stakerPrivKey.PubKey(),
-		storedTx.ValidatorBtcPks,
+		storedTx.FinalityProvidersBtcPks,
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
 		storedTx.StakingTime,
@@ -474,7 +474,7 @@ func parseWatchStakingRequest(
 	stakingTx *wire.MsgTx,
 	stakingTime uint16,
 	stakingValue btcutil.Amount,
-	validatorBtcPks []*btcec.PublicKey,
+	fpBtcPks []*btcec.PublicKey,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
@@ -490,7 +490,7 @@ func parseWatchStakingRequest(
 ) (*stakingRequestedEvent, error) {
 	stakingInfo, err := staking.BuildStakingInfo(
 		stakerBtcPk,
-		validatorBtcPks,
+		fpBtcPks,
 		currentParams.CovenantPks,
 		currentParams.CovenantQuruomThreshold,
 		stakingTime,
@@ -572,7 +572,7 @@ func parseWatchStakingRequest(
 
 	unbondingInfo, err := staking.BuildUnbondingInfo(
 		stakerBtcPk,
-		validatorBtcPks,
+		fpBtcPks,
 		currentParams.CovenantPks,
 		currentParams.CovenantQuruomThreshold,
 		unbondingTime,
@@ -653,7 +653,7 @@ func parseWatchStakingRequest(
 		stakingTx.TxOut[stakingOutputIdx].PkScript,
 		stakingTime,
 		stakingValue,
-		validatorBtcPks,
+		fpBtcPks,
 		currentParams.ConfirmationTimeBlocks,
 		pop,
 		slashingTx,

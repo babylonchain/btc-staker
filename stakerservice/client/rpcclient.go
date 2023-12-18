@@ -41,8 +41,8 @@ func (c *StakerServiceJsonRpcClient) ListOutputs(ctx context.Context) (*service.
 	return result, nil
 }
 
-func (c *StakerServiceJsonRpcClient) BabylonValidators(ctx context.Context, offset *int, limit *int) (*service.ValidatorsResponse, error) {
-	result := new(service.ValidatorsResponse)
+func (c *StakerServiceJsonRpcClient) BabylonFinalityProviders(ctx context.Context, offset *int, limit *int) (*service.FinalityProvidersResponse, error) {
+	result := new(service.FinalityProvidersResponse)
 
 	params := make(map[string]interface{})
 
@@ -54,7 +54,7 @@ func (c *StakerServiceJsonRpcClient) BabylonValidators(ctx context.Context, offs
 		params["offset"] = offset
 	}
 
-	_, err := c.client.Call(ctx, "babylon_validators", params, result)
+	_, err := c.client.Call(ctx, "babylon_finality_providers", params, result)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (c *StakerServiceJsonRpcClient) Stake(
 	stakerAddress string,
 	slashingTxChangeAddress string,
 	stakingAmount int64,
-	validatorPks []string,
+	fpPks []string,
 	stakingTimeBlocks int64,
 ) (*service.ResultStake, error) {
 	result := new(service.ResultStake)
@@ -75,7 +75,7 @@ func (c *StakerServiceJsonRpcClient) Stake(
 	params["stakerAddress"] = stakerAddress
 	params["slashingTxChangeAddress"] = slashingTxChangeAddress
 	params["stakingAmount"] = stakingAmount
-	params["validatorBtcPks"] = validatorPks
+	params["fpBtcPks"] = fpPks
 	params["stakingTimeBlocks"] = stakingTimeBlocks
 
 	_, err := c.client.Call(ctx, "stake", params, result)
@@ -157,7 +157,7 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	stakingTime int,
 	stakingValue int,
 	stakerBtcPk string,
-	validatorBtcPks []string,
+	fpBtcPks []string,
 	slashingTx string,
 	slashingTxSig string,
 	stakerBabylonPk string,
@@ -177,7 +177,7 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	params["stakingTime"] = stakingTime
 	params["stakingValue"] = stakingValue
 	params["stakerBtcPk"] = stakerBtcPk
-	params["validatorBtcPks"] = validatorBtcPks
+	params["fpBtcPks"] = fpBtcPks
 	params["slashingTx"] = slashingTx
 	params["slashingTxSig"] = slashingTxSig
 	params["stakerBabylonPk"] = stakerBabylonPk

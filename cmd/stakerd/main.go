@@ -22,7 +22,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg, cfgLogger, err := scfg.LoadConfig()
+	cfg, cfgLogger, zapLogger, err := scfg.LoadConfig()
 
 	if err != nil {
 		if e, ok := err.(*flags.Error); !ok || e.Type != flags.ErrHelp {
@@ -69,7 +69,7 @@ func main() {
 	}
 
 	// TODO: consider moving this to stakerservice
-	staker, err := staker.NewStakerAppFromConfig(cfg, cfgLogger, dbBackend)
+	staker, err := staker.NewStakerAppFromConfig(cfg, cfgLogger, zapLogger, dbBackend)
 
 	if err != nil {
 		cfgLogger.Errorf("failed to create staker app: %v", err)

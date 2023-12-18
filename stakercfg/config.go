@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/babylonchain/btc-staker/types"
+	"go.uber.org/zap"
 
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -118,7 +119,7 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 
 type StakerConfig struct {
 	BabylonStallingInterval  time.Duration `long:"babylonstallinginterval" description:"The interval for Babylon node BTC light client to catch up with the real chain before re-sending delegation request"`
-	UnbondingTxCheckInterval time.Duration `long:"unbondingtxcheckinterval" description:"The interval for staker whether unbonding TX received validator and covenant signatures"`
+	UnbondingTxCheckInterval time.Duration `long:"unbondingtxcheckinterval" description:"The interval for staker whether delegation received all covenant signatures"`
 	ExitOnCriticalError      bool          `long:"exitoncriticalerror" description:"Exit stakerd on critical error"`
 }
 
@@ -205,13 +206,13 @@ func (u *usageError) Error() string {
 //  2. Pre-parse the command line to check for an alternative config file
 //  3. Load configuration file overwriting defaults with any specified options
 //  4. Parse CLI options and overwrite/add any specified options
-func LoadConfig() (*Config, *logrus.Logger, error) {
+func LoadConfig() (*Config, *logrus.Logger, *zap.Logger, error) {
 	// Pre-parse the command line options to pick up an alternative config
 	// file.
 	preCfg := DefaultConfig()
 
 	if _, err := flags.Parse(&preCfg); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Show the version and exit if the version flag was specified.
@@ -237,7 +238,7 @@ func LoadConfig() (*Config, *logrus.Logger, error) {
 	// exist under that path to avoid surprises.
 	case configFilePath != DefaultConfigFile:
 		if !FileExists(configFilePath) {
-			return nil, nil, fmt.Errorf("specified config file does "+
+			return nil, nil, nil, fmt.Errorf("specified config file does "+
 				"not exist in %s", configFilePath)
 		}
 	}
@@ -252,7 +253,7 @@ func LoadConfig() (*Config, *logrus.Logger, error) {
 		// immediately, otherwise we can proceed as possibly the config
 		// file doesn't exist which is OK.
 		if _, ok := err.(*flags.IniError); ok {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		configFileError = err
@@ -262,7 +263,7 @@ func LoadConfig() (*Config, *logrus.Logger, error) {
 	// they take precedence.
 	flagParser := flags.NewParser(&cfg, flags.Default)
 	if _, err := flagParser.Parse(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	cfgLogger := logrus.New()
@@ -276,7 +277,7 @@ func LoadConfig() (*Config, *logrus.Logger, error) {
 		}
 
 		cfgLogger.Warnf("Error validating config: %v", err)
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// ignore error here as we already validated the value
@@ -287,7 +288,7 @@ func LoadConfig() (*Config, *logrus.Logger, error) {
 	logFilePath := filepath.Join(cleanCfg.LogDir, defaultLogFilename)
 	f, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	mw := io.MultiWriter(os.Stdout, f)
 
@@ -305,12 +306,19 @@ func LoadConfig() (*Config, *logrus.Logger, error) {
 			err := flags.NewIniParser(fileParser).WriteFile(configFilePath, flags.IniIncludeComments|flags.IniIncludeDefaults)
 			if err != nil {
 				cfgLogger.Warnf("Error writing configuration file: %v", err)
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 		}
 	}
 
-	return cleanCfg, cfgLogger, nil
+	// Zap logger for rpc client
+	// TODO: Migrate fully to zap
+	zapLogger, err := NewRootLogger("console", cleanCfg.DebugLevel)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return cleanCfg, cfgLogger, zapLogger, nil
 }
 
 // ValidateConfig check the given configuration to be sane. This makes sure no

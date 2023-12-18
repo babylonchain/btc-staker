@@ -28,16 +28,16 @@ type SpendTxDetails struct {
 	TxValue string `json:"tx_value"`
 }
 
-type ValidatorInfoResponse struct {
+type FinalityProviderInfoResponse struct {
 	// Hex encoded Babylon public secp256k1 key in compressed format
 	BabylonPublicKey string `json:"babylon_public_Key"`
 	// Hex encoded Bitcoin public secp256k1 key in BIP340 format
 	BtcPublicKey string `json:"bitcoin_public_Key"`
 }
 
-type ValidatorsResponse struct {
-	Validators          []ValidatorInfoResponse `json:"validators"`
-	TotalValidatorCount string                  `json:"total_validator_count"`
+type FinalityProvidersResponse struct {
+	FinalityProviders           []FinalityProviderInfoResponse `json:"finality_providers"`
+	TotalFinalityProvidersCount string                         `json:"total_finality_providers_count"`
 }
 
 type ListStakingTransactionsResponse struct {
