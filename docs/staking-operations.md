@@ -30,22 +30,22 @@ The following guide will show how to stake, withdraw, and unbond Bitcoin.
 
 ### 1. Stake Bitcoin
 
-#### 1. List active BTC validators on Babylon
+#### 1. List active BTC finality providers on Babylon
 
-Find the public key of the validator you want to stake to. You can stake to multiple
-validators by specifying public keys in the `--validator-pks` flag of the `stake`
+Find the public key of the finality provider you want to stake to. You can stake to multiple
+finality providers by specifying public keys in the `--finality-providers-pks` flag of the `stake`
 command.
 
 ```bash
-$ stakercli daemon babylon-validators
+$ stakercli daemon babylon-finality-providers
 {
-    "validators": [
+    "finality_providers": [
         {
             "babylon_public_Key": "0294092d0266c8d26544291b692e13f1e4fcba7829c5445ff99fcb3aefb23fe7cd",
             "bitcoin_public_Key": "3328782c63404386d9cd905dba5a35975cba629e48192cea4a348937e865d312"
         }
     ],
-    "total_validator_count": "1"
+    "total_finality_providers_count": "1"
 }
 ```
 
@@ -71,7 +71,7 @@ $ stakercli daemon list-outputs
 
 #### 3. Stake Bitcoin
 
-Stake Bitcoin to the validator(s) of your choice. The `--staking-time` flag specifies
+Stake Bitcoin to the finality provider(s) of your choice. The `--staking-time` flag specifies
 the timelock of the staking transaction in BTC blocks. The `--staking-amount`
 flag specifies the amount in satoshis to stake.
 
@@ -79,7 +79,7 @@ flag specifies the amount in satoshis to stake.
 $ stakercli daemon stake \
   --staker-address bcrt1q56ehztys752uzg7fzpear08l5mw8w2kxgz7644 \
   --staking-amount 1000000 \
-  --validator-pks 3328782c63404386d9cd905dba5a35975cba629e48192cea4a348937e865d312 \
+  --finality-providers-pks 3328782c63404386d9cd905dba5a35975cba629e48192cea4a348937e865d312 \
   --staking-time 100
 
 # Transaction details
@@ -88,10 +88,10 @@ $ stakercli daemon stake \
 }
 ```
 
-**Note**: You can self delegate i.e. stake to your own validator. Follow
-the [validator registration guide](https://github.com/babylonchain/btc-validator/blob/dev/docs/interacting-with-daemons.md#1-creating-a-btc-validator)
-to create and register a validator to Babylon. Once the validator is registered, you
-can use your validator BTC public key in the `--validator-pks` flag of the `stake`
+**Note**: You can self delegate i.e. stake to your own finality provider. Follow
+the [finality provider registration guide](https://github.com/babylonchain/finality-provider/blob/dev/docs/finality-provider.md#4-create-and-register-a-finality-provider)
+to create and register a finality provider to Babylon. Once the finality provider is registered, you
+can use your finality provider BTC public key in the `--finality-providers-pks` flag of the `stake`
 command.
 
 ### 2. Withdraw staked funds

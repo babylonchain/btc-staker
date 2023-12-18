@@ -73,7 +73,7 @@ var listOutputsCmd = cli.Command{
 
 var babylonFinalityProvidersCmd = cli.Command{
 	Name:      "babylon-finality-providers",
-	ShortName: "bv",
+	ShortName: "bfp",
 	Usage:     "List current BTC finality providers on Babylon chain",
 	Flags: []cli.Flag{
 		cli.StringFlag{

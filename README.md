@@ -10,7 +10,7 @@ components:
 
 2. `stakercli` - The `stakercli` is a command line interface (CLI) to facilitate
    interaction with the `stakerd` daemon . It enables users to stake funds, withdraw
-   funds, unbond staked funds, retrieve the active validator set in Babylon, and
+   funds, unbond staked funds, retrieve the active finality providers set in Babylon, and
    more. It serves as an intuitive interface for effortless control and monitoring of
    your Bitcoin staking activities.
 
@@ -27,28 +27,28 @@ the [official Go installation guide](https://golang.org/doc/install).
 
 To get started, clone the repository to your local machine from Github:
 
-```bash  
+```bash
 $ git clone git@github.com:babylonchain/btc-staker.git
-```  
+```
 
 You can choose a specific version from
 the [official releases page](https://github.com/babylonchain/btcstaker/releases)
 
-```bash  
+```bash
 $ cd btc-staker # cd into the project directory
 $ git checkout <release-tag>
-````  
+````
 
 #### Building and installing the binary
 
-```bash  
-# cd into the project directory  
-$ cd btc-staker   
-# installs the compiled binaries to your  
-# $GOPATH/bin directory allowing access  
-# from anywhere on your system  
-$ make install   
-```  
+```bash
+# cd into the project directory
+$ cd btc-staker
+# installs the compiled binaries to your
+# $GOPATH/bin directory allowing access
+# from anywhere on your system
+$ make install
+```
 
 The above will produce the following binaries:
 
