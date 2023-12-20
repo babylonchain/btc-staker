@@ -102,6 +102,7 @@ func createWitnessSignaturesForPubKeys(
 }
 
 func buildSlashingTxAndSig(
+	slashingFee btcutil.Amount,
 	delegationData *externalDelegationData,
 	storedTx *stakerdb.StoredTransaction,
 	net *chaincfg.Params,
@@ -110,9 +111,10 @@ func buildSlashingTxAndSig(
 	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
 		storedTx.StakingTx,
 		storedTx.StakingOutputIndex,
-		delegationData.slashingAddress, delegationData.slashingTxChangeAddress,
-		delegationData.slashingRate,
-		int64(delegationData.slashingFee),
+		delegationData.babylonParams.SlashingAddress,
+		delegationData.slashingTxChangeAddress,
+		delegationData.babylonParams.SlashingRate,
+		int64(slashingFee),
 	)
 
 	if err != nil {
@@ -122,8 +124,8 @@ func buildSlashingTxAndSig(
 	stakingInfo, err := staking.BuildStakingInfo(
 		delegationData.stakerPrivKey.PubKey(),
 		storedTx.FinalityProvidersBtcPks,
-		delegationData.covenantPks,
-		delegationData.covenantThreshold,
+		delegationData.babylonParams.CovenantPks,
+		delegationData.babylonParams.CovenantQuruomThreshold,
 		storedTx.StakingTime,
 		btcutil.Amount(storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex].Value),
 		net,
@@ -561,8 +563,8 @@ func parseWatchStakingRequest(
 		return nil, fmt.Errorf("failed to watch staking tx. Invalid unbonding tx: %w", err)
 	}
 
-	if unbondingTime <= uint16(currentParams.FinalizationTimeoutBlocks) {
-		return nil, fmt.Errorf("failed to watch staking tx. Unbonding time must be greater than finalization timeout. Unbonding time: %d, finalization timeout: %d", unbondingTime, currentParams.FinalizationTimeoutBlocks)
+	if unbondingTime <= currentParams.MinUnbondingTime {
+		return nil, fmt.Errorf("failed to watch staking tx. Unbonding time must be greater than min unbonding time. Unbonding time: %d, min unbonding time: %d", unbondingTime, currentParams.MinUnbondingTime)
 	}
 
 	unbondingTxValue := unbondingTx.TxOut[0].Value

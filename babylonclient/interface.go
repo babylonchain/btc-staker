@@ -34,6 +34,9 @@ type StakingParams struct {
 
 	// Convenant quorum threshold
 	CovenantQuruomThreshold uint32
+
+	// Minimum unbonding time required by bayblon
+	MinUnbondingTime uint16
 }
 
 // SingleKeyCosmosKeyring represents a keyring that supports only one pritvate/public key pair
@@ -56,9 +59,9 @@ type BabylonClient interface {
 }
 
 type MockBabylonClient struct {
-	ClientParams    *StakingParams
-	babylonKey      *secp256k1.PrivKey
-	SentMessages    chan *types.MsgCreateBTCDelegation
+	ClientParams           *StakingParams
+	babylonKey             *secp256k1.PrivKey
+	SentMessages           chan *types.MsgCreateBTCDelegation
 	ActiveFinalityProvider *FinalityProviderInfo
 }
 
@@ -173,8 +176,8 @@ func GetMockClient() *MockBabylonClient {
 			SlashingAddress:           slashingAddress,
 			SlashingRate:              sdkmath.LegacyNewDecWithPrec(1, 1), // 1 * 10^{-1} = 0.1
 		},
-		babylonKey:      priv,
-		SentMessages:    make(chan *types.MsgCreateBTCDelegation),
+		babylonKey:             priv,
+		SentMessages:           make(chan *types.MsgCreateBTCDelegation),
 		ActiveFinalityProvider: &vi,
 	}
 }

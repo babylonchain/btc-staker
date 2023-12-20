@@ -104,6 +104,7 @@ type StakingTrackerResponse struct {
 	CovenantPks             []*btcec.PublicKey
 	CovenantQuruomThreshold uint32
 	MinSlashingFee          btcutil.Amount
+	MinUnbodningTime        uint16
 }
 
 type FinalityProviderInfo struct {
@@ -166,6 +167,15 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 		return nil, err
 	}
 
+	if bccParams.CheckpointFinalizationTimeout > math.MaxUint16 {
+		return nil, fmt.Errorf("checkpoint finalization timeout is bigger than uint16: %w", ErrInvalidValueReceivedFromBabylonNode)
+	}
+
+	minUnbondingTime := sdkmath.Max[uint16](
+		uint16(bccParams.CheckpointFinalizationTimeout),
+		stakingTrackerParams.MinUnbodningTime,
+	)
+
 	return &StakingParams{
 		ConfirmationTimeBlocks:    uint32(bccParams.BtcConfirmationDepth),
 		FinalizationTimeoutBlocks: uint32(bccParams.CheckpointFinalizationTimeout),
@@ -174,6 +184,7 @@ func (bc *BabylonController) Params() (*StakingParams, error) {
 		MinSlashingTxFeeSat:       stakingTrackerParams.MinSlashingFee,
 		SlashingRate:              stakingTrackerParams.SlashingRate,
 		CovenantQuruomThreshold:   stakingTrackerParams.CovenantQuruomThreshold,
+		MinUnbondingTime:          minUnbondingTime,
 	}, nil
 }
 
@@ -463,6 +474,10 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 		covenantPks = append(covenantPks, covenantBtcPk)
 	}
 
+	if response.Params.MinUnbondingTime > math.MaxUint16 {
+		return nil, fmt.Errorf("min unbonding time is bigger than uint16: %w", ErrInvalidValueReceivedFromBabylonNode)
+	}
+
 	return &StakingTrackerResponse{
 		SlashingAddress:         slashingAddress,
 		SlashingRate:            response.Params.SlashingRate,
@@ -470,6 +485,7 @@ func (bc *BabylonController) QueryStakingTracker() (*StakingTrackerResponse, err
 		CovenantPks:             covenantPks,
 		MinSlashingFee:          btcutil.Amount(response.Params.MinSlashingTxFeeSat),
 		CovenantQuruomThreshold: response.Params.CovenantQuorum,
+		MinUnbodningTime:        uint16(response.Params.MinUnbondingTime),
 	}, nil
 }
 

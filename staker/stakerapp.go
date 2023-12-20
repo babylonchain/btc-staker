@@ -11,7 +11,6 @@ import (
 	pv "github.com/cosmos/relayer/v2/relayer/provider"
 	"go.uber.org/zap"
 
-	sdkmath "cosmossdk.io/math"
 	"github.com/avast/retry-go/v4"
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
@@ -41,22 +40,12 @@ import (
 type externalDelegationData struct {
 	// stakerPrivKey needs to be retrieved from btc wallet
 	stakerPrivKey *btcec.PrivateKey
-	// slashingAddress needs to be retrieved from babylon
-	slashingAddress btcutil.Address
 	// slashingTxChangeAddress is the address used to receive change from slashing transaction.
 	slashingTxChangeAddress btcutil.Address
 	// babylonPubKey needs to be retrieved from babylon keyring
 	babylonPubKey *secp256k1.PubKey
-	// slashingRate is the rate at which the staked funds will be slashed, expressed as a decimal.
-	slashingRate sdkmath.LegacyDec
-	// slashingFee is the fee to be paid for slashing transaction.
-	slashingFee btcutil.Amount
-	// Public keys of the current covenant committee
-	covenantPks []*btcec.PublicKey
-	// current threshold for covenant committee
-	covenantThreshold uint32
-	// current babylong finalization time
-	babylonFinalizationTimeBlocks uint32
+	// params retrieved from babylon
+	babylonParams *cl.StakingParams
 }
 
 type stakingDbInfo struct {
@@ -718,9 +707,7 @@ func (app *StakerApp) waitForStakingTxConfirmation(
 	}
 }
 
-func (app *StakerApp) getSlashingFee(p *cl.StakingParams) btcutil.Amount {
-	feeFromBabylon := p.MinSlashingTxFeeSat
-
+func (app *StakerApp) getSlashingFee(feeFromBabylon btcutil.Amount) btcutil.Amount {
 	if feeFromBabylon < minSlashingFee {
 		app.logger.WithFields(logrus.Fields{
 			"babylonSlashingFee":  feeFromBabylon,
@@ -790,23 +777,16 @@ func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Addre
 		return nil, err
 	}
 
-	slashingFee := app.getSlashingFee(params)
-
 	slashingTxChangeAddr, err := btcutil.DecodeAddress(slashingTxChangeAddress, app.network)
 	if err != nil {
 		return nil, err
 	}
 
 	return &externalDelegationData{
-		stakerPrivKey:                 stakerPrivKey,
-		slashingAddress:               params.SlashingAddress,
-		slashingTxChangeAddress:       slashingTxChangeAddr,
-		babylonPubKey:                 app.babylonClient.GetPubKey(),
-		slashingFee:                   slashingFee,
-		slashingRate:                  params.SlashingRate,
-		covenantPks:                   params.CovenantPks,
-		covenantThreshold:             params.CovenantQuruomThreshold,
-		babylonFinalizationTimeBlocks: params.FinalizationTimeoutBlocks,
+		stakerPrivKey:           stakerPrivKey,
+		slashingTxChangeAddress: slashingTxChangeAddr,
+		babylonPubKey:           app.babylonClient.GetPubKey(),
+		babylonParams:           params,
 	}, nil
 }
 
@@ -1446,7 +1426,7 @@ func (app *StakerApp) StakeFunds(
 		return nil, err
 	}
 
-	slashingFee := app.getSlashingFee(params)
+	slashingFee := app.getSlashingFee(params.MinSlashingTxFeeSat)
 
 	if stakingAmount <= slashingFee {
 		return nil, fmt.Errorf("staking amount %d is less than minimum slashing fee %d",
