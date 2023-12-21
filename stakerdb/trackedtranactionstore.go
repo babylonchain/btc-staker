@@ -131,6 +131,18 @@ type StoredTransaction struct {
 	UnbondingTxData         *UnbondingStoreData
 }
 
+// StakingTxConfirmedOnBtc returns true only if staking transaction was sent and confirmed on bitcoin
+func (t *StoredTransaction) StakingTxConfirmedOnBtc() bool {
+	return t.State == proto.TransactionState_SENT_TO_BABYLON ||
+		t.State == proto.TransactionState_DELEGATION_ACTIVE ||
+		t.State == proto.TransactionState_CONFIRMED_ON_BTC
+}
+
+// IsUnbonded returns true only if unbonding transaction was sent and confirmed on bitcoin
+func (t *StoredTransaction) IsUnbonded() bool {
+	return t.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC
+}
+
 type WatchedTransactionData struct {
 	SlashingTx          *wire.MsgTx
 	SlashingTxSig       *schnorr.Signature
@@ -981,7 +993,7 @@ func (c *TrackedTransactionStore) QueryStoredTransactions(q StoredTransactionQue
 			}
 
 			// we have query only for withdrawable transaction i.e transactions which
-			// either in SENT_TO_BABYLON or UNBONDING_CONFIRMED_ON_BTC state and which timelock has expired
+			// either in SENT_TO_BABYLON or DELEGATION_ACTIVE or UNBONDING_CONFIRMED_ON_BTC state and which timelock has expired
 			if q.withdrawableTransactionsFilter != nil {
 				var confirmationHeight uint32
 				var scriptTimeLock uint16
@@ -992,10 +1004,10 @@ func (c *TrackedTransactionStore) QueryStoredTransactions(q StoredTransactionQue
 					return false, nil
 				}
 
-				if txFromDb.State == proto.TransactionState_SENT_TO_BABYLON {
+				if txFromDb.StakingTxConfirmedOnBtc() {
 					scriptTimeLock = txFromDb.StakingTime
 					confirmationHeight = txFromDb.StakingTxConfirmationInfo.Height
-				} else if txFromDb.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC {
+				} else if txFromDb.IsUnbonded() {
 					scriptTimeLock = txFromDb.UnbondingTxData.UnbondingTime
 					confirmationHeight = txFromDb.UnbondingTxData.UnbondingTxConfirmationInfo.Height
 				} else {
