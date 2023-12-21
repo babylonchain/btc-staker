@@ -37,7 +37,9 @@ func (app *StakerApp) buildOwnedDelegation(
 		return nil, err
 	}
 
-	slashingTx, slashingTxSig, err := buildSlashingTxAndSig(externalData, storedTx, app.network)
+	slashingFee := app.getSlashingFee(externalData.babylonParams.MinSlashingTxFeeSat)
+
+	slashingTx, slashingTxSig, err := buildSlashingTxAndSig(slashingFee, externalData, storedTx, app.network)
 	if err != nil {
 		// This is truly unexpected, most probably programming error we have
 		// valid and btc confirmed staking transacion, but for some reason we cannot
@@ -56,15 +58,15 @@ func (app *StakerApp) buildOwnedDelegation(
 	undelegationData, err := createUndelegationData(
 		storedTx,
 		externalData.stakerPrivKey,
-		externalData.covenantPks,
-		externalData.covenantThreshold,
-		externalData.slashingAddress,
+		externalData.babylonParams.CovenantPks,
+		externalData.babylonParams.CovenantQuruomThreshold,
+		externalData.babylonParams.SlashingAddress,
 		externalData.slashingTxChangeAddress,
 		unbondingTxFeeRatePerKb,
 		// TODO: Possiblity to customize finalization time
-		uint16(externalData.babylonFinalizationTimeBlocks)+1,
-		externalData.slashingFee,
-		externalData.slashingRate,
+		uint16(externalData.babylonParams.MinUnbondingTime)+1,
+		app.getSlashingFee(externalData.babylonParams.MinSlashingTxFeeSat),
+		externalData.babylonParams.SlashingRate,
 		app.network,
 	)
 
