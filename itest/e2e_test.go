@@ -1071,6 +1071,13 @@ func TestSendingStakingTransaction(t *testing.T) {
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 
+	pend, err := tm.BabylonClient.QueryPendingBTCDelegations()
+	require.NoError(t, err)
+	require.Len(t, pend, 1)
+	// need to activate delegation to unbond
+	tm.insertCovenantSigForDelegation(t, pend[0])
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_DELEGATION_ACTIVE)
+
 	// mine one block less than the amount needed to spend staking tx
 	blockForStakingToExpire := uint32(testStakingData.StakingTime) - params.ConfirmationTimeBlocks - 2
 	tm.mineNEmptyBlocks(t, blockForStakingToExpire, false)

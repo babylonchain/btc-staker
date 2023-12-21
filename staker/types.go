@@ -229,7 +229,11 @@ func createSpendStakeTxFromStoredTx(
 	feeRate chainfee.SatPerKVByte,
 	net *chaincfg.Params,
 ) (*spendStakeTxInfo, error) {
-	if storedtx.State == proto.TransactionState_SENT_TO_BABYLON {
+	// Note: we enable withdrawal only even if staking transaction is confirmed on btc.
+	// This is to cover cases:
+	// - staker is unable to sent delegation to babylon
+	// - staking transaction on babylon fail to get covenant signatures
+	if storedtx.StakingTxConfirmedOnBtc() {
 		stakingInfo, err := staking.BuildStakingInfo(
 			stakerBtcPk,
 			storedtx.FinalityProvidersBtcPks,
@@ -271,7 +275,7 @@ func createSpendStakeTxFromStoredTx(
 			fundingOutput:          storedtx.StakingTx.TxOut[storedtx.StakingOutputIndex],
 			calculatedFee:          *calculatedFee,
 		}, nil
-	} else if storedtx.State == proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC {
+	} else if storedtx.IsUnbonded() {
 		data := storedtx.UnbondingTxData
 
 		unbondingInfo, err := staking.BuildUnbondingInfo(

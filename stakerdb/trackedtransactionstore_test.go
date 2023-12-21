@@ -356,7 +356,8 @@ func FuzzQuerySpendableTx(f *testing.F) {
 
 		storedResult, err = s.QueryStoredTransactions(filteredQuery)
 		require.NoError(t, err)
-		require.Len(t, storedResult.Transactions, 0)
+		require.Len(t, storedResult.Transactions, len(hashesWithExpiredTimeLock))
+		require.Equal(t, storedResult.Total, uint64(maxCreatedTx))
 
 		for _, storedTx := range stored {
 			txHash := storedTx.StakingTx.TxHash()
