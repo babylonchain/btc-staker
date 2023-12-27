@@ -2,6 +2,7 @@ package staker
 
 import (
 	"fmt"
+
 	"github.com/babylonchain/btc-staker/types"
 
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
@@ -12,11 +13,6 @@ import (
 )
 
 const (
-	// DefaultBtcFee Relativly large fee 25 sat/byte to be used for estimating fees.
-	// This is to be sure that tx will be confirmed in reasonable time.
-	// It is also default fee if dynamic fee estimation fails
-	DefaultBtcFee = chainfee.SatPerKVByte(25 * 1000)
-
 	// DefaultNumBlockForEstimation Default number of blocks to use for fee estimation.
 	// 1 means we want our transactions to be confirmed in the next block.
 	// TODO: make this configurable ?
@@ -30,13 +26,19 @@ type FeeEstimator interface {
 }
 
 type DynamicBtcFeeEstimator struct {
-	estimator chainfee.Estimator
+	estimator  chainfee.Estimator
+	logger     *logrus.Logger
+	MinFeeRate chainfee.SatPerKVByte
+	MaxFeeRate chainfee.SatPerKVByte
 }
 
 func NewDynamicBtcFeeEstimator(
 	cfg *scfg.BtcNodeBackendConfig,
 	_ *chaincfg.Params,
-	_ *logrus.Logger) (*DynamicBtcFeeEstimator, error) {
+	logger *logrus.Logger) (*DynamicBtcFeeEstimator, error) {
+
+	minFeeRate := chainfee.SatPerKVByte(cfg.MinFeeRate * 1000)
+	maxFeeRate := chainfee.SatPerKVByte(cfg.MaxFeeRate * 1000)
 
 	switch cfg.ActiveNodeBackend {
 	case types.BitcoindNodeBackend:
@@ -53,14 +55,17 @@ func NewDynamicBtcFeeEstimator(
 		// TODO: we should probably create our own estimator backend, as those from lnd
 		// have hardcoded loggers, so we do not log stuff to file as we want
 		est, err := chainfee.NewBitcoindEstimator(
-			rpcConfig, cfg.Bitcoind.EstimateMode, DefaultBtcFee.FeePerKWeight(),
+			rpcConfig, cfg.Bitcoind.EstimateMode, maxFeeRate.FeePerKWeight(),
 		)
 
 		if err != nil {
 			return nil, err
 		}
 		return &DynamicBtcFeeEstimator{
-			estimator: est,
+			estimator:  est,
+			logger:     logger,
+			MinFeeRate: minFeeRate,
+			MaxFeeRate: maxFeeRate,
 		}, nil
 
 	case types.BtcdNodeBackend:
@@ -82,7 +87,7 @@ func NewDynamicBtcFeeEstimator(
 		}
 
 		est, err := chainfee.NewBtcdEstimator(
-			rpcConfig, DefaultBtcFee.FeePerKWeight(),
+			rpcConfig, maxFeeRate.FeePerKWeight(),
 		)
 
 		if err != nil {
@@ -90,7 +95,10 @@ func NewDynamicBtcFeeEstimator(
 		}
 
 		return &DynamicBtcFeeEstimator{
-			estimator: est,
+			estimator:  est,
+			logger:     logger,
+			MinFeeRate: minFeeRate,
+			MaxFeeRate: maxFeeRate,
 		}, nil
 
 	default:
@@ -112,23 +120,50 @@ func (e *DynamicBtcFeeEstimator) EstimateFeePerKb() chainfee.SatPerKVByte {
 	fee, err := e.estimator.EstimateFeePerKW(DefaultNumBlockForEstimation)
 
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
+		e.logger.WithFields(logrus.Fields{
 			"err":     err,
-			"default": DefaultBtcFee,
-		}).Error("Failed to estimate transaction fee. Using default fee")
-		return DefaultBtcFee
+			"default": e.MaxFeeRate,
+		}).Error("Failed to estimate transaction fee using connected btc node. Using max fee from config")
+		return e.MaxFeeRate
 	}
 
-	return fee.FeePerKVByte()
+	estimatedFee := fee.FeePerKVByte()
+
+	if estimatedFee < e.MinFeeRate {
+		e.logger.WithFields(logrus.Fields{
+			"minFeeRate": e.MinFeeRate,
+			"estimated":  estimatedFee,
+		}).Debug("Estimated fee is lower than min fee rate. Using min fee rate")
+		return e.MinFeeRate
+	}
+
+	if estimatedFee > e.MaxFeeRate {
+		e.logger.WithFields(logrus.Fields{
+			"maxFeeRate": e.MaxFeeRate,
+			"estimated":  estimatedFee,
+		}).Debug("Estimated fee is higher than max fee rate. Using max fee rate")
+		return e.MaxFeeRate
+	}
+
+	e.logger.WithFields(logrus.Fields{
+		"fee":        estimatedFee,
+		"maxFeeRate": e.MaxFeeRate,
+		"minFeeRate": e.MinFeeRate,
+	}).Debug("Using fee rate estimated by connected btc node")
+
+	return estimatedFee
 }
 
 type StaticFeeEstimator struct {
+	DefaultFee chainfee.SatPerKVByte
 }
 
 var _ FeeEstimator = (*StaticFeeEstimator)(nil)
 
-func NewStaticBtcFeeEstimator() *StaticFeeEstimator {
-	return &StaticFeeEstimator{}
+func NewStaticBtcFeeEstimator(defaultFee chainfee.SatPerKVByte) *StaticFeeEstimator {
+	return &StaticFeeEstimator{
+		DefaultFee: defaultFee,
+	}
 }
 
 func (e *StaticFeeEstimator) Start() error {
@@ -140,5 +175,5 @@ func (e *StaticFeeEstimator) Stop() error {
 }
 
 func (e *StaticFeeEstimator) EstimateFeePerKb() chainfee.SatPerKVByte {
-	return DefaultBtcFee
+	return e.DefaultFee
 }

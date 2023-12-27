@@ -34,6 +34,7 @@ import (
 	notifier "github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/kvdb"
+	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 	"github.com/sirupsen/logrus"
 )
 
@@ -197,7 +198,7 @@ func NewStakerAppFromConfig(
 	var feeEstimator FeeEstimator
 	switch config.BtcNodeBackendConfig.EstimationMode {
 	case types.StaticFeeEstimation:
-		feeEstimator = NewStaticBtcFeeEstimator()
+		feeEstimator = NewStaticBtcFeeEstimator(chainfee.SatPerKVByte(config.BtcNodeBackendConfig.MaxFeeRate * 1000))
 	case types.DynamicFeeEstimation:
 		feeEstimator, err = NewDynamicBtcFeeEstimator(config.BtcNodeBackendConfig, &config.ActiveNetParams, logger)
 		if err != nil {
@@ -290,6 +291,13 @@ func (app *StakerApp) Start() error {
 			return
 		}
 
+		err = app.feeEstimator.Start()
+
+		if err != nil {
+			startErr = err
+			return
+		}
+
 		// we registered for notifications with `nil`  so we should receive best block
 		// immeadiatly
 		select {
@@ -347,7 +355,14 @@ func (app *StakerApp) Stop() error {
 
 		app.babylonMsgSender.Stop()
 
-		err := app.notifier.Stop()
+		err := app.feeEstimator.Stop()
+
+		if err != nil {
+			stopErr = err
+			return
+		}
+
+		err = app.notifier.Stop()
 		if err != nil {
 			stopErr = err
 			return

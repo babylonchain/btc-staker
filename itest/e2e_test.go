@@ -101,6 +101,8 @@ func defaultStakerConfig(btcdCert []byte, btcdHost string) *stakercfg.Config {
 	defaultConfig.BtcNodeBackendConfig.Btcd.RawRPCCert = hex.EncodeToString(btcdCert)
 	defaultConfig.BtcNodeBackendConfig.Btcd.RPCUser = "user"
 	defaultConfig.BtcNodeBackendConfig.Btcd.RPCPass = "pass"
+	defaultConfig.BtcNodeBackendConfig.FeeMode = "dynamic"
+	defaultConfig.BtcNodeBackendConfig.EstimationMode = types.DynamicFeeEstimation
 	defaultConfig.BtcNodeBackendConfig.ActiveNodeBackend = types.BtcdNodeBackend
 	defaultConfig.BtcNodeBackendConfig.ActiveWalletBackend = types.BtcwalletWalletBackend
 
