@@ -36,6 +36,11 @@ const (
 	defaultTLSCertDuration = 14 * 30 * 24 * time.Hour
 	defaultConfigFileName  = "stakerd.conf"
 	defaultFeeMode         = "static"
+	// We are using 2 sat/vbyte as default min fee rate, as currently our size estimates
+	// for different transaction types are not very accurate and if we would use 1 sat/vbyte (minimum accepted by bitcoin network)
+	// we risk into having transactions rejected by the network due to low fee.
+	DefaultMinFeeRate = 2
+	DefaultMaxFeeRate = 25
 )
 
 var (
@@ -98,6 +103,8 @@ type BtcNodeBackendConfig struct {
 	Nodetype            string    `long:"nodetype" description:"type of node to connect to {bitcoind, btcd}"`
 	WalletType          string    `long:"wallettype" description:"type of wallet to connect to {bitcoind, btcwallet}"`
 	FeeMode             string    `long:"feemode" description:"fee mode to use for fee estimation {static, dynamic}. In dynamic mode fee will be estimated using backend node"`
+	MinFeeRate          uint64    `long:"minfeerate" description:"minimum fee rate to use for fee estimation in sat/vbyte. If fee estimation by connected btc node returns a lower fee rate, this value will be used instead"`
+	MaxFeeRate          uint64    `long:"maxfeerate" description:"maximum fee rate to use for fee estimation in sat/vbyte. If fee estimation by connected btc node returns a higher fee rate, this value will be used instead. It is also used as fallback if fee estimation by connected btc node fails and as fee rate in case of static estimator"`
 	Btcd                *Btcd     `group:"btcd" namespace:"btcd"`
 	Bitcoind            *Bitcoind `group:"bitcoind" namespace:"bitcoind"`
 	EstimationMode      types.FeeEstimationMode
@@ -112,6 +119,8 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 		Nodetype:   "btcd",
 		WalletType: "btcwallet",
 		FeeMode:    defaultFeeMode,
+		MinFeeRate: DefaultMinFeeRate,
+		MaxFeeRate: DefaultMaxFeeRate,
 		Btcd:       &btcdConfig,
 		Bitcoind:   &bitcoindConfig,
 	}
@@ -422,6 +431,18 @@ func ValidateConfig(cfg Config) (*Config, error) {
 		cfg.BtcNodeBackendConfig.EstimationMode = types.DynamicFeeEstimation
 	default:
 		return nil, mkErr(fmt.Sprintf("invalid fee estimation mode: %s", cfg.BtcNodeBackendConfig.Nodetype))
+	}
+
+	if cfg.BtcNodeBackendConfig.MinFeeRate == 0 {
+		return nil, mkErr("minfeerate rate must be greater than 0")
+	}
+
+	if cfg.BtcNodeBackendConfig.MaxFeeRate == 0 {
+		return nil, mkErr("maxfeerate rate must be greater than 0")
+	}
+
+	if cfg.BtcNodeBackendConfig.MinFeeRate > cfg.BtcNodeBackendConfig.MaxFeeRate {
+		return nil, mkErr(fmt.Sprintf("minfeerate must be less or equal maxfeerate. minfeerate: %d, maxfeerate: %d", cfg.BtcNodeBackendConfig.MinFeeRate, cfg.BtcNodeBackendConfig.MaxFeeRate))
 	}
 
 	// TODO: Validate node host and port
