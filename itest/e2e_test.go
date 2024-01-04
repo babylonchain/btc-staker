@@ -659,6 +659,8 @@ func (tm *TestManager) sendWatchedStakingTx(
 	testStakingData *testStakingData,
 	params *babylonclient.StakingParams,
 ) *chainhash.Hash {
+	unbondingTme := uint16(params.FinalizationTimeoutBlocks) + 1
+
 	stakingInfo, err := staking.BuildStakingInfo(
 		testStakingData.StakerKey,
 		[]*btcec.PublicKey{testStakingData.FinalityProviderBtcKey},
@@ -705,7 +707,9 @@ func (tm *TestManager) sendWatchedStakingTx(
 	slashingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		tx,
 		uint32(stakingOutputIdx),
-		params.SlashingAddress, testStakingData.SlashingTxChangeAddress,
+		params.SlashingAddress,
+		testStakingData.StakerKey,
+		unbondingTme,
 		int64(params.MinSlashingTxFeeSat)+10,
 		params.SlashingRate,
 		simnetParams,
@@ -732,7 +736,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 	// Build unbonding related data
 	unbondingFee := btcutil.Amount(1000)
 	unbondingAmount := btcutil.Amount(testStakingData.StakingAmount) - unbondingFee
-	unbondingTme := uint16(params.FinalizationTimeoutBlocks) + 1
 
 	unbondingInfo, err := staking.BuildUnbondingInfo(
 		testStakingData.StakerKey,
@@ -755,7 +758,9 @@ func (tm *TestManager) sendWatchedStakingTx(
 	slashUnbondingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		unbondingTx,
 		0,
-		params.SlashingAddress, testStakingData.SlashingTxChangeAddress,
+		params.SlashingAddress,
+		testStakingData.StakerKey,
+		unbondingTme,
 		int64(params.MinSlashingTxFeeSat)+10,
 		params.SlashingRate,
 		simnetParams,
@@ -919,7 +924,7 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 		[]*btcec.PublicKey{btcDel.FpBtcPkList[0].MustToBTCPK()},
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
-		uint16(btcDel.BtcUndelegation.UnbondingTime),
+		uint16(btcDel.UnbondingTime),
 		btcutil.Amount(unbondingMsgTx.TxOut[0].Value),
 		simnetParams,
 	)

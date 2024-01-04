@@ -739,14 +739,14 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 				return retry.Unrecoverable(fmt.Errorf("malformed unbonding transaction: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
 			}
 
-			if resp.UndelegationInfo.UnbondingTime > math.MaxUint16 {
-				return retry.Unrecoverable(fmt.Errorf("malformed unbonding time: %d: %w", resp.UndelegationInfo.UnbondingTime, ErrInvalidValueReceivedFromBabylonNode))
+			if resp.UnbondingTime > math.MaxUint16 {
+				return retry.Unrecoverable(fmt.Errorf("malformed unbonding time: %d: %w", resp.UnbondingTime, ErrInvalidValueReceivedFromBabylonNode))
 			}
 
 			udi = &UndelegationInfo{
 				UnbondingTransaction:        tx,
 				CovenantUnbondingSignatures: coventSigInfos,
-				UnbondingTime:               uint16(resp.UndelegationInfo.UnbondingTime),
+				UnbondingTime:               uint16(resp.UnbondingTime),
 			}
 		}
 
