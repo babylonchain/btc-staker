@@ -27,7 +27,6 @@ var _ StakingEvent = (*criticalErrorEvent)(nil)
 
 type stakingRequestedEvent struct {
 	stakerAddress           btcutil.Address
-	slashingTxChangeAddress btcutil.Address
 	stakingTxHash           chainhash.Hash
 	stakingTx               *wire.MsgTx
 	stakingOutputIdx        uint32
@@ -47,7 +46,7 @@ func (req *stakingRequestedEvent) isWatched() bool {
 }
 
 func newOwnedStakingRequest(
-	stakerAddress, slashingTxChangeAddress btcutil.Address,
+	stakerAddress btcutil.Address,
 	stakingTx *wire.MsgTx,
 	stakingOutputIdx uint32,
 	stakingOutputPkScript []byte,
@@ -59,7 +58,6 @@ func newOwnedStakingRequest(
 ) *stakingRequestedEvent {
 	return &stakingRequestedEvent{
 		stakerAddress:           stakerAddress,
-		slashingTxChangeAddress: slashingTxChangeAddress,
 		stakingTxHash:           stakingTx.TxHash(),
 		stakingTx:               stakingTx,
 		stakingOutputIdx:        stakingOutputIdx,
@@ -88,7 +86,7 @@ type watchTxData struct {
 }
 
 func newWatchedStakingRequest(
-	stakerAddress, slashingTxChangeAddress btcutil.Address,
+	stakerAddress btcutil.Address,
 	stakingTx *wire.MsgTx,
 	stakingOutputIdx uint32,
 	stakingOutputPkScript []byte,
@@ -108,7 +106,6 @@ func newWatchedStakingRequest(
 ) *stakingRequestedEvent {
 	return &stakingRequestedEvent{
 		stakerAddress:           stakerAddress,
-		slashingTxChangeAddress: slashingTxChangeAddress,
 		stakingTxHash:           stakingTx.TxHash(),
 		stakingTx:               stakingTx,
 		stakingOutputIdx:        stakingOutputIdx,

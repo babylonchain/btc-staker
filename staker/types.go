@@ -19,7 +19,6 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/wallet/txsizes"
@@ -333,7 +332,7 @@ func createUndelegationData(
 	stakerPrivKey *btcec.PrivateKey,
 	covenantPubKeys []*btcec.PublicKey,
 	covenantThreshold uint32,
-	slashingAddress, slashingTxChangeAddress btcutil.Address,
+	slashingAddress btcutil.Address,
 	feeRatePerKb btcutil.Amount,
 	unbondingTime uint16,
 	slashingFee btcutil.Amount,
@@ -564,17 +563,7 @@ func parseWatchStakingRequest(
 		return nil, fmt.Errorf("failed to watch staking tx. Invalid pop: %w", err)
 	}
 
-	// 6. Extract slashing tx change address
-	_, outAddrs, _, err := txscript.ExtractPkScriptAddrs(slashingTx.TxOut[1].PkScript, network)
-	if err != nil {
-		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx change address: %w", err)
-	}
-	if len(outAddrs) != 1 {
-		return nil, fmt.Errorf("failed to watch staking tx. Only one slashing tx change address is allowed")
-	}
-	slashingTxChangeAddress := outAddrs[0]
-
-	//  7. Validate unbonding related data
+	// 6. Validate unbonding related data
 	if err := btcstaking.IsSimpleTransfer(unbondingTx); err != nil {
 		return nil, fmt.Errorf("failed to watch staking tx. Invalid unbonding tx: %w", err)
 	}
@@ -647,23 +636,8 @@ func parseWatchStakingRequest(
 		return nil, fmt.Errorf("failed to watch staking tx. Unbonding tx do not point to staking tx")
 	}
 
-	// Extract unbonding slashing tx change address
-	_, outAddrsSlashUnbonding, _, err := txscript.ExtractPkScriptAddrs(slashUnbondingTx.TxOut[1].PkScript, network)
-	if err != nil {
-		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx change address: %w", err)
-	}
-	if len(outAddrsSlashUnbonding) != 1 {
-		return nil, fmt.Errorf("failed to watch staking tx. Only one slashing tx change address is allowed")
-	}
-	slashUnbondingChangeAddress := outAddrs[0]
-
-	// TODO: Consider allowing different slashing tx change address
-	if slashingTxChangeAddress.EncodeAddress() != slashUnbondingChangeAddress.EncodeAddress() {
-		return nil, fmt.Errorf("failed to watch staking tx. Slashing tx and slash-unbonding tx change addresses must equal")
-	}
-
 	req := newWatchedStakingRequest(
-		stakerAddress, slashingTxChangeAddress,
+		stakerAddress,
 		stakingTx,
 		uint32(stakingOutputIdx),
 		stakingTx.TxOut[stakingOutputIdx].PkScript,

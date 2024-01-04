@@ -41,8 +41,6 @@ import (
 type externalDelegationData struct {
 	// stakerPrivKey needs to be retrieved from btc wallet
 	stakerPrivKey *btcec.PrivateKey
-	// slashingTxChangeAddress is the address used to receive change from slashing transaction.
-	slashingTxChangeAddress btcutil.Address
 	// babylonPubKey needs to be retrieved from babylon keyring
 	babylonPubKey *secp256k1.PubKey
 	// params retrieved from babylon
@@ -780,8 +778,7 @@ func (app *StakerApp) stakerPrivateKey(stakerAddress btcutil.Address) (*btcec.Pr
 	return privkey, nil
 }
 
-func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Address,
-	slashingTxChangeAddress string) (*externalDelegationData, error) {
+func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Address) (*externalDelegationData, error) {
 	params, err := app.babylonClient.Params()
 	if err != nil {
 		return nil, err
@@ -792,16 +789,10 @@ func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Addre
 		return nil, err
 	}
 
-	slashingTxChangeAddr, err := btcutil.DecodeAddress(slashingTxChangeAddress, app.network)
-	if err != nil {
-		return nil, err
-	}
-
 	return &externalDelegationData{
-		stakerPrivKey:           stakerPrivKey,
-		slashingTxChangeAddress: slashingTxChangeAddr,
-		babylonPubKey:           app.babylonClient.GetPubKey(),
-		babylonParams:           params,
+		stakerPrivKey: stakerPrivKey,
+		babylonPubKey: app.babylonClient.GetPubKey(),
+		babylonParams: params,
 	}, nil
 }
 
@@ -1099,7 +1090,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakingTime,
 					ev.fpBtcPks,
 					babylonPopToDbPop(ev.pop),
-					ev.stakerAddress, ev.slashingTxChangeAddress,
+					ev.stakerAddress,
 					ev.watchTxData.slashingTx,
 					ev.watchTxData.slashingTxSig,
 					ev.watchTxData.stakerBabylonPubKey,
@@ -1128,7 +1119,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakingTime,
 					ev.fpBtcPks,
 					babylonPopToDbPop(ev.pop),
-					ev.stakerAddress, ev.slashingTxChangeAddress,
+					ev.stakerAddress,
 				)
 
 				if err != nil {
@@ -1407,7 +1398,7 @@ func (app *StakerApp) WatchStaking(
 }
 
 func (app *StakerApp) StakeFunds(
-	stakerAddress, slashingTxChangeAddress btcutil.Address,
+	stakerAddress btcutil.Address,
 	stakingAmount btcutil.Amount,
 	fpPks []*btcec.PublicKey,
 	stakingTimeBlocks uint16,
@@ -1500,15 +1491,14 @@ func (app *StakerApp) StakeFunds(
 	}
 
 	app.logger.WithFields(logrus.Fields{
-		"stakerAddress":           stakerAddress,
-		"slashingTxChangeAddress": slashingTxChangeAddress,
-		"stakingAmount":           stakingInfo.StakingOutput,
-		"btxTxHash":               tx.TxHash(),
-		"fee":                     feeRate,
+		"stakerAddress": stakerAddress,
+		"stakingAmount": stakingInfo.StakingOutput,
+		"btxTxHash":     tx.TxHash(),
+		"fee":           feeRate,
 	}).Info("Created and signed staking transaction")
 
 	req := newOwnedStakingRequest(
-		stakerAddress, slashingTxChangeAddress,
+		stakerAddress,
 		tx,
 		0,
 		stakingInfo.StakingOutput.PkScript,

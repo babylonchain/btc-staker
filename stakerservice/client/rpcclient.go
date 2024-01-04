@@ -64,7 +64,6 @@ func (c *StakerServiceJsonRpcClient) BabylonFinalityProviders(ctx context.Contex
 func (c *StakerServiceJsonRpcClient) Stake(
 	ctx context.Context,
 	stakerAddress string,
-	slashingTxChangeAddress string,
 	stakingAmount int64,
 	fpPks []string,
 	stakingTimeBlocks int64,
@@ -73,7 +72,6 @@ func (c *StakerServiceJsonRpcClient) Stake(
 
 	params := make(map[string]interface{})
 	params["stakerAddress"] = stakerAddress
-	params["slashingTxChangeAddress"] = slashingTxChangeAddress
 	params["stakingAmount"] = stakingAmount
 	params["fpBtcPks"] = fpPks
 	params["stakingTimeBlocks"] = stakingTimeBlocks

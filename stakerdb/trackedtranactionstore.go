@@ -124,11 +124,10 @@ type StoredTransaction struct {
 	Pop                       *ProofOfPossession
 	// Returning address as string, to avoid having to know how to decode address
 	// which requires knowing the network we are on
-	StakerAddress           string
-	SlashingTxChangeAddress string
-	State                   proto.TransactionState
-	Watched                 bool
-	UnbondingTxData         *UnbondingStoreData
+	StakerAddress   string
+	State           proto.TransactionState
+	Watched         bool
+	UnbondingTxData *UnbondingStoreData
 }
 
 // StakingTxConfirmedOnBtc returns true only if staking transaction was sent and confirmed on bitcoin
@@ -363,11 +362,10 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 			BabylonSigOverBtcPk:  ttx.BabylonSigBtcPk,
 			BtcSigOverBabylonSig: ttx.BtcSigBabylonSig,
 		},
-		StakerAddress:           ttx.StakerAddress,
-		SlashingTxChangeAddress: ttx.SlashingTxChangeAddress,
-		State:                   ttx.State,
-		Watched:                 ttx.Watched,
-		UnbondingTxData:         utd,
+		StakerAddress:   ttx.StakerAddress,
+		State:           ttx.State,
+		Watched:         ttx.Watched,
+		UnbondingTxData: utd,
 	}, nil
 }
 
@@ -570,7 +568,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 	stakingTime uint16,
 	fpPubKeys []*btcec.PublicKey,
 	pop *ProofOfPossession,
-	stakerAddress, slashingTxChangeAddress btcutil.Address,
+	stakerAddress btcutil.Address,
 ) error {
 	txHash := btcTx.TxHash()
 	txHashBytes := txHash[:]
@@ -598,7 +596,6 @@ func (c *TrackedTransactionStore) AddTransaction(
 		StakerAddress:                stakerAddress.EncodeAddress(),
 		StakingTime:                  uint32(stakingTime),
 		FinalityProvidersBtcPks:      fpPubKeysBytes,
-		SlashingTxChangeAddress:      slashingTxChangeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
 		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
@@ -619,7 +616,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	stakingTime uint16,
 	fpPubKeys []*btcec.PublicKey,
 	pop *ProofOfPossession,
-	stakerAddress, slashingTxChangeAddress btcutil.Address,
+	stakerAddress btcutil.Address,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
 	stakerBabylonPk *secp256k1.PubKey,
@@ -655,7 +652,6 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 		StakerAddress:                stakerAddress.EncodeAddress(),
 		StakingTime:                  uint32(stakingTime),
 		FinalityProvidersBtcPks:      fpPubKeysBytes,
-		SlashingTxChangeAddress:      slashingTxChangeAddress.EncodeAddress(),
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
 		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
