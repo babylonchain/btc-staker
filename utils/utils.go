@@ -18,6 +18,8 @@ func GetBtcNetworkParams(network string) (*chaincfg.Params, error) {
 		return &chaincfg.RegressionNetParams, nil
 	case "simnet":
 		return &chaincfg.SimNetParams, nil
+	case "signet":
+		return &chaincfg.SigNetParams, nil
 	default:
 		return nil, fmt.Errorf("unknown network %s", network)
 	}

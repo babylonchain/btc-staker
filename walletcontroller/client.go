@@ -6,9 +6,9 @@ import (
 
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/types"
-	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/txscript"
@@ -38,6 +38,7 @@ func NewRpcWalletController(scfg *stakercfg.Config) (*RpcWalletController, error
 		scfg.ActiveNetParams.Name,
 		scfg.WalletConfig.WalletPass,
 		scfg.BtcNodeBackendConfig.ActiveWalletBackend,
+		&scfg.ActiveNetParams,
 		// TODO for now just disable tls
 		true,
 	)
@@ -50,22 +51,15 @@ func NewRpcWalletControllerFromArgs(
 	network string,
 	walletPassphrase string,
 	nodeBackend types.SupportedWalletBackend,
+	params *chaincfg.Params,
 	disableTls bool,
 ) (*RpcWalletController, error) {
 
-	params, err := utils.GetBtcNetworkParams(network)
-
-	if err != nil {
-		return nil, err
-	}
-
 	connCfg := &rpcclient.ConnConfig{
-		Host:       host,
-		User:       user,
-		Pass:       pass,
-		Params:     network,
-		DisableTLS: disableTls,
-
+		Host:                 host,
+		User:                 user,
+		Pass:                 pass,
+		DisableTLS:           disableTls,
 		DisableConnectOnNew:  true,
 		DisableAutoReconnect: false,
 		// we use post mode as it sure it works with either bitcoind or btcwallet
