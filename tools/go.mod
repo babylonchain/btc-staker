@@ -234,7 +234,7 @@ require (
 )
 
 replace (
-	github.com/babylonchain/babylon => github.com/babylonchain/babylon-private v0.0.0-20240103111354-0fe0c0b1fed4
+	github.com/babylonchain/babylon => github.com/babylonchain/babylon-private v0.0.0-20240105083612-dd4e4b1c0598
 	github.com/cosmos/ibc-go/v7 => github.com/babylonchain/ibc-go/v7 v7.0.0-20230324085744-4d6a0d2c0fcf
 
 	// Downgraded to stable version see: https://github.com/cosmos/cosmos-sdk/pull/14952
