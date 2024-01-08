@@ -19,7 +19,6 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/wallet/txsizes"
@@ -107,14 +106,18 @@ func buildSlashingTxAndSig(
 	storedTx *stakerdb.StoredTransaction,
 	net *chaincfg.Params,
 ) (*wire.MsgTx, *schnorr.Signature, error) {
+	stakerPubKey := delegationData.stakerPrivKey.PubKey()
+	lockSlashTxLockTime := delegationData.babylonParams.MinUnbondingTime + 1
 
-	slashingTx, err := staking.BuildSlashingTxFromStakingTx(
+	slashingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		storedTx.StakingTx,
 		storedTx.StakingOutputIndex,
 		delegationData.babylonParams.SlashingAddress,
-		delegationData.slashingTxChangeAddress,
-		delegationData.babylonParams.SlashingRate,
+		stakerPubKey,
+		lockSlashTxLockTime,
 		int64(slashingFee),
+		delegationData.babylonParams.SlashingRate,
+		net,
 	)
 
 	if err != nil {
@@ -329,9 +332,9 @@ func createUndelegationData(
 	stakerPrivKey *btcec.PrivateKey,
 	covenantPubKeys []*btcec.PublicKey,
 	covenantThreshold uint32,
-	slashingAddress, slashingTxChangeAddress btcutil.Address,
+	slashingAddress btcutil.Address,
 	feeRatePerKb btcutil.Amount,
-	finalizationTimeBlocks uint16,
+	unbondingTime uint16,
 	slashingFee btcutil.Amount,
 	slashingRate sdkmath.LegacyDec,
 	btcNetwork *chaincfg.Params,
@@ -343,6 +346,8 @@ func createUndelegationData(
 	unbondingTxFee := txrules.FeeForSerializeSize(feeRatePerKb, slashingPathSpendTxVSize)
 
 	unbondingOutputValue := stakingOutpout.Value - int64(unbondingTxFee)
+
+	stakerPubKey := stakerPrivKey.PubKey()
 
 	if unbondingOutputValue <= 0 {
 		return nil, fmt.Errorf(
@@ -356,10 +361,8 @@ func createUndelegationData(
 		)
 	}
 
-	unbondingTime := finalizationTimeBlocks + 1
-
 	unbondingInfo, err := staking.BuildUnbondingInfo(
-		stakerPrivKey.PubKey(),
+		stakerPubKey,
 		storedTx.FinalityProvidersBtcPks,
 		covenantPubKeys,
 		covenantThreshold,
@@ -379,7 +382,9 @@ func createUndelegationData(
 	slashUnbondingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		unbondingTx,
 		0,
-		slashingAddress, slashingTxChangeAddress,
+		slashingAddress,
+		stakerPubKey,
+		unbondingTime,
 		int64(slashingFee),
 		slashingRate,
 		btcNetwork,
@@ -513,6 +518,10 @@ func parseWatchStakingRequest(
 		return nil, fmt.Errorf("failed to watch staking tx due to tx not matching current data: %w", err)
 	}
 
+	if unbondingTime <= currentParams.MinUnbondingTime {
+		return nil, fmt.Errorf("failed to watch staking tx. Unbonding time must be greater than min unbonding time. Unbonding time: %d, min unbonding time: %d", unbondingTime, currentParams.MinUnbondingTime)
+	}
+
 	// 2. Check wheter slashing tx match staking tx
 	err = staking.CheckTransactions(
 		slashingTx,
@@ -521,6 +530,8 @@ func parseWatchStakingRequest(
 		int64(currentParams.MinSlashingTxFeeSat),
 		currentParams.SlashingRate,
 		currentParams.SlashingAddress,
+		stakerBtcPk,
+		unbondingTime,
 		network,
 	)
 	if err != nil {
@@ -552,23 +563,9 @@ func parseWatchStakingRequest(
 		return nil, fmt.Errorf("failed to watch staking tx. Invalid pop: %w", err)
 	}
 
-	// 6. Extract slashing tx change address
-	_, outAddrs, _, err := txscript.ExtractPkScriptAddrs(slashingTx.TxOut[1].PkScript, network)
-	if err != nil {
-		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx change address: %w", err)
-	}
-	if len(outAddrs) != 1 {
-		return nil, fmt.Errorf("failed to watch staking tx. Only one slashing tx change address is allowed")
-	}
-	slashingTxChangeAddress := outAddrs[0]
-
-	//  7. Validate unbonding related data
+	// 6. Validate unbonding related data
 	if err := btcstaking.IsSimpleTransfer(unbondingTx); err != nil {
 		return nil, fmt.Errorf("failed to watch staking tx. Invalid unbonding tx: %w", err)
-	}
-
-	if unbondingTime <= currentParams.MinUnbondingTime {
-		return nil, fmt.Errorf("failed to watch staking tx. Unbonding time must be greater than min unbonding time. Unbonding time: %d, min unbonding time: %d", unbondingTime, currentParams.MinUnbondingTime)
 	}
 
 	unbondingTxValue := unbondingTx.TxOut[0].Value
@@ -601,6 +598,8 @@ func parseWatchStakingRequest(
 		int64(currentParams.MinSlashingTxFeeSat),
 		currentParams.SlashingRate,
 		currentParams.SlashingAddress,
+		stakerBtcPk,
+		unbondingTime,
 		network,
 	)
 	if err != nil {
@@ -637,23 +636,8 @@ func parseWatchStakingRequest(
 		return nil, fmt.Errorf("failed to watch staking tx. Unbonding tx do not point to staking tx")
 	}
 
-	// Extract unbonding slashing tx change address
-	_, outAddrsSlashUnbonding, _, err := txscript.ExtractPkScriptAddrs(slashUnbondingTx.TxOut[1].PkScript, network)
-	if err != nil {
-		return nil, fmt.Errorf("failed to watch staking tx. Invalid slashing tx change address: %w", err)
-	}
-	if len(outAddrsSlashUnbonding) != 1 {
-		return nil, fmt.Errorf("failed to watch staking tx. Only one slashing tx change address is allowed")
-	}
-	slashUnbondingChangeAddress := outAddrs[0]
-
-	// TODO: Consider allowing different slashing tx change address
-	if slashingTxChangeAddress.EncodeAddress() != slashUnbondingChangeAddress.EncodeAddress() {
-		return nil, fmt.Errorf("failed to watch staking tx. Slashing tx and slash-unbonding tx change addresses must equal")
-	}
-
 	req := newWatchedStakingRequest(
-		stakerAddress, slashingTxChangeAddress,
+		stakerAddress,
 		stakingTx,
 		uint32(stakingOutputIdx),
 		stakingTx.TxOut[stakingOutputIdx].PkScript,

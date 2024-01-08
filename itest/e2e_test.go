@@ -59,8 +59,6 @@ var (
 	babylonTag       = []byte{1, 2, 3, 4}
 	babylonTagHex    = hex.EncodeToString(babylonTag)
 
-	slashingTxChangeAddress, _ = datagen.GenRandomBTCAddress(r, simnetParams)
-
 	// copy of the seed from btcd/integration/rpctest memWallet, this way we can
 	// import the same wallet in the btcd wallet
 	hdSeed = [chainhash.HashSize]byte{
@@ -182,7 +180,6 @@ type testStakingData struct {
 	FinalityProviderBabylonPublicKey *secp256k1.PubKey
 	FinalityProviderBtcPrivKey       *btcec.PrivateKey
 	FinalityProviderBtcKey           *btcec.PublicKey
-	SlashingTxChangeAddress          btcutil.Address
 	StakingTime                      uint16
 	StakingAmount                    int64
 }
@@ -208,7 +205,6 @@ func (tm *TestManager) getTestStakingData(
 		FinalityProviderBabylonPublicKey: finalityProviderBabylonPubKey,
 		FinalityProviderBtcPrivKey:       delegatarPrivKey,
 		FinalityProviderBtcKey:           delegatarPrivKey.PubKey(),
-		SlashingTxChangeAddress:          slashingTxChangeAddress,
 		StakingTime:                      stakingTime,
 		StakingAmount:                    stakingAmount,
 	}
@@ -589,7 +585,6 @@ func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingD
 	res, err := tm.StakerClient.Stake(
 		context.Background(),
 		tm.MinerAddr.String(),
-		testStakingData.SlashingTxChangeAddress.String(),
 		testStakingData.StakingAmount,
 		[]string{fpKey},
 		int64(testStakingData.StakingTime),
@@ -626,7 +621,6 @@ func (tm *TestManager) sendMultipleStakingTx(t *testing.T, testStakingData []*te
 		res, err := tm.StakerClient.Stake(
 			context.Background(),
 			tm.MinerAddr.String(),
-			data.SlashingTxChangeAddress.String(),
 			data.StakingAmount,
 			[]string{fpKey},
 			int64(data.StakingTime),
@@ -659,6 +653,8 @@ func (tm *TestManager) sendWatchedStakingTx(
 	testStakingData *testStakingData,
 	params *babylonclient.StakingParams,
 ) *chainhash.Hash {
+	unbondingTme := uint16(params.FinalizationTimeoutBlocks) + 1
+
 	stakingInfo, err := staking.BuildStakingInfo(
 		testStakingData.StakerKey,
 		[]*btcec.PublicKey{testStakingData.FinalityProviderBtcKey},
@@ -705,7 +701,9 @@ func (tm *TestManager) sendWatchedStakingTx(
 	slashingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		tx,
 		uint32(stakingOutputIdx),
-		params.SlashingAddress, testStakingData.SlashingTxChangeAddress,
+		params.SlashingAddress,
+		testStakingData.StakerKey,
+		unbondingTme,
 		int64(params.MinSlashingTxFeeSat)+10,
 		params.SlashingRate,
 		simnetParams,
@@ -732,7 +730,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 	// Build unbonding related data
 	unbondingFee := btcutil.Amount(1000)
 	unbondingAmount := btcutil.Amount(testStakingData.StakingAmount) - unbondingFee
-	unbondingTme := uint16(params.FinalizationTimeoutBlocks) + 1
 
 	unbondingInfo, err := staking.BuildUnbondingInfo(
 		testStakingData.StakerKey,
@@ -755,7 +752,9 @@ func (tm *TestManager) sendWatchedStakingTx(
 	slashUnbondingTx, err := staking.BuildSlashingTxFromStakingTxStrict(
 		unbondingTx,
 		0,
-		params.SlashingAddress, testStakingData.SlashingTxChangeAddress,
+		params.SlashingAddress,
+		testStakingData.StakerKey,
+		unbondingTme,
 		int64(params.MinSlashingTxFeeSat)+10,
 		params.SlashingRate,
 		simnetParams,
@@ -919,7 +918,7 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 		[]*btcec.PublicKey{btcDel.FpBtcPkList[0].MustToBTCPK()},
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
-		uint16(btcDel.BtcUndelegation.UnbondingTime),
+		uint16(btcDel.UnbondingTime),
 		btcutil.Amount(unbondingMsgTx.TxOut[0].Value),
 		simnetParams,
 	)
@@ -1022,7 +1021,6 @@ func TestStakingFailures(t *testing.T) {
 	_, err = tm.StakerClient.Stake(
 		context.Background(),
 		tm.MinerAddr.String(),
-		testStakingData.SlashingTxChangeAddress.String(),
 		testStakingData.StakingAmount,
 		[]string{fpKey, fpKey},
 		int64(testStakingData.StakingTime),
@@ -1033,7 +1031,6 @@ func TestStakingFailures(t *testing.T) {
 	_, err = tm.StakerClient.Stake(
 		context.Background(),
 		tm.MinerAddr.String(),
-		testStakingData.SlashingTxChangeAddress.String(),
 		testStakingData.StakingAmount,
 		[]string{},
 		int64(testStakingData.StakingTime),

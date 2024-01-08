@@ -66,12 +66,11 @@ func NewStakerService(
 
 func storedTxToStakingDetails(storedTx *stakerdb.StoredTransaction) StakingDetails {
 	return StakingDetails{
-		StakingTxHash:           storedTx.StakingTx.TxHash().String(),
-		StakerAddress:           storedTx.StakerAddress,
-		SlashingTxChangeAddress: storedTx.SlashingTxChangeAddress,
-		StakingState:            storedTx.State.String(),
-		Watched:                 storedTx.Watched,
-		TransactionIdx:          strconv.FormatUint(storedTx.StoredTransactionIdx, 10),
+		StakingTxHash:  storedTx.StakingTx.TxHash().String(),
+		StakerAddress:  storedTx.StakerAddress,
+		StakingState:   storedTx.State.String(),
+		Watched:        storedTx.Watched,
+		TransactionIdx: strconv.FormatUint(storedTx.StoredTransactionIdx, 10),
 	}
 }
 
@@ -81,7 +80,6 @@ func (s *StakerService) health(_ *rpctypes.Context) (*ResultHealth, error) {
 
 func (s *StakerService) stake(_ *rpctypes.Context,
 	stakerAddress string,
-	slashingTxChangeAddress string,
 	stakingAmount int64,
 	fpBtcPks []string,
 	stakingTimeBlocks int64,
@@ -94,11 +92,6 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 	amount := btcutil.Amount(stakingAmount)
 
 	stakerAddr, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
-	if err != nil {
-		return nil, err
-	}
-
-	slashingTxChangeAddr, err := btcutil.DecodeAddress(slashingTxChangeAddress, &s.config.ActiveNetParams)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +118,7 @@ func (s *StakerService) stake(_ *rpctypes.Context,
 
 	stakingTimeUint16 := uint16(stakingTimeBlocks)
 
-	stakingTxHash, err := s.staker.StakeFunds(stakerAddr, slashingTxChangeAddr, amount, fpPubKeys, stakingTimeUint16)
+	stakingTxHash, err := s.staker.StakeFunds(stakerAddr, amount, fpPubKeys, stakingTimeUint16)
 	if err != nil {
 		return nil, err
 	}
@@ -561,7 +554,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
 		// staking API
-		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,slashingTxChangeAddress,stakingAmount,fpBtcPks,stakingTimeBlocks"),
+		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,fpBtcPks,stakingTimeBlocks"),
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),

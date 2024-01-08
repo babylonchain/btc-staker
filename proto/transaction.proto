@@ -58,15 +58,13 @@ message TrackedTransaction {
     uint32 staking_time = 5;
     // Public keys of finality providers to which we delegated
     repeated bytes finality_providers_btc_pks = 6;
-
-    string slashing_tx_change_address = 7;
     // this data is only filed if tracked transactions state is >= CONFIRMED_ON_BTC
-    BTCConfirmationInfo staking_tx_btc_confirmation_info = 8;
-    uint32 btc_sig_type = 9;
-    bytes babylon_sig_btc_pk = 10;
-    bytes btc_sig_babylon_sig = 11;
-    TransactionState state = 12;
-    bool watched = 13;
+    BTCConfirmationInfo staking_tx_btc_confirmation_info = 7;
+    uint32 btc_sig_type = 8;
+    bytes babylon_sig_btc_pk = 9;
+    bytes btc_sig_babylon_sig = 10;
+    TransactionState state = 11;
+    bool watched = 12;
    // this data is only filled if tracked transactions state is >= SENT_TO_BABYLON
-    UnbondingTxData unbonding_tx_data = 14;
+    UnbondingTxData unbonding_tx_data = 13;
 }

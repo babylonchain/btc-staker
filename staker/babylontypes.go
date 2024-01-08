@@ -32,7 +32,7 @@ func (app *StakerApp) buildOwnedDelegation(
 	storedTx *stakerdb.StoredTransaction,
 	stakingTxInclusionProof []byte,
 ) (*cl.DelegationData, error) {
-	externalData, err := app.retrieveExternalDelegationData(stakerAddress, storedTx.SlashingTxChangeAddress)
+	externalData, err := app.retrieveExternalDelegationData(stakerAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,6 @@ func (app *StakerApp) buildOwnedDelegation(
 		externalData.babylonParams.CovenantPks,
 		externalData.babylonParams.CovenantQuruomThreshold,
 		externalData.babylonParams.SlashingAddress,
-		externalData.slashingTxChangeAddress,
 		unbondingTxFeeRatePerKb,
 		// TODO: Possiblity to customize finalization time
 		uint16(externalData.babylonParams.MinUnbondingTime)+1,

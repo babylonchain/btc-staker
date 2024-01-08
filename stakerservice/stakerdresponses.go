@@ -7,12 +7,11 @@ type ResultStake struct {
 }
 
 type StakingDetails struct {
-	StakingTxHash           string `json:"staking_tx_hash"`
-	StakerAddress           string `json:"staker_address"`
-	SlashingTxChangeAddress string `json:"change_address"`
-	StakingState            string `json:"staking_state"`
-	Watched                 bool   `json:"watched"`
-	TransactionIdx          string `json:"transaction_idx"`
+	StakingTxHash  string `json:"staking_tx_hash"`
+	StakerAddress  string `json:"staker_address"`
+	StakingState   string `json:"staking_state"`
+	Watched        bool   `json:"watched"`
+	TransactionIdx string `json:"transaction_idx"`
 }
 
 type OutputDetail struct {
