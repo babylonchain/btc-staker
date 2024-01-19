@@ -301,19 +301,7 @@ to create and register a finality provider to Babylon. Once the finality provide
 can use your finality provider BTC public key in the `--finality-providers-pks` flag of the `stake`
 command.
 
-### 2. Withdraw staked funds
-
-The staker can withdraw the staked funds after the timelock of the staking or
-unbonding transaction expires.
-
-`--staking-transaction-hash` is the hash from response of `stake` command.
-
-```bash
-$ stakercli daemon unstake \
-  --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
-```
-
-### 3. Unbond staked funds
+### 2. Unbond staked funds
 
 The `unbond` cmd initiates unbonding flow which involves communication with the
 Babylon chain, Covenant emulators, and the BTC chain. It
@@ -326,5 +314,17 @@ Babylon chain, Covenant emulators, and the BTC chain. It
 
 ```bash
 $ stakercli daemon unbond \
+  --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
+```
+
+### 3. Withdraw staked funds
+
+The staker can withdraw the staked funds after the timelock of the staking or
+unbonding transaction expires.
+
+`--staking-transaction-hash` is the hash from response of `stake` command.
+
+```bash
+$ stakercli daemon unstake \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
