@@ -93,7 +93,7 @@ sudo apt install build-essential
 
 ## 3. Setting up BTC Staker
 
-### 3.1 Prerequisites
+#### Prerequisites
 
 #### 1. Create a Babylon keyring with funds
 
@@ -113,7 +113,7 @@ Follow the official guides to install and run the Bitcoin node:
 - [bitcoind](https://bitcoin.org/en/bitcoin-core)
 - [btcd](https://github.com/btcsuite/btcd)
 
-### 3.2 Staker daemon (`stakerd`) configuration
+### Staker daemon (`stakerd`) configuration
 
 `stakercli` tool serves as a control plane for the Staker Daemon.
 
@@ -292,6 +292,50 @@ can also be set in the configuration file.
 
 ## 5. Staking operations with stakercli
 
+The following guide will show how to stake, withdraw, and unbond Bitcoin.
+
+### Stake Bitcoin
+
+#### 1. List active BTC finality providers on Babylon
+
+Find the public key of the finality provider you want to stake to. You can stake to multiple
+finality providers by specifying public keys in the `--finality-providers-pks` flag of the `stake`
+command.
+
+```bash
+$ stakercli daemon babylon-finality-providers
+{
+    "finality_providers": [
+        {
+            "babylon_public_Key": "0294092d0266c8d26544291b692e13f1e4fcba7829c5445ff99fcb3aefb23fe7cd",
+            "bitcoin_public_Key": "3328782c63404386d9cd905dba5a35975cba629e48192cea4a348937e865d312"
+        }
+    ],
+    "total_finality_providers_count": "1"
+}
+```
+
+#### 2. Obtain the BTC address from the BTC wallet
+
+Find the BTC address that has sufficient Bitcoin balance that you want to stake from.
+
+```bash
+$ stakercli daemon list-outputs
+{
+  "outputs": [
+    {
+      "amount": "10 BTC",
+      "address": "bcrt1q56ehztys752uzg7fzpear08l5mw8w2kxgz7644"
+    },
+    {
+      "amount": "10 BTC",
+      "address": "bcrt1ql94x9v78ag7qx896f0axka809u55pla8cywsvn"
+    }
+  ]
+}
+```
+#### 3. Stake Bitcoin
+
 Stake Bitcoin to the finality provider of your choice. The `--staking-time` flag specifies
 the timelock of the staking transaction in BTC blocks. The `--staking-amount`
 flag specifies the amount in satoshis to stake.
@@ -315,7 +359,7 @@ to create and register a finality provider to Babylon. Once the finality provide
 can use your finality provider BTC public key in the `--finality-providers-pks` flag of the `stake`
 command.
 
-### 2. Unbond staked funds
+### Unbond staked funds
 
 The `unbond` cmd initiates unbonding flow which involves communication with the
 Babylon chain, Covenant emulators, and the BTC chain. It
@@ -331,7 +375,7 @@ $ stakercli daemon unbond \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
 
-### 3. Withdraw staked funds
+### Withdraw staked funds
 
 The staker can withdraw the staked funds after the timelock of the staking or
 unbonding transaction expires.
