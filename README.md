@@ -166,6 +166,12 @@ GRPCAddr = https://localhost:9090
 # ref https://docs.cosmos.network/v0.46/run-node/keyring.html#available-backends-for-the-keyring
 KeyringBackend = test
 
+# Adjustment factor when using gas estimation
+GasAdjustment = 1.2
+
+# Comma separated minimum gas prices to accept for transactions
+GasPrices = 0.01ubbn
+
 # Directory to store staker keys in
 KeyDirectory = /Users/<user>/Library/Application Support/Stakerd
 ```
@@ -175,6 +181,14 @@ To change the babylon rpc/grpc address, you can set
 ```bash
 RPCAddr = https://rpc.devnet.babylonchain.io:443
 GRPCAddr = https://grpc.devnet.babylonchain.io:443
+```
+
+If you encounter any gas-related errors while performing staking operations, 
+consider adjusting the `GasAdjustment` and `GasPrices` parameters. For example, you can set:
+
+```bash
+GasAdjustment = 1.5
+GasPrices = 0.002ubbn
 ```
 
 #### BTC Node configuration
