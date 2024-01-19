@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path"
 
 	babylonApp "github.com/babylonchain/babylon/app"
 	"github.com/babylonchain/btc-staker/stakercfg"
@@ -55,6 +57,17 @@ func dumpCfg(c *cli.Context) error {
 			fmt.Sprintf("config already exists under provided path: %s", configPath),
 			1,
 		)
+	}
+
+	dir, _ := path.Split(configPath)
+
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			return cli.NewExitError(
+				fmt.Sprintf("could not create config directory: %s", err.Error()),
+				1,
+			)
+		}
 	}
 
 	defaultConfig := stakercfg.DefaultConfig()
