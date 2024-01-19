@@ -278,7 +278,7 @@ can also be set in the configuration file.
 
 ## 5. Staking operations with stakercli
 
-Stake Bitcoin to the finality provider(s) of your choice. The `--staking-time` flag specifies
+Stake Bitcoin to the finality provider of your choice. The `--staking-time` flag specifies
 the timelock of the staking transaction in BTC blocks. The `--staking-amount`
 flag specifies the amount in satoshis to stake.
 
