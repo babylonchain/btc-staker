@@ -99,24 +99,22 @@ The `stakerd` daemon requires a running Bitcoin node and a wallet loaded with si
 Bitcoins. You can configure the daemon to connect to either `bitcoind`
 or `btcd` node types.
 
-Follow the official guides to install and run the Bitcoin node:
+Follow the official guides to install and run the Bitcoin node, also make sure to run
+the Bitcoin node on the same network as the one the Babylon node connects to.:
 
 - ##### Bitcoin Core (bitcoind)
-  Official Bitcoin Core website: [Bitcoin core](https://bitcoin.org/en/bitcoin-core/)
+    - Official Bitcoin Core
+      website: [Bitcoin core](https://bitcoin.org/en/bitcoin-core/)
 
-  For information on Signet, you can check this wiki
-  page: [Signet](https://en.bitcoin.it/wiki/Signet)
+    - For information on Signet, you can check this wiki
+      page: [Signet](https://en.bitcoin.it/wiki/Signet)
+
+    - Currently we only support Bitcoin Core
+      version [24.1](https://bitcoincore.org/en/releases/24.1/)
 
 - ##### btcd
 
   GitHub repository for btcd: [btcd](https://github.com/btcsuite/btcd)
-
-**Note:**
-
-1. Ensure that you are using Bitcoin Core
-   version [24.1](https://bitcoincore.org/en/releases/24.1/) for compatibility
-   with `stakerd`
-2. Run the Bitcoin node on the same network as the one the Babylon node connects to.
 
 ### Staker daemon (`stakerd`) configuration
 
