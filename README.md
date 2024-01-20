@@ -400,11 +400,17 @@ Babylon chain, Covenant emulators, and the BTC chain. It
 2. Wait for the signatures from the covenant emulators
 3. Send the unbonding transaction to the BTC chain
 
-`--staking-transaction-hash` is the transaction hash from the response of `stake` command.
+`--staking-transaction-hash` is the transaction hash from the response of `stake` command. 
 
 ```bash
 $ stakercli daemon unbond \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
+```
+
+**Note**: 
+You can also use this cmd to get the list of staking transactions in db.
+```bash
+stakercli daemon list-staking-transactions
 ```
 
 ### Withdraw staked funds
