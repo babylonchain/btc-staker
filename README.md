@@ -99,8 +99,7 @@ The `stakerd` daemon requires a running Bitcoin node and a wallet loaded with si
 Bitcoins. You can configure the daemon to connect to either `bitcoind`
 or `btcd` node types.
 
-Follow the official guides to install and run the Bitcoin node, also make sure to run
-the Bitcoin node on the same network as the one the Babylon node connects to.:
+Follow the official guides to install and run the Bitcoin node:
 
 - ##### Bitcoin Core (bitcoind)
     - Official Bitcoin Core
@@ -115,6 +114,14 @@ the Bitcoin node on the same network as the one the Babylon node connects to.:
 - ##### btcd
 
   GitHub repository for btcd: [btcd](https://github.com/btcsuite/btcd)
+
+**Notes**:
+
+1. Ensure to run the Bitcoin node on the same network as the one the Babylon node
+   connects to. For Babylon testnet, we are using BTC Signet.
+2. If you prefer not to run your own Bitcoin node, you can find an RPC to connect to.
+3. Expected sync times for the BTC node are as follows: Signet takes less than 1
+   hour, testnet takes a few hours, and mainnet could take a few days.
 
 ### Staker daemon (`stakerd`) configuration
 
