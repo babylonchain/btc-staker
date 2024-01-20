@@ -90,7 +90,7 @@ structure:
 
 The `stakerd` daemon requires a keyring with loaded Babylon tokens to pay for the
 transactions. Follow this
-guide [Getting Testnet Tokens](https://docs.babylonchain.io/docs/user-guides/btc-timestamping-testnet/getting-funds)
+[guide](https://docs.babylonchain.io/docs/user-guides/btc-timestamping-testnet/getting-funds)
 to create a keyring and request funds.
 
 #### 2. Start Bitcoin node with wallet
