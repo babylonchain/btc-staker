@@ -256,7 +256,10 @@ the following parameters.
 ```bash
 [btcd]
 # The daemon's rpc listening address. 
-RPCHost = 127.0.0.1:18334
+# note: P2P port for signet is 38332
+# for other networks, check the ref below'
+# https://github.com/btcsuite/btcd/blob/17fdc5219b363c98df12e3ed7849a14f4820d93f/params.go#L23
+RPCHost = 127.0.0.1:38332
 
 # Username for RPC connections
 RPCUser = user
