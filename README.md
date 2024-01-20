@@ -408,10 +408,12 @@ $ stakercli daemon unbond \
 ```
 
 **Note**: 
-You can also use this cmd to get the list of all staking transactions in db.
-```bash
-stakercli daemon list-staking-transactions
-```
+1. You can also use this cmd to get the list of all staking transactions in db.
+   ```bash
+   stakercli daemon list-staking-transactions
+   ```
+2. There is a minimum unbonding time currently set to 50 BTC blocks. After this period, the unbonding timelock will
+   expire, and the staked funds will be unbonded.
 
 ### Withdraw staked funds
 
