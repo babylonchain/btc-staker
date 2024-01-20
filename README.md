@@ -309,7 +309,7 @@ time="2023-12-08T11:48:04+05:30" level=info msg="Starting StakerApp"
 time="2023-12-08T11:48:04+05:30" level=info msg="Connecting to node backend: btcd"
 ```
 
-All the available cli options can be viewed using the `--help` flag. These options
+All the available CLI options can be viewed using the `--help` flag. These options
 can also be set in the configuration file.
 
 
