@@ -239,7 +239,7 @@ WalletPass = walletpass
 
 [walletrpcconfig]
 # location of the wallet rpc server
-# note: in case of bitcoind, the wallet host is same as rpc host
+# note: in case of bitcoind, the wallet host is same as the rpc host
 Host = localhost:18556
 
 # user auth for the wallet rpc server
