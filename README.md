@@ -226,8 +226,8 @@ FeeMode = static
 #### BTC Wallet configuration
 
 **Notes:**
-Make sure you create a BTC wallet, name it appropriately, and load it with signet
-BTC.
+Make sure you create a BTC wallet, name it appropriately, and load it with enough
+signet BTC.
 
 ```bash
 [walletconfig]
