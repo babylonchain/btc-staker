@@ -333,7 +333,7 @@ When staking, specify the BTC public key of a single finality provider using the
 **Note** Make sure to use only one finality provider BTC public key in
 the `--finality-providers-pks` flag of the
 `stake`
-command, as multiple providers are not supported.
+command, as multiple providers are not currently supported.
 
 ```bash
 $ stakercli daemon babylon-finality-providers
