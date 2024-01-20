@@ -321,12 +321,13 @@ The following guide will show how to stake, withdraw, and unbond Bitcoin.
 
 #### 1. List active BTC finality providers on Babylon
 
-Find the BTC public key of the finality provider you intend to stake to. <br>
-When staking, specify the BTC public key of a single finality provider using the <br>
+Find the BTC public key of the finality provider you intend to stake to. 
+
+When staking, specify the BTC public key of a single finality provider using the
 `--finality-providers-pks` flag in 
 the `stake` command.
 
-**Note** Make sure to use only one finality provider BTC public key in the <br> `--finality-providers-pks` flag of the 
+**Note** Make sure to use only one finality provider BTC public key in the `--finality-providers-pks` flag of the 
 `stake` 
 command, as multiple providers are not supported.
 
