@@ -10,9 +10,9 @@ components:
 
 2. `stakercli` - The `stakercli` is a command line interface (CLI) to facilitate
    interaction with the `stakerd` daemon . It enables users to stake funds, withdraw
-   funds, unbond staked funds, retrieve the active finality providers set in Babylon, and
-   more. It serves as an intuitive interface for effortless control and monitoring of
-   your Bitcoin staking activities.
+   funds, unbond staked funds, retrieve the active finality providers set in Babylon,
+   and more. It serves as an intuitive interface for effortless control and
+   monitoring of your Bitcoin staking activities.
 
 ## 2. Installation
 
@@ -73,8 +73,8 @@ To build without installing,
 $ make build
 ```
 
-The above command will put the built binaries in a build directory with the
-following structure:
+The above command will put the built binaries in a build directory with the following
+structure:
 
 ```bash
  $ ls build
@@ -105,14 +105,18 @@ Follow the official guides to install and run the Bitcoin node:
 
 Official Bitcoin Core website: [Bitcoin core](https://bitcoin.org/en/bitcoin-core/)
 
-For information on Signet, you can check this wiki page: [Signet](https://en.bitcoin.it/wiki/Signet)
+For information on Signet, you can check this wiki
+page: [Signet](https://en.bitcoin.it/wiki/Signet)
 
 ##### 2.2 btcd
 
 GitHub repository for btcd: [btcd](https://github.com/btcsuite/btcd)
 
 **Note:**
-1. Ensure that you are using Bitcoin Core version [24.1](https://bitcoincore.org/en/releases/24.1/) for compatibility with `stakerd`
+
+1. Ensure that you are using Bitcoin Core
+   version [24.1](https://bitcoincore.org/en/releases/24.1/) for compatibility
+   with `stakerd`
 2. Run the Bitcoin node on the same network as the one the Babylon node connects to.
 
 ### Staker daemon (`stakerd`) configuration
@@ -146,11 +150,12 @@ Below are some important parameters of the `stakerd.conf` file.
 
 **Notes:**
 
-1. The `Key` parameter in the config below is the name of the key in the keyring to use
-for signing transactions. Use the key name you created
-in [Create a Babylon keyring with funds](#create-a-babylon-keyring-with-funds)
+1. The `Key` parameter in the config below is the name of the key in the keyring to
+   use for signing transactions. Use the key name you created
+   in [Create a Babylon keyring with funds](#create-a-babylon-keyring-with-funds)
 
-2. Ensure that the `KeyringDirectory` is set to the location where the keyring is stored.
+2. Ensure that the `KeyringDirectory` is set to the location where the keyring is
+   stored.
 3. Make sure to use  `test` keyring backend.
 
 ```bash
@@ -189,8 +194,9 @@ KeyDirectory = /Users/<user>/Library/Application Support/Stakerd
    GRPCAddr = https://grpc.devnet.babylonchain.io:443
    ```
 
-2. If you encounter any gas-related errors while performing staking operations, 
-consider adjusting the `GasAdjustment` and `GasPrices` parameters. For example, you can set:
+2. If you encounter any gas-related errors while performing staking operations,
+   consider adjusting the `GasAdjustment` and `GasPrices` parameters. For example,
+   you can set:
 
    ```bash
    GasAdjustment = 1.5
@@ -199,8 +205,10 @@ consider adjusting the `GasAdjustment` and `GasPrices` parameters. For example, 
 
 #### BTC Node configuration
 
-**Notes:** 
-1. BTC configuration should reflect the BTC node that we're running and the network Babylon connects to.
+**Notes:**
+
+1. BTC configuration should reflect the BTC node that we're running and the network
+   Babylon connects to.
 2. You can use this [faucet](https://signet.bc-2.jp/) to receive signet BTC.
 
 ```bash
@@ -221,8 +229,9 @@ FeeMode = static
 
 #### BTC Wallet configuration
 
-**Notes:** 
-Make sure you create a BTC wallet, name it appropriately, and load it with signet BTC.
+**Notes:**
+Make sure you create a BTC wallet, name it appropriately, and load it with signet
+BTC.
 
 ```bash
 [walletconfig]
@@ -312,7 +321,6 @@ time="2023-12-08T11:48:04+05:30" level=info msg="Connecting to node backend: btc
 All the available CLI options can be viewed using the `--help` flag. These options
 can also be set in the configuration file.
 
-
 ## 5. Staking operations with stakercli
 
 The following guide will show how to stake, withdraw, and unbond Bitcoin.
@@ -321,14 +329,14 @@ The following guide will show how to stake, withdraw, and unbond Bitcoin.
 
 #### 1. List active BTC finality providers on Babylon
 
-Find the BTC public key of the finality provider you intend to stake to. 
+Find the BTC public key of the finality provider you intend to stake to.
 
 When staking, specify the BTC public key of a single finality provider using the
-`--finality-providers-pks` flag in 
-the `stake` command.
+`--finality-providers-pks` flag in the `stake` command.
 
-**Note** Make sure to use only one finality provider BTC public key in the `--finality-providers-pks` flag of the 
-`stake` 
+**Note** Make sure to use only one finality provider BTC public key in
+the `--finality-providers-pks` flag of the
+`stake`
 command, as multiple providers are not supported.
 
 ```bash
@@ -348,9 +356,9 @@ $ stakercli daemon babylon-finality-providers
 
 Find the BTC address that has sufficient Bitcoin balance that you want to stake from.
 
-**Note**: In case you don't have addresses with adequate balances, 
-you can use the faucet to receive signet BTC. Visit the faucet [link](https://signet.bc-2.jp/) to acquire signet BTC.
-
+**Note**: In case you don't have addresses with adequate balances, you can use the
+faucet to receive signet BTC. Visit the faucet [link](https://signet.bc-2.jp/) to
+acquire signet BTC.
 
 ```bash
 $ stakercli daemon list-outputs
@@ -367,10 +375,12 @@ $ stakercli daemon list-outputs
   ]
 }
 ```
+
 #### 3. Stake Bitcoin
 
-Stake Bitcoin to the finality provider of your choice. The `--staking-time` flag specifies
-the timelock of the staking transaction in BTC blocks. The `--staking-amount`
+Stake Bitcoin to the finality provider of your choice. The `--staking-time` flag
+specifies the timelock of the staking transaction in BTC blocks.
+The `--staking-amount`
 flag specifies the amount in satoshis to stake.
 
 ```bash
@@ -388,8 +398,9 @@ $ stakercli daemon stake \
 
 **Note**: You can self delegate i.e. stake to your own finality provider. Follow
 the [finality provider registration guide](https://github.com/babylonchain/finality-provider/blob/dev/docs/finality-provider.md#4-create-and-register-a-finality-provider)
-to create and register a finality provider to Babylon. Once the finality provider is registered, you
-can use your finality provider BTC public key in the `--finality-providers-pks` flag of the `stake`
+to create and register a finality provider to Babylon. Once the finality provider is
+registered, you can use your finality provider BTC public key in
+the `--finality-providers-pks` flag of the `stake`
 command.
 
 ### Unbond staked funds
@@ -401,27 +412,30 @@ Babylon chain, Covenant emulators, and the BTC chain. It
 2. Wait for the signatures from the covenant emulators
 3. Send the unbonding transaction to the BTC chain
 
-`--staking-transaction-hash` is the transaction hash from the response of `stake` command. 
+`--staking-transaction-hash` is the transaction hash from the response of `stake`
+command.
 
 ```bash
 $ stakercli daemon unbond \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
 ```
 
-**Note**: 
+**Note**:
+
 1. You can also use this cmd to get the list of all staking transactions in db.
    ```bash
    stakercli daemon list-staking-transactions
    ```
-2. There is a minimum unbonding time currently set to 50 BTC blocks. After this period, the unbonding timelock will
-   expire, and the staked funds will be unbonded.
+2. There is a minimum unbonding time currently set to 50 BTC blocks. After this
+   period, the unbonding timelock will expire, and the staked funds will be unbonded.
 
 ### Withdraw staked funds
 
 The staker can withdraw the staked funds after the timelock of the staking or
 unbonding transaction expires.
 
-`--staking-transaction-hash` is the transaction hash from the response of `stake` command.
+`--staking-transaction-hash` is the transaction hash from the response of `stake`
+command.
 
 ```bash
 $ stakercli daemon unstake \
@@ -429,7 +443,9 @@ $ stakercli daemon unstake \
 ```
 
 **Note**:
-You can also use this cmd to get the list of all withdrawable staking transactions in db.
+You can also use this cmd to get the list of all withdrawable staking transactions in
+db.
+
 ```bash
 stakercli daemon withdrawable-transactions
 ```
