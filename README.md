@@ -141,7 +141,7 @@ will be used. For different operating systems, those are:
 - **Linux** `~/.Stakerd`
 - **Windows** `C:\Users\<username>\AppData\Local\Stakerd`
 
-Below are some important parameters of the `stakerd.conf` file.
+In the following, we go through important parameters of the `stakerd.conf` file.
 
 #### Babylon configuration
 
