@@ -23,7 +23,7 @@ This project requires Go version 1.21 or later.
 Install Go by following the instructions on
 the [official Go installation guide](https://golang.org/doc/install).
 
-Install essential tools and packages needed to compile and build the project.
+Install essential tools and packages needed to compile and build the binaries.
 
 ```bash
 sudo apt install build-essential
