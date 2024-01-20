@@ -418,7 +418,7 @@ stakercli daemon list-staking-transactions
 The staker can withdraw the staked funds after the timelock of the staking or
 unbonding transaction expires.
 
-`--staking-transaction-hash` is the hash from response of `stake` command.
+`--staking-transaction-hash` is the transaction hash from the response of `stake` command.
 
 ```bash
 $ stakercli daemon unstake \
