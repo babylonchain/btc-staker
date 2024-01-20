@@ -23,6 +23,12 @@ This project requires Go version 1.21 or later.
 Install Go by following the instructions on
 the [official Go installation guide](https://golang.org/doc/install).
 
+Install essential tools and packages needed to compile and build the project.
+
+```bash
+sudo apt install build-essential
+```
+
 #### Downloading the code
 
 To get started, clone the repository to your local machine from Github:
@@ -53,13 +59,6 @@ The above command will build and install the following binaries to
 - `stakerd`: The daemon program for the btc-staker
 - `stakercli`: The CLI tool for interacting with the stakerd.
 
-To build locally,
-
-```bash
-$ cd btc-staker # cd into the project directory
-$ make build
-```
-
 If your shell cannot find the installed binaries, make sure `$GOPATH/bin` is in
 the `$PATH` of your shell. Usually these commands will do the job
 
@@ -68,27 +67,19 @@ export PATH=$HOME/go/bin:$PATH
 echo 'export PATH=$HOME/go/bin:$PATH' >> ~/.profile
 ```
 
+To build without installing,
+
+```bash
+$ make build
+```
+
 The above command will put the built binaries in a build directory with the
 following structure:
-    
- ```bash
+
+```bash
  $ ls build
      ├── stakerd
      └── stakercli
- ```
-
-If Go complains that it cannot retrieve some of the dependencies, one reason
-could be that these repositories are private. Try following the instructions
-[here](https://go.dev/doc/faq#git_https).
-
-Another common issue with compiling is that some of the dependencies have
-components written in C. If a C toolchain is absent, the Go compiler will throw
-errors. (Most likely it will complain about undefined names/types.) Make sure a
-C toolchain (for example, GCC or Clang) is available.  On Ubuntu, this can be
-installed by running
-
-```bash
-sudo apt install build-essential
 ```
 
 ## 3. Setting up BTC Staker
