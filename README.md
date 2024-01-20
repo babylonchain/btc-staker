@@ -16,7 +16,7 @@ components:
 
 ## 2. Installation
 
-#### Prerequisites
+### Prerequisites
 
 This project requires Go version 1.21 or later.
 
@@ -29,7 +29,7 @@ Install essential tools and packages needed to compile and build the binaries.
 sudo apt install build-essential
 ```
 
-#### Downloading the code
+### Downloading the code
 
 To get started, clone the repository to your local machine from Github:
 
@@ -45,7 +45,7 @@ $ cd btc-staker # cd into the project directory
 $ git checkout <release-tag>
 ````
 
-#### Building and installing the binary
+### Building and installing the binary
 
 At the top-level directory of the project
 
@@ -84,7 +84,7 @@ structure:
 
 ## 3. Setting up BTC Staker
 
-#### Prerequisites
+### Prerequisites
 
 #### 1. Create a Babylon keyring with funds
 
