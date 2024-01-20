@@ -393,7 +393,7 @@ command.
 
 ### Unbond staked funds
 
-The `unbond` cmd initiates unbonding flow which involves communication with the
+The `unbond` cmd initiates the unbonding flow which involves communication with the
 Babylon chain, Covenant emulators, and the BTC chain. It
 
 1. Build the unbonding transaction and send it to the Babylon chain
