@@ -347,6 +347,10 @@ $ stakercli daemon babylon-finality-providers
 
 Find the BTC address that has sufficient Bitcoin balance that you want to stake from.
 
+**Note**: In case you don't have addresses with adequate balances, 
+you can use the faucet to receive signet BTC. Visit the faucet [link](https://signet.bc-2.jp/) to acquire signet BTC.
+
+
 ```bash
 $ stakercli daemon list-outputs
 {
