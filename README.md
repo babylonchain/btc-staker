@@ -106,8 +106,8 @@ the Bitcoin node on the same network as the one the Babylon node connects to.:
     - Official Bitcoin Core
       website: [Bitcoin core](https://bitcoin.org/en/bitcoin-core/)
 
-    - For information on Signet, you can check this wiki
-      page: [Signet](https://en.bitcoin.it/wiki/Signet)
+    - For information on Signet, you can
+      check [this](https://en.bitcoin.it/wiki/Signet) wiki page.
 
     - Currently we only support Bitcoin Core
       version [24.1](https://bitcoincore.org/en/releases/24.1/)
