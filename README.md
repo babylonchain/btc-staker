@@ -144,10 +144,14 @@ Below are some important parameters of the `stakerd.conf` file.
 
 #### Babylon configuration
 
-**Note:**
-The `Key` parameter in the config below is the name of the key in the keyring to use
+**Notes:**
+
+1. The `Key` parameter in the config below is the name of the key in the keyring to use
 for signing transactions. Use the key name you created
 in [Create a Babylon keyring with funds](#create-a-babylon-keyring-with-funds)
+
+2. Ensure that the `KeyringDirectory` is set to the location where the keyring is stored.
+3. Make sure to use  `test` keyring backend.
 
 ```bash
 [babylon]
@@ -163,9 +167,7 @@ RPCAddr = http://localhost:26657
 # Address of the chain's GRPC server (Babylon)
 GRPCAddr = https://localhost:9090
 
-# Type of keyring to use,
-# supported backends - (os|file|kwallet|pass|test|memory)
-# ref https://docs.cosmos.network/v0.46/run-node/keyring.html#available-backends-for-the-keyring
+# Type of keyring backend to use 
 KeyringBackend = test
 
 # Adjustment factor when using gas estimation
@@ -178,20 +180,22 @@ GasPrices = 0.01ubbn
 KeyDirectory = /Users/<user>/Library/Application Support/Stakerd
 ```
 
-To change the babylon rpc/grpc address, you can set
+**Additional Notes:**
 
-```bash
-RPCAddr = https://rpc.devnet.babylonchain.io:443
-GRPCAddr = https://grpc.devnet.babylonchain.io:443
-```
+1. To change the babylon rpc/grpc address, you can set
 
-If you encounter any gas-related errors while performing staking operations, 
+   ```bash
+   RPCAddr = https://rpc.devnet.babylonchain.io:443
+   GRPCAddr = https://grpc.devnet.babylonchain.io:443
+   ```
+
+2. If you encounter any gas-related errors while performing staking operations, 
 consider adjusting the `GasAdjustment` and `GasPrices` parameters. For example, you can set:
 
-```bash
-GasAdjustment = 1.5
-GasPrices = 0.002ubbn
-```
+   ```bash
+   GasAdjustment = 1.5
+   GasPrices = 0.002ubbn
+   ```
 
 #### BTC Node configuration
 
