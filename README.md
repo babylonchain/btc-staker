@@ -408,7 +408,7 @@ $ stakercli daemon unbond \
 ```
 
 **Note**: 
-You can also use this cmd to get the list of staking transactions in db.
+You can also use this cmd to get the list of all staking transactions in db.
 ```bash
 stakercli daemon list-staking-transactions
 ```
@@ -423,4 +423,10 @@ unbonding transaction expires.
 ```bash
 $ stakercli daemon unstake \
   --staking-transaction-hash 6bf442a2e864172cba73f642ced10c178f6b19097abde41608035fb26a601b10
+```
+
+**Note**:
+You can also use this cmd to get the list of all withdrawable staking transactions in db.
+```bash
+stakercli daemon withdrawable-transactions
 ```
