@@ -408,7 +408,7 @@ Babylon chain, Covenant emulators, and the BTC chain. It
 2. Wait for the signatures from the covenant emulators
 3. Send the unbonding transaction to the BTC chain
 
-`--staking-transaction-hash` is the transaction hash from the response of `stake`
+`--staking-transaction-hash` is the transaction hash from the response of the `stake`
 command.
 
 ```bash
