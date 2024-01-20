@@ -199,10 +199,14 @@ consider adjusting the `GasAdjustment` and `GasPrices` parameters. For example, 
 
 #### BTC Node configuration
 
+**Notes:** 
+1. BTC configuration should reflect the BTC node that we're running and the network Babylon connects to.
+2. You can use this [faucet](https://signet.bc-2.jp/) to receive signet BTC.
+
 ```bash
 [chain]
 # btc network to run on
-Network = testnet
+Network = signet
 
 [btcnodebackend]
 # type of node to connect to {bitcoind, btcd}
@@ -217,6 +221,9 @@ FeeMode = static
 
 #### BTC Wallet configuration
 
+**Notes:** 
+Make sure you create a BTC wallet, name it appropriately, and load it with signet BTC.
+
 ```bash
 [walletconfig]
 # name of the wallet to sign Bitcoin transactions
@@ -227,9 +234,11 @@ WalletPass = walletpass
 
 [walletrpcconfig]
 # location of the wallet rpc server
+# note: in case of bitcoind, the wallet host is same as rpc host
 Host = localhost:18556
 
 # user auth for the wallet rpc server
+# note: in case of bitcoind, the wallet rpc credentials are same as rpc credentials
 User = rpcuser
 
 # password auth for the wallet rpc server
