@@ -271,7 +271,12 @@ following parameters.
 ```bash
 [bitcoind]
 # The daemon's rpc listening address
-RPCHost = 127.0.0.1:8334
+# note: P2P port for signet is 38332/38333
+# mainnet 8332/8334
+# testnet 18332/18333
+# regtest 18443
+# ref - https://github.com/bitcoin/bitcoin/blob/03752444cd54df05a731557968d5a9f33a55c55c/src/chainparamsbase.cpp#L39
+RPCHost = 127.0.0.1:38332
 
 # Username for RPC connections
 RPCUser = user
