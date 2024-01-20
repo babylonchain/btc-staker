@@ -101,16 +101,15 @@ or `btcd` node types.
 
 Follow the official guides to install and run the Bitcoin node:
 
-##### 2.1 Bitcoin Core (bitcoind)
+- ##### Bitcoin Core (bitcoind)
+  Official Bitcoin Core website: [Bitcoin core](https://bitcoin.org/en/bitcoin-core/)
 
-Official Bitcoin Core website: [Bitcoin core](https://bitcoin.org/en/bitcoin-core/)
+  For information on Signet, you can check this wiki
+  page: [Signet](https://en.bitcoin.it/wiki/Signet)
 
-For information on Signet, you can check this wiki
-page: [Signet](https://en.bitcoin.it/wiki/Signet)
+- ##### btcd
 
-##### 2.2 btcd
-
-GitHub repository for btcd: [btcd](https://github.com/btcsuite/btcd)
+  GitHub repository for btcd: [btcd](https://github.com/btcsuite/btcd)
 
 **Note:**
 
