@@ -152,6 +152,19 @@ In the following, we go through important parameters of the `stakerd.conf` file.
 2. Ensure that the `KeyringDirectory` is set to the location where the keyring is
    stored.
 3. Make sure to use the  `test` keyring backend.
+4. To change the babylon RPC/GRPC address, you can set
+
+   ```bash
+   RPCAddr = https://rpc.devnet.babylonchain.io:443
+   GRPCAddr = https://grpc.devnet.babylonchain.io:443
+   ```
+5. If you encounter any gas-related errors while performing staking operations, consider
+   adjusting the `GasAdjustment` and `GasPrices` parameters. For example, you can set:
+
+   ```bash
+   GasAdjustment = 1.5
+   GasPrices = 0.002ubbn
+   ```
 
 ```bash
 [babylon]
@@ -180,24 +193,6 @@ GasPrices = 0.01ubbn
 KeyDirectory = /Users/<user>/Library/Application Support/Stakerd
 ```
 
-**Additional Notes:**
-
-1. To change the babylon rpc/grpc address, you can set
-
-   ```bash
-   RPCAddr = https://rpc.devnet.babylonchain.io:443
-   GRPCAddr = https://grpc.devnet.babylonchain.io:443
-   ```
-
-2. If you encounter any gas-related errors while performing staking operations,
-   consider adjusting the `GasAdjustment` and `GasPrices` parameters. For example,
-   you can set:
-
-   ```bash
-   GasAdjustment = 1.5
-   GasPrices = 0.002ubbn
-   ```
-
 #### BTC Node configuration
 
 **Notes:**
@@ -224,7 +219,7 @@ FeeMode = static
 
 #### BTC Wallet configuration
 
-**Notes:**
+**Note:**
 Make sure you create a BTC wallet, name it appropriately, and load it with enough
 signet BTC.
 
