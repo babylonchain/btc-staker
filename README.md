@@ -105,9 +105,9 @@ stakerd supports Bitcoin Core version 24.1.
 You can download Bitcoin Core version 24.1 from the official
 release [page](https://bitcoincore.org/en/releases/24.1/).
 
-For more information on Signet, you can
-check [this](https://en.bitcoin.it/wiki/Signet)
-wiki page.
+For more information on Signet, you can check the
+Bitcoin [wiki](https://en.bitcoin.it/wiki/Signet)
+page.
 
 **Notes**:
 
@@ -160,8 +160,9 @@ In the following, we go through important parameters of the `stakerd.conf` file.
    RPCAddr = https://rpc.devnet.babylonchain.io:443
    GRPCAddr = https://grpc.devnet.babylonchain.io:443
    ```
-5. If you encounter any gas-related errors while performing staking operations, consider
-   adjusting the `GasAdjustment` and `GasPrices` parameters. For example, you can set:
+5. If you encounter any gas-related errors while performing staking operations,
+   consider adjusting the `GasAdjustment` and `GasPrices` parameters. For example,
+   you can set:
 
    ```bash
    GasAdjustment = 1.5
