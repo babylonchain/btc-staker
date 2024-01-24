@@ -34,7 +34,7 @@ sudo apt install build-essential
 To get started, clone the repository to your local machine from Github:
 
 ```bash
-git clone git@github.com:babylonchain/btc-staker.git
+git clone https://github.com/babylonchain/btc-staker.git
 ```
 
 You can choose a specific version from
@@ -95,18 +95,14 @@ to create a keyring and request funds.
 
 #### 2. Start Bitcoin node with wallet
 
-The `stakerd` daemon requires a running Bitcoin node and a wallet loaded with signet
-Bitcoins.
-
-Choose between two popular Bitcoin node implementations: `bitcoind` (Bitcoin Core)
-or `btcd`. While both are compatible, we recommend using `bitcoind`. Currently,
-stakerd supports Bitcoin Core version 24.1.
+The `stakerd` daemon requires a running Bitcoin node and a **legacy** wallet loaded
+with signet Bitcoins. You can configure the daemon to connect to either
+`bitcoind` or `btcd` node types. While both are compatible, we recommend
+using `bitcoind`. Currently, `stakerd` only supports Bitcoin Core version 24.1.
 
 You can download Bitcoin Core version 24.1 from the official
-release [page](https://bitcoincore.org/en/releases/24.1/).
-
-For more information on Signet, you can check the
-Bitcoin [wiki](https://en.bitcoin.it/wiki/Signet)
+release [page](https://bitcoincore.org/en/releases/24.1/). For more information on
+Signet, you can check the Bitcoin [wiki](https://en.bitcoin.it/wiki/Signet)
 page.
 
 **Notes**:
@@ -116,6 +112,8 @@ page.
 2. If you prefer not to run your own Bitcoin node, you can find an RPC to connect to.
 3. Expected sync times for the BTC node are as follows: Signet takes less than 1
    hour, testnet takes a few hours, and mainnet could take a few days.
+4. Ensure that you use a legacy (non-descriptor) wallet, as BTC Staker doesn't
+   currently support descriptor wallets.
 
 ### Staker daemon (`stakerd`) configuration
 
@@ -262,7 +260,7 @@ your setup.
 [bitcoind]
 # The daemon's rpc listening address
 # note: P2P port for signet is 38332/38333
-# mainnet 8332/8334
+# mainnet 8332/8333
 # testnet 18332/18333
 # regtest 18443
 # ref - https://github.com/bitcoin/bitcoin/blob/03752444cd54df05a731557968d5a9f33a55c55c/src/chainparamsbase.cpp#L39
