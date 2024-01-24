@@ -254,8 +254,8 @@ DisableTls = true
 
 #### BTC Node type specific configuration
 
-Make sure to update the following important parameters related to your `bitcoind`
-config.
+Make sure to replace the following important parameters related to `bitcoind` as per
+your setup.
 
 ```bash
 [bitcoind]
