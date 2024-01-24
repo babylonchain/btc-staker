@@ -96,24 +96,18 @@ to create a keyring and request funds.
 #### 2. Start Bitcoin node with wallet
 
 The `stakerd` daemon requires a running Bitcoin node and a wallet loaded with signet
-Bitcoins. You can configure the daemon to connect to either `bitcoind`
-or `btcd` node types.
+Bitcoins.
 
-Follow the official guides to install and run the Bitcoin node:
+Choose between two popular Bitcoin node implementations: `bitcoind` (Bitcoin Core)
+or `btcd`. While both are compatible, we recommend using `bitcoind`. Currently,
+stakerd supports Bitcoin Core version 24.1.
 
-- ##### Bitcoin Core (bitcoind)
-    - Official Bitcoin Core
-      website: [Bitcoin core](https://bitcoin.org/en/bitcoin-core/)
+You can download Bitcoin Core version 24.1 from the official
+release [page](https://bitcoincore.org/en/releases/24.1/).
 
-    - For information on Signet, you can
-      check [this](https://en.bitcoin.it/wiki/Signet) wiki page.
-
-    - Currently we only support Bitcoin Core
-      version [24.1](https://bitcoincore.org/en/releases/24.1/)
-
-- ##### btcd
-
-  GitHub repository for btcd: [btcd](https://github.com/btcsuite/btcd)
+For more information on Signet, you can
+check [this](https://en.bitcoin.it/wiki/Signet)
+wiki page.
 
 **Notes**:
 
@@ -262,26 +256,8 @@ DisableTls = true
 
 #### BTC Node type specific configuration
 
-If you selected `btcd` as the node type, then you can configure the btcd node using
-the following parameters.
-
-```bash
-[btcd]
-# The daemon's rpc listening address. 
-# note: P2P port for signet is 38332
-# for other networks, check the ref below'
-# https://github.com/btcsuite/btcd/blob/17fdc5219b363c98df12e3ed7849a14f4820d93f/params.go#L23
-RPCHost = 127.0.0.1:38332
-
-# Username for RPC connections
-RPCUser = user
-
-# Password for RPC connections
-RPCPass = pass
-```
-
-If you selected `bitcoind` as the node type, then you can configure it using the
-following parameters.
+Make sure to update the following important parameters related to your `bitcoind`
+config.
 
 ```bash
 [bitcoind]
@@ -299,10 +275,10 @@ RPCUser = user
 # Password for RPC connections
 RPCPass = pass
 
-; The address listening for ZMQ connections to deliver raw block notifications
+# The address listening for ZMQ connections to deliver raw block notifications
 ZMQPubRawBlock = tcp://127.0.0.1:29001
 
-; The address listening for ZMQ connections to deliver raw transaction notifications
+# The address listening for ZMQ connections to deliver raw transaction notifications
 ZMQPubRawTx = tcp://127.0.0.1:29002
 ```
 
@@ -324,7 +300,6 @@ the `--rpclisten` flag.
 stakerd --rpclisten 'localhost:15812'
 
 time="2023-12-08T11:48:04+05:30" level=info msg="Starting StakerApp"
-time="2023-12-08T11:48:04+05:30" level=info msg="Connecting to node backend: btcd"
 ```
 
 All the available CLI options can be viewed using the `--help` flag. These options
