@@ -107,7 +107,7 @@ release [page](https://bitcoincore.org/en/releases/24.1/)
 Below, we'll guide you through setting up a signet `bitcoind` node and a legacy
 wallet:
 
-##### 2.1. Download and Extract Bitcoin Binary:
+#### 2.1. Download and Extract Bitcoin Binary:
 
 ```bash
 wget https://bitcoincore.org/bin/bitcoin-core-24.1/bitcoin-24.1-x86_64-linux-gnu.tar.gz
@@ -116,7 +116,7 @@ chmod +x bitcoin-24.1/bin/bitcoind
 chmod +x bitcoin-24.1/bin/bitcoin-cli
 ```
 
-##### 2.2. Create and start a Systemd Service:
+#### 2.2. Create and start a Systemd Service:
 
 ```bash 
 # Create the service file
@@ -158,7 +158,7 @@ systemctl status bitcoind
 journalctl -u bitcoind -f
 ```
 
-##### 2.3. Create legacy wallet and generate address:
+#### 2.3. Create legacy wallet and generate address:
 
 ```bash
 # Create a new wallet
@@ -187,7 +187,7 @@ journalctl -u bitcoind -f
     getnewaddress
 ```
 
-##### 2.4. Request signet BTC from faucet:
+#### 2.4. Request signet BTC from faucet:
 
 Use the faucet [link](https://signet.bc-2.jp/) to request signet BTC to the address
 generated in the previous step. You can use the following command to check the
