@@ -183,7 +183,7 @@ check if you've received them using the following commands:
    hour, testnet takes a few hours, and mainnet could take a few days.
 4. Ensure that you use a legacy (non-descriptor) wallet, as BTC Staker doesn't
    currently support descriptor wallets.
-5. For more details on signet and how to use it, check the
+5. For more details on btc signet and how to use it, check the
    Bitcoin [wiki](https://en.bitcoin.it/wiki/Signet)
    page.
 
