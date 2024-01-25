@@ -153,8 +153,7 @@ In the following, we go through important parameters of the `stakerd.conf` file.
    stored.
 3. Ensure to use the `test` keyring backend
 4. Ensure you use the correct `ChainID` for the network you're connecting to. For
-   example, for Babylon [devnet](https://rpc.devnet.babylonchain.io/status), the
-   chain ID is `bbn-dev-5`.
+   example, for Babylon devnet, the chain ID is `bbn-dev-5`.
 5. To change the Babylon RPC/GRPC address, update the following:
 
     ```bash
