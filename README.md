@@ -148,7 +148,7 @@ In the following, we go through important parameters of the `stakerd.conf` file.
 
 1. The `Key` parameter in the config below is the name of the key in the keyring to
    use for signing transactions. Use the key name you created
-   in [Create a Babylon keyring with funds](#create-a-babylon-keyring-with-funds)
+   in [Create a Babylon keyring with funds](#1-create-a-babylon-keyring-keyring-backend-test-with-funds).
 2. Ensure that the `KeyringDirectory` is set to the location where the keyring is
    stored.
 3. Ensure to use the `test` keyring backend
