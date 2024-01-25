@@ -126,10 +126,17 @@ Description=bitcoin signet node
 After=network.target
 
 [Service]
-User=<user>
+User=ubuntu
 Type=simple
-ExecStart=/home/<user>/bitcoin-24.1/bin/bitcoind -deprecatedrpc=create_bdb -signet -server -rpcallowip=0.0.0.0/0 
--rpcbind=0.0.0.0 -rpcport=38332 -rpcuser=<USER> -rpcpassword=<PASS>
+ExecStart=/home/ubuntu/bitcoin-24.1/bin/bitcoind \
+    -deprecatedrpc=create_bdb \
+    -signet \
+    -server \
+    -rpcallowip=0.0.0.0/0 \
+    -rpcbind=0.0.0.0 \
+    -rpcport=38332 \
+    -rpcuser=user \
+    -rpcpassword=pass
 Restart=on-failure
 LimitNOFILE=65535
 
