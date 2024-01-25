@@ -152,7 +152,6 @@ sudo systemctl enable bitcoind
 sudo systemctl start bitcoind
 ```
 
-
 ```bash
 # Check the status and logs of the service
 systemctl status bitcoind
@@ -190,9 +189,9 @@ journalctl -u bitcoind -f
 
 ##### 2.4. Request signet BTC from faucet:
 
-Use the provided faucet link (https://signet.bc-2.jp/) to request signet BTC to the
-address generated in the previous step. Once you've requested the funds, you can
-check if you've received them using the following commands:
+Use the faucet [link](https://signet.bc-2.jp/) to request signet BTC to the address
+generated in the previous step. You can use the following command to check the
+balance.
 
 ```bash
 # Replace $TXID with the transaction id you received from the faucet
