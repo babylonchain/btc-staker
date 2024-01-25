@@ -96,23 +96,24 @@ to create a keyring and request funds.
 #### 2. Start Bitcoin node with wallet
 
 The `stakerd` daemon requires a running Bitcoin node and a **legacy** wallet loaded
-with signet Bitcoins. You can configure the daemon to connect to either
-`bitcoind` or `btcd` node types. While both are compatible, we recommend
-using `bitcoind`. In below instructions, we will go through steps to run a `bitcoind`
-node.
+with signet Bitcoins.
 
-You can download Bitcoin Core version 24.1 from the official
-release [page](https://bitcoincore.org/en/releases/24.1/). For more information on
-Signet, you can check the Bitcoin [wiki](https://en.bitcoin.it/wiki/Signet)
-page.
+You can configure the daemon to connect to either
+`bitcoind` or `btcd` node types. While both are compatible, we recommend
+using `bitcoind`. `stakerd` currently supports Bitcoin Core version 24.1. For more
+details, refer to the official
+release [page](https://bitcoincore.org/en/releases/24.1/)
+
+Below, we'll guide you through setting up a signet `bitcoind` node and a legacy
+wallet:
 
 ##### 2.1. Download and Extract Bitcoin Binary:
 
 ```bash
-wget https://bitcoincore.org/bin/bitcoin-core-26.0/bitcoin-26.0-x86_64-linux-gnu.tar.gz
-tar -xvf bitcoin-26.0-x86_64-linux-gnu.tar.gz
-chmod +x bitcoin-26.0/bin/bitcoind
-chmod +x bitcoin-26.0/bin/bitcoin-cli
+wget https://bitcoincore.org/bin/bitcoin-core-24.1/bitcoin-24.1-x86_64-linux-gnu.tar.gz
+tar -xvf bitcoin-24.1-x86_64-linux-gnu.tar.gz
+chmod +x bitcoin-24.1/bin/bitcoind
+chmod +x bitcoin-24.1/bin/bitcoin-cli
 ```
 
 ##### 2.2. Create and start a Systemd Service:
@@ -120,7 +121,7 @@ chmod +x bitcoin-26.0/bin/bitcoin-cli
 Create bitcoind systemd service file:
 
 ```bash 
-sudo tee /etc/systemd/system/bitcoind.service > /dev/null <<EOF
+sudo tee /etc/systemd/system/bitcoind.service >/dev/null <<EOF
 [Unit]
 Description=bitcoin signet node
 After=network.target
@@ -128,7 +129,8 @@ After=network.target
 [Service]
 User=bitcoin
 Type=simple
-ExecStart=/home/bitcoin/bitcoin-26.0/bin/bitcoind -deprecatedrpc=create_bdb -signet -server -rpcallowip=0.0.0.0/0 -rpcbind=0.0.0.0 -rpcport=8332 -rpcuser=<USER> -rpcpassword=<PASS>
+ExecStart=/home/bitcoin/bitcoin-24.1/bin/bitcoind -deprecatedrpc=create_bdb -signet -server -rpcallowip=0.0.0.0/0 
+-rpcbind=0.0.0.0 -rpcport=38332 -rpcuser=<USER> -rpcpassword=<PASS>
 Restart=on-failure
 LimitNOFILE=65535
 
@@ -156,9 +158,10 @@ journalctl -u bitcoind -f
 ##### 2.3. Create legacy wallet and generate address:
 
 ```bash
-~/bitcoin-26.0/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=8332 -named createwallet wallet_name=btcstaker passphrase="<PASSPHRASE>" load_on_startup=true descriptors=false
-~/bitcoin-26.0/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=8332 loadwallet "btcstaker"
-~/bitcoin-26.0/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=8332 getnewaddress
+~/bitcoin-24.1/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=38332 -named createwallet 
+wallet_name=btcstaker passphrase="<PASSPHRASE>" load_on_startup=true descriptors=false
+~/bitcoin-24.1/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=38332 loadwallet "btcstaker"
+~/bitcoin-24.1/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=38332 getnewaddress
 ```
 
 ##### 2.4. Request signet BTC from faucet:
@@ -168,8 +171,10 @@ address generated in the previous step. Once you've requested the funds, you can
 check if you've received them using the following commands:
 
 ```bash
-~/bitcoin-26.0/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=8332 gettransaction $TXID # replace $TXID with the transaction id you received from the faucet
-~/bitcoin-26.0/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=8332 getbalance # once the tx is confirmed, you should see the balance
+# replace $TXID with the transaction id you received from the faucet
+~/bitcoin-24.1/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=38332 gettransaction $TXID
+# once the tx is confirmed, you can check the balance
+~/bitcoin-24.1/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=38332 getbalance
 ```
 
 **Notes**:
@@ -181,6 +186,9 @@ check if you've received them using the following commands:
    hour, testnet takes a few hours, and mainnet could take a few days.
 4. Ensure that you use a legacy (non-descriptor) wallet, as BTC Staker doesn't
    currently support descriptor wallets.
+5. For more details on signet and how to use it, check the
+   Bitcoin [wiki](https://en.bitcoin.it/wiki/Signet)
+   page.
 
 ### Staker daemon (`stakerd`) configuration
 
