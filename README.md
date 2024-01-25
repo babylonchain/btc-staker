@@ -98,12 +98,79 @@ to create a keyring and request funds.
 The `stakerd` daemon requires a running Bitcoin node and a **legacy** wallet loaded
 with signet Bitcoins. You can configure the daemon to connect to either
 `bitcoind` or `btcd` node types. While both are compatible, we recommend
-using `bitcoind`. Currently, `stakerd` only supports Bitcoin Core version 24.1.
+using `bitcoind`. In below instructions, we will go through steps to run a `bitcoind`
+node.
 
 You can download Bitcoin Core version 24.1 from the official
 release [page](https://bitcoincore.org/en/releases/24.1/). For more information on
 Signet, you can check the Bitcoin [wiki](https://en.bitcoin.it/wiki/Signet)
 page.
+
+##### 2.1. Download and Extract Bitcoin Binary:
+
+```bash
+wget https://bitcoincore.org/bin/bitcoin-core-26.0/bitcoin-26.0-x86_64-linux-gnu.tar.gz
+tar -xvf bitcoin-26.0-x86_64-linux-gnu.tar.gz
+chmod +x bitcoin-26.0/bin/bitcoind
+chmod +x bitcoin-26.0/bin/bitcoin-cli
+```
+
+##### 2.2. Create and start a Systemd Service:
+
+Create bitcoind systemd service file:
+
+```bash 
+sudo tee /etc/systemd/system/bitcoind.service > /dev/null <<EOF
+[Unit]
+Description=bitcoin signet node
+After=network.target
+
+[Service]
+User=bitcoin
+Type=simple
+ExecStart=/home/bitcoin/bitcoin-26.0/bin/bitcoind -deprecatedrpc=create_bdb -signet -server -rpcallowip=0.0.0.0/0 -rpcbind=0.0.0.0 -rpcport=8332 -rpcuser=<USER> -rpcpassword=<PASS>
+Restart=on-failure
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+Start the bitcoind service:
+
+```bash
+
+sudo systemctl daemon-reload
+sudo systemctl enable bitcoind
+sudo systemctl start bitcoind
+```
+
+Check the status/logs of the bitcoind service:
+
+```bash
+systemctl status bitcoind
+journalctl -u bitcoind -f
+```
+
+##### 2.3. Create legacy wallet and generate address:
+
+```bash
+~/bitcoin-26.0/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=8332 -named createwallet wallet_name=btcstaker passphrase="<PASSPHRASE>" load_on_startup=true descriptors=false
+~/bitcoin-26.0/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=8332 loadwallet "btcstaker"
+~/bitcoin-26.0/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=8332 getnewaddress
+```
+
+##### 2.4. Request signet BTC from faucet:
+
+Use the provided faucet link (https://signet.bc-2.jp/) to request signet BTC to the
+address generated in the previous step. Once you've requested the funds, you can
+check if you've received them using the following commands:
+
+```bash
+~/bitcoin-26.0/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=8332 gettransaction $TXID # replace $TXID with the transaction id you received from the faucet
+~/bitcoin-26.0/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=8332 getbalance # once the tx is confirmed, you should see the balance
+```
 
 **Notes**:
 
