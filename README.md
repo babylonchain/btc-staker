@@ -310,7 +310,7 @@ WalletPass = walletpass
 [walletrpcconfig]
 # location of the wallet rpc server
 # note: in case of bitcoind, the wallet host is same as the rpc host
-Host = localhost:18556
+Host = localhost:38332
 
 # user auth for the wallet rpc server
 # note: in case of bitcoind, the wallet rpc credentials are same as rpc credentials
@@ -339,10 +339,10 @@ your setup.
 RPCHost = 127.0.0.1:38332
 
 # Username for RPC connections
-RPCUser = user
+RPCUser = rpcuser
 
 # Password for RPC connections
-RPCPass = pass
+RPCPass = rpcpass
 
 # The address listening for ZMQ connections to deliver raw block notifications
 ZMQPubRawBlock = tcp://127.0.0.1:29001
