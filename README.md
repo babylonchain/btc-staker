@@ -155,10 +155,30 @@ journalctl -u bitcoind -f
 ##### 2.3. Create legacy wallet and generate address:
 
 ```bash
-~/bitcoin-24.1/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=38332 -named createwallet 
-wallet_name=btcstaker passphrase="<PASSPHRASE>" load_on_startup=true descriptors=false
-~/bitcoin-24.1/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=38332 loadwallet "btcstaker"
-~/bitcoin-24.1/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=38332 getnewaddress
+# Create a new wallet
+~/bitcoin-24.1/bin/bitcoin-cli -signet \
+    -rpcuser=<USER> \
+    -rpcpassword=<PASS> \
+    -rpcport=38332 \
+    -named createwallet \
+    wallet_name=btcstaker \
+    passphrase="<PASSPHRASE>" \
+    load_on_startup=true \
+    descriptors=false
+
+# Load the newly created wallet
+~/bitcoin-24.1/bin/bitcoin-cli -signet \
+    -rpcuser=<USER> \
+    -rpcpassword=<PASS> \
+    -rpcport=38332 \
+    loadwallet "btcstaker"
+
+# Generate a new address for the wallet
+~/bitcoin-24.1/bin/bitcoin-cli -signet \
+    -rpcuser=<USER> \
+    -rpcpassword=<PASS> \
+    -rpcport=38332 \
+    getnewaddress
 ```
 
 ##### 2.4. Request signet BTC from faucet:
@@ -168,10 +188,19 @@ address generated in the previous step. Once you've requested the funds, you can
 check if you've received them using the following commands:
 
 ```bash
-# replace $TXID with the transaction id you received from the faucet
-~/bitcoin-24.1/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=38332 gettransaction $TXID
-# once the tx is confirmed, you can check the balance
-~/bitcoin-24.1/bin/bitcoin-cli -signet -rpcuser=<USER> -rpcpassword=<PASS> -rpcport=38332 getbalance
+# Replace $TXID with the transaction id you received from the faucet
+~/bitcoin-24.1/bin/bitcoin-cli -signet \
+    -rpcuser=<USER> \
+    -rpcpassword=<PASS> \
+    -rpcport=38332 \
+    gettransaction $TXID
+
+# Once the transaction is confirmed, you can check the balance
+~/bitcoin-24.1/bin/bitcoin-cli -signet \
+    -rpcuser=<USER> \
+    -rpcpassword=<PASS> \
+    -rpcport=38332 \
+    getbalance
 ```
 
 **Notes**:
