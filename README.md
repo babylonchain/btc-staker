@@ -100,7 +100,7 @@ with signet Bitcoins.
 
 You can configure the daemon to connect to either
 `bitcoind` or `btcd` node types. While both are compatible, we recommend
-using `bitcoind`. `stakerd` currently supports Bitcoin Core version 24.1. For more
+using `bitcoind`. The daemon currently supports Bitcoin Core version 24.1. For more
 details, refer to the official
 release [page](https://bitcoincore.org/en/releases/24.1/)
 
