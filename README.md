@@ -159,8 +159,8 @@ In the following, we go through important parameters of the `stakerd.conf` file.
 5. To change the Babylon RPC/GRPC address, update the following:
 
     ```bash
-    RPCAddr = https://rpc.devnet.babylonchain.io:443
-    GRPCAddr = https://grpc.devnet.babylonchain.io:443
+    RPCAddr = https://rpc.devnet.babylonchain.io:443 # rpc node address
+    GRPCAddr = https://grpc.devnet.babylonchain.io:443 # grpc node address
     ```
    The above addresses are for Babylon devnet.
 6. If you encounter any gas-related errors while performing staking operations,
