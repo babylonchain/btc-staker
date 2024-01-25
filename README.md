@@ -119,7 +119,7 @@ chmod +x bitcoin-24.1/bin/bitcoin-cli
 ##### 2.2. Create and start a Systemd Service:
 
 ```bash 
-# create the service file
+# Create the service file
 sudo tee /etc/systemd/system/bitcoind.service >/dev/null <<EOF
 [Unit]
 Description=bitcoin signet node
@@ -139,7 +139,7 @@ EOF
 ```
 
 ```bash
-# start the service
+# Start the service
 sudo systemctl daemon-reload
 sudo systemctl enable bitcoind
 sudo systemctl start bitcoind
@@ -147,7 +147,7 @@ sudo systemctl start bitcoind
 
 
 ```bash
-# check the status and logs of the service
+# Check the status and logs of the service
 systemctl status bitcoind
 journalctl -u bitcoind -f
 ```
