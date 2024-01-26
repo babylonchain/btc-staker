@@ -352,7 +352,7 @@ signet BTC.
 
 ```bash
 [walletconfig]
-# name of the wallet to sign Bitcoin transactions
+# name of the wallet to sign Bitcoin transactions. This should be the same as set in createwallet command in bitcoind.
 WalletName = btcstaker
 
 # passphrase to unlock the wallet
