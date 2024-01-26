@@ -98,11 +98,10 @@ to create a keyring and request funds.
 The `stakerd` daemon requires a running Bitcoin node and a **legacy** wallet loaded
 with signet Bitcoins.
 
-You can configure the daemon to connect to either
+You can configure `stakerd` daemon to connect to either
 `bitcoind` or `btcd` node types. While both are compatible, we recommend
-using `bitcoind`. The daemon currently supports Bitcoin Core version 24.1. For more
-details, refer to the official
-release [page](https://bitcoincore.org/en/releases/24.1/)
+using `bitcoind`. Ensure that you are using legacy wallets, as `stakerd` daemon
+doesn't currently support descriptor wallets.
 
 Below, we'll guide you through setting up a signet `bitcoind` node and a legacy
 wallet:
@@ -110,10 +109,10 @@ wallet:
 #### 2.1. Download and Extract Bitcoin Binary:
 
 ```bash
-wget https://bitcoincore.org/bin/bitcoin-core-24.1/bitcoin-24.1-x86_64-linux-gnu.tar.gz
-tar -xvf bitcoin-24.1-x86_64-linux-gnu.tar.gz
-chmod +x bitcoin-24.1/bin/bitcoind
-chmod +x bitcoin-24.1/bin/bitcoin-cli
+wget https://bitcoincore.org/bin/bitcoin-core-26.0/bitcoin-26.0-x86_64-linux-gnu.tar.gz
+tar -xvf bitcoin-26.0-x86_64-linux-gnu.tar.gz
+chmod +x bitcoin-26.0/bin/bitcoind
+chmod +x bitcoin-26.0/bin/bitcoin-cli
 ```
 
 #### 2.2. Create and start a Systemd Service:
@@ -128,7 +127,7 @@ After=network.target
 [Service]
 User=ubuntu
 Type=simple
-ExecStart=/home/ubuntu/bitcoin-24.1/bin/bitcoind \
+ExecStart=/home/ubuntu/bitcoin-26.0/bin/bitcoind \
     -deprecatedrpc=create_bdb \
     -signet \
     -server \
@@ -162,7 +161,7 @@ journalctl -u bitcoind -f
 
 ```bash
 # Create a new wallet
-~/bitcoin-24.1/bin/bitcoin-cli -signet \
+~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<USER> \
     -rpcpassword=<PASS> \
     -rpcport=38332 \
@@ -173,14 +172,14 @@ journalctl -u bitcoind -f
     descriptors=false
 
 # Load the newly created wallet
-~/bitcoin-24.1/bin/bitcoin-cli -signet \
+~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<USER> \
     -rpcpassword=<PASS> \
     -rpcport=38332 \
     loadwallet "btcstaker"
 
 # Generate a new address for the wallet
-~/bitcoin-24.1/bin/bitcoin-cli -signet \
+~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<USER> \
     -rpcpassword=<PASS> \
     -rpcport=38332 \
@@ -195,14 +194,14 @@ balance.
 
 ```bash
 # Replace $TXID with the transaction id you received from the faucet
-~/bitcoin-24.1/bin/bitcoin-cli -signet \
+~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<USER> \
     -rpcpassword=<PASS> \
     -rpcport=38332 \
     gettransaction $TXID
 
 # Once the transaction is confirmed, you can check the balance
-~/bitcoin-24.1/bin/bitcoin-cli -signet \
+~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<USER> \
     -rpcpassword=<PASS> \
     -rpcport=38332 \
