@@ -122,6 +122,17 @@ chmod +x bitcoin-26.0/bin/bitcoin-cli
 
 #### 2.2. Create and start a Systemd Service:
 
+Please update the following configurations in the provided file:
+
+1. Replace `<rpcuser>` and `<rpcpass>` with your own values. These credentials will
+   also be utilized in the btc-staker configuration file later on.
+2. Ensure that the `<user>` is set to the machine user. In the guide below, it's set
+   to ubuntu.
+3. Note that `deprecatedrpc=create_bdb` is necessary to enable the creation of a
+   legacy wallet, which has been deprecated in the latest core version. For more
+   information, refer to the Bitcoin Core 26.0 release
+   page [here](https://bitcoincore.org/en/releases/26.0/)
+   and this [link](https://github.com/bitcoin/bitcoin/pull/28597).
 
 ```bash 
 # Create the service file
@@ -131,7 +142,7 @@ Description=bitcoin signet node
 After=network.target
 
 [Service]
-User=ubuntu
+User=<user>
 Type=simple
 ExecStart=/home/ubuntu/bitcoin-26.0/bin/bitcoind \
     -deprecatedrpc=create_bdb \
@@ -140,8 +151,8 @@ ExecStart=/home/ubuntu/bitcoin-26.0/bin/bitcoind \
     -rpcallowip=0.0.0.0/0 \
     -rpcbind=0.0.0.0 \
     -rpcport=38332 \
-    -rpcuser=<rpcuser> \
-    -rpcpassword=<rpcpass>
+    -rpcuser=<your_rpc_username> \
+    -rpcpassword=<your_rpc_password>
 Restart=on-failure
 LimitNOFILE=65535
 
@@ -168,8 +179,8 @@ journalctl -u bitcoind -f
 ```bash
 # Create a new wallet
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
-    -rpcuser=<rpcuser> \
-    -rpcpassword=<rpcpass> \
+    -rpcuser=<your_rpc_username> \
+    -rpcpassword=<your_rpc_password> \
     -rpcport=38332 \
     -named createwallet \
     wallet_name=btcstaker \
@@ -179,15 +190,15 @@ journalctl -u bitcoind -f
 
 # Load the newly created wallet
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
-    -rpcuser=<rpcuser> \
-    -rpcpassword=<rpcpass> \
+    -rpcuser=<your_rpc_username> \
+    -rpcpassword=<your_rpc_password> \
     -rpcport=38332 \
     loadwallet "btcstaker"
 
 # Generate a new address for the wallet
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
-    -rpcuser=<rpcuser> \
-    -rpcpassword=<rpcpass> \
+    -rpcuser=<your_rpc_username> \
+    -rpcpassword=<your_rpc_password> \
     -rpcport=38332 \
     getnewaddress
 ```
@@ -201,15 +212,15 @@ balance.
 ```bash
 # Replace $TXID with the transaction id you received from the faucet
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
-    -rpcuser=<rpcuser> \
-    -rpcpassword=<rpcpass> \
+    -rpcuser=<your_rpc_username> \
+    -rpcpassword=<your_rpc_password> \
     -rpcport=38332 \
     gettransaction $TXID
 
 # Once the transaction is confirmed, you can check the balance
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
-    -rpcuser=<rpcuser> \
-    -rpcpassword=<rpcpass> \
+    -rpcuser=<your_rpc_username> \
+    -rpcpassword=<your_rpc_password> \
     -rpcport=38332 \
     getbalance
 ```
@@ -354,10 +365,10 @@ Host = localhost:38332
 
 # user auth for the wallet rpc server
 # note: in case of bitcoind, the wallet rpc credentials are same as rpc credentials
-User = rpcuser
+User = your_rpc_username
 
 # password auth for the wallet rpc server
-Pass = rpcpass
+Pass = your_rpc_password
 
 # disables tls for the wallet rpc client
 DisableTls = true
@@ -379,10 +390,10 @@ your setup.
 RPCHost = 127.0.0.1:38332
 
 # Username for RPC connections
-RPCUser = rpcuser
+RPCUser = your_rpc_username
 
 # Password for RPC connections
-RPCPass = rpcpass
+RPCPass = your_rpc_password
 
 # The address listening for ZMQ connections to deliver raw block notifications
 ZMQPubRawBlock = tcp://127.0.0.1:29001
