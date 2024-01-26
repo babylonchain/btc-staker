@@ -365,9 +365,10 @@ Host = localhost:38332
 
 # user auth for the wallet rpc server
 # note: in case of bitcoind, the wallet rpc credentials are same as rpc credentials
+# this should be the same as set in the bitcoind daemon
 User = your_rpc_username
 
-# password auth for the wallet rpc server
+# password auth for the wallet rpc server. This should be the same as set in the bitcoind daemon
 Pass = your_rpc_password
 
 # disables tls for the wallet rpc client
@@ -389,10 +390,10 @@ your setup.
 # ref - https://github.com/bitcoin/bitcoin/blob/03752444cd54df05a731557968d5a9f33a55c55c/src/chainparamsbase.cpp#L39
 RPCHost = 127.0.0.1:38332
 
-# Username for RPC connections
+# Username for RPC connections. This should be the same as set in the bitcoind daemon
 RPCUser = your_rpc_username
 
-# Password for RPC connections
+# Password for RPC connections. This should be the same as set in the bitcoind daemon
 RPCPass = your_rpc_password
 
 # The address listening for ZMQ connections to deliver raw block notifications
