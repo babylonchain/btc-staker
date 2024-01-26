@@ -109,13 +109,19 @@ wallet:
 #### 2.1. Download and Extract Bitcoin Binary:
 
 ```bash
+# Download Bitcoin Core binary
 wget https://bitcoincore.org/bin/bitcoin-core-26.0/bitcoin-26.0-x86_64-linux-gnu.tar.gz
+
+# Extract the downloaded archive
 tar -xvf bitcoin-26.0-x86_64-linux-gnu.tar.gz
+
+# Provide execution permissions to binaries
 chmod +x bitcoin-26.0/bin/bitcoind
 chmod +x bitcoin-26.0/bin/bitcoin-cli
 ```
 
 #### 2.2. Create and start a Systemd Service:
+
 
 ```bash 
 # Create the service file
@@ -134,8 +140,8 @@ ExecStart=/home/ubuntu/bitcoin-26.0/bin/bitcoind \
     -rpcallowip=0.0.0.0/0 \
     -rpcbind=0.0.0.0 \
     -rpcport=38332 \
-    -rpcuser=user \
-    -rpcpassword=pass
+    -rpcuser=<rpcuser> \
+    -rpcpassword=<rpcpass>
 Restart=on-failure
 LimitNOFILE=65535
 
@@ -162,26 +168,26 @@ journalctl -u bitcoind -f
 ```bash
 # Create a new wallet
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
-    -rpcuser=<USER> \
-    -rpcpassword=<PASS> \
+    -rpcuser=<rpcuser> \
+    -rpcpassword=<rpcpass> \
     -rpcport=38332 \
     -named createwallet \
     wallet_name=btcstaker \
-    passphrase="<PASSPHRASE>" \
+    passphrase="<passphrase>" \
     load_on_startup=true \
     descriptors=false
 
 # Load the newly created wallet
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
-    -rpcuser=<USER> \
-    -rpcpassword=<PASS> \
+    -rpcuser=<rpcuser> \
+    -rpcpassword=<rpcpass> \
     -rpcport=38332 \
     loadwallet "btcstaker"
 
 # Generate a new address for the wallet
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
-    -rpcuser=<USER> \
-    -rpcpassword=<PASS> \
+    -rpcuser=<rpcuser> \
+    -rpcpassword=<rpcpass> \
     -rpcport=38332 \
     getnewaddress
 ```
@@ -195,15 +201,15 @@ balance.
 ```bash
 # Replace $TXID with the transaction id you received from the faucet
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
-    -rpcuser=<USER> \
-    -rpcpassword=<PASS> \
+    -rpcuser=<rpcuser> \
+    -rpcpassword=<rpcpass> \
     -rpcport=38332 \
     gettransaction $TXID
 
 # Once the transaction is confirmed, you can check the balance
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
-    -rpcuser=<USER> \
-    -rpcpassword=<PASS> \
+    -rpcuser=<rpcuser> \
+    -rpcpassword=<rpcpass> \
     -rpcport=38332 \
     getbalance
 ```
