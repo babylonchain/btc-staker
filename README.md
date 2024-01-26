@@ -236,7 +236,8 @@ balance.
    currently support descriptor wallets.
 5. You can also use `bitcoin.conf` to set necessary flags, details of which are
    mentioned in this Bitcoin [wiki](https://en.bitcoin.it/wiki/Signet)
-   page.
+   page. Ensure you have set all the flags in `bitcoin.conf` we used in the systemd service file
+   template above.
 
 ### Staker daemon (`stakerd`) configuration
 
