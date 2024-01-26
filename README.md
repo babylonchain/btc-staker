@@ -133,6 +133,8 @@ Please update the following configurations in the provided file:
    information, refer to the Bitcoin Core 26.0 release
    page [here](https://bitcoincore.org/en/releases/26.0/)
    and this [link](https://github.com/bitcoin/bitcoin/pull/28597).
+4. If you want to enable remote connections to the node, you can add
+   `rpcallowip=0.0.0.0/0` and `rpcbind=0.0.0.0` to the bitcoind command.
 
 ```bash 
 # Create the service file
@@ -148,8 +150,6 @@ ExecStart=/home/ubuntu/bitcoin-26.0/bin/bitcoind \
     -deprecatedrpc=create_bdb \
     -signet \
     -server \
-    -rpcallowip=0.0.0.0/0 \
-    -rpcbind=0.0.0.0 \
     -rpcport=38332 \
     -rpcuser=<your_rpc_username> \
     -rpcpassword=<your_rpc_password>
