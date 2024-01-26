@@ -234,10 +234,11 @@ balance.
    hour, testnet takes a few hours, and mainnet could take a few days.
 4. Ensure that you use a legacy (non-descriptor) wallet, as BTC Staker doesn't
    currently support descriptor wallets.
-5. You can also use `bitcoin.conf` to set necessary flags, details of which are
-   mentioned in this Bitcoin [wiki](https://en.bitcoin.it/wiki/Signet)
-   page. Ensure you have set all the flags in `bitcoin.conf` we used in the systemd service file
-   template above.
+5. You can also use `bitcoin.conf` instead of using flags in the `bitcoind` cmd.
+   Please check the Bitcoin signet [wiki](https://en.bitcoin.it/wiki/Signet) and this
+   manual [here](https://manpages.org/bitcoinconf/5) to learn how to
+   set `bitcoin.conf`. Ensure you have configured the `bitcoind.conf` correctly and
+   set all the required parameters as shown in the systemd service file above.
 
 ### Staker daemon (`stakerd`) configuration
 
