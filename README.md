@@ -182,11 +182,53 @@ while setting up the bitcoind systemd service.
 1. Ensure to run the Bitcoin node on the same network as the one the Babylon node
    connects to. For Babylon testnet, we are using BTC Signet.
 2. If you prefer not to run your own Bitcoin node, you can find an RPC to connect to.
-3. Expected sync times for the BTC node are as follows: Signet takes less than 1
-   hour, testnet takes a few hours, and mainnet could take a few days.
-4. Ensure that you use a legacy (non-descriptor) wallet, as BTC Staker doesn't
-   currently support descriptor wallets.
-5. You can also use `bitcoin.conf` instead of using flags in the `bitcoind` cmd.
+3. Expected sync times for the BTC node are as follows: Signet takes less than 20
+   minutes, testnet takes a few hours, and mainnet could take a few days.
+4. You can check the sync progress in bitcoind systemd logs
+   using `journalctl -u bitcoind -f`. It should show you the progress percentage for
+   example it is `progress=0.936446` in this log
+   ```bash
+   Jan 29 18:55:50 ip-172-31-85-49 bitcoind[71096]:
+   2024-01-29T18:55:50Z UpdateTip: new best=00000123354567a29574e6bdd263409b8eab6c05c6ef2abad959b092bf61fe9a
+   height=169100 version=0x20000000 log2_work=40.925924 tx=2319364
+   date='2023-11-12T19:42:53Z' progress=0.936446
+   cache=255.6MiB(1455996txo)
+   ```
+   Alternatively, you can also check the latest block in a btc explorer like
+   https://mempool.space/signet and compare it with the latest block in your node.
+5. Ensure that you use a legacy (non-descriptor) wallet, as BTC Staker doesn't
+   currently support descriptor wallets. You can check the wallet format using
+   ```bash
+    ~/bitcoin-26.0/bin/bitcoin-cli -signet \
+     -rpcuser=<your_rpc_username> \
+     -rpcpassword=<your_rpc_password> \
+     -rpcport=38332 \
+     getwalletinfo
+    ```
+   The output should be similar to this and the `format` should be `bdb`:
+   ```bash  
+   {
+     "walletname": "btcstaker",
+     "walletversion": 169900,
+     "format": "bdb",
+     "balance": 0.00000000,
+     "unconfirmed_balance": 0.00000000,
+     "immature_balance": 0.00000000,
+     "txcount": 0,
+     "keypoololdest": 1706554908,
+     "keypoolsize": 1000,
+     "hdseedid": "9660319ab465abc05db95ad17cb59a9ec8f106fd",
+     "keypoolsize_hd_internal": 1000,
+     "unlocked_until": 0,
+     "paytxfee": 0.00000000,
+     "private_keys_enabled": true,
+     "avoid_reuse": false,
+     "scanning": false,
+     "descriptors": false,
+     "external_signer": false
+   }
+   ```
+6. You can also use `bitcoin.conf` instead of using flags in the `bitcoind` cmd.
    Please check the Bitcoin signet [wiki](https://en.bitcoin.it/wiki/Signet) and this
    manual [here](https://manpages.org/bitcoinconf/5) to learn how to
    set `bitcoin.conf`. Ensure you have configured the `bitcoind.conf` correctly and
