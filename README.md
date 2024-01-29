@@ -190,8 +190,8 @@ journalctl -u bitcoind -f
     descriptors=false
 ```
 
-- Use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while setting up
-  the bitcoind systemd service.
+- Ensure use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while
+  setting up the bitcoind systemd service.
 - `-named createwallet` indicates that a new wallet should be created with the
   provided name.
 - `wallet_name=btcstaker` specifies the name of the new wallet and `<passphrase>` is
@@ -213,8 +213,8 @@ journalctl -u bitcoind -f
     loadwallet "btcstaker"
 ```
 
-- Use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while setting up
-  the bitcoind systemd service.
+- Ensure use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while
+  setting up the bitcoind systemd service.
 - `loadwallet "btcstaker"` loads the wallet with the name `btcstaker`.
 
 #### 2.3.3 Generate a new address for the wallet
@@ -227,8 +227,8 @@ journalctl -u bitcoind -f
     getnewaddress
 ```
 
-- Use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while setting up
-  the bitcoind systemd service.
+- Ensure use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while
+  setting up the bitcoind systemd service.
 - `getnewaddress` generates a new btc address for the wallet, this will be used to
   request funds from the faucet.
 
@@ -236,8 +236,8 @@ journalctl -u bitcoind -f
 
 Use the faucet [link](https://signet.bc-2.jp/) to request signet BTC to the address
 generated in the previous step. You can use the following command to check the
-balance. Use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while
-setting up the bitcoind systemd service.
+balance. Ensure use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used
+while setting up the bitcoind systemd service.
 
 ```bash
 # Replace $TXID with the transaction id you received from the faucet
