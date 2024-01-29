@@ -17,7 +17,7 @@ components:
 ## 2. Setting up Bitcoin node
 
 The `stakerd` daemon requires a running Bitcoin node and a **legacy** wallet loaded
-with signet Bitcoins.
+with signet Bitcoins to perform staking operations.
 
 You can configure `stakerd` daemon to connect to either
 `bitcoind` or `btcd` node types. While both are compatible, we recommend
