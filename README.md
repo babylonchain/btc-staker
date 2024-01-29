@@ -14,7 +14,7 @@ components:
    and more. It serves as an intuitive interface for effortless control and
    monitoring of your Bitcoin staking activities.
 
-## 2. Setting up Bitcoin node
+## 2. Setting up a Bitcoin node
 
 The `stakerd` daemon requires a running Bitcoin node and a **legacy** wallet loaded
 with signet Bitcoins to perform staking operations.
@@ -234,7 +234,7 @@ while setting up the bitcoind systemd service.
    set `bitcoin.conf`. Ensure you have configured the `bitcoind.conf` correctly and
    set all the required parameters as shown in the systemd service file above.
 
-## 3. Installing BTC Staker
+## 3. BTC Staker Installation
 
 ### Prerequisites
 
@@ -309,7 +309,7 @@ structure:
      └── stakercli
 ```
 
-## 4. Setting up BTC Staker
+## 4. BTC Staker Setup
 
 ### Staker daemon (`stakerd`) configuration
 
