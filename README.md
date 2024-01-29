@@ -247,7 +247,7 @@ while setting up the bitcoind systemd service.
     -rpcport=38332 \
     gettransaction $TXID
 
-# Once the transaction is confirmed, you can check the balance
+# You can check the balance, it should be there once the transaction is confirmed.
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<your_rpc_username> \
     -rpcpassword=<your_rpc_password> \
