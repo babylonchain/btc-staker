@@ -264,7 +264,7 @@ structure:
 
 ### Prerequisites
 
-#### 1. Create a Babylon keyring (keyring backend: test) with funds
+#### Create a Babylon keyring (keyring backend: test) with funds
 
 The `stakerd` daemon requires a keyring with loaded Babylon tokens to pay for the
 transactions. Follow this
