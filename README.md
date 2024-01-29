@@ -192,7 +192,7 @@ while setting up the bitcoind systemd service.
    set `bitcoin.conf`. Ensure you have configured the `bitcoind.conf` correctly and
    set all the required parameters as shown in the systemd service file above.
 
-## 3. Installation
+## 3. Installing BTC Staker
 
 ### Prerequisites
 
