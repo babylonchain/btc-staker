@@ -176,7 +176,7 @@ journalctl -u bitcoind -f
 
 #### 2.3. Create legacy wallet and generate address:
 
-##### 2.3.1. Create a legacy wallet:
+#### 2.3.1. Create a legacy wallet:
 
 ```bash
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
@@ -203,7 +203,7 @@ journalctl -u bitcoind -f
 - `descriptors=false` disables descriptors, which are not supported by BTC Staker at
   present.
 
-##### 2.3.2. Load the wallet:
+#### 2.3.2. Load the wallet:
 
 ```bash
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
@@ -217,7 +217,7 @@ journalctl -u bitcoind -f
   the bitcoind systemd service.
 - `loadwallet "btcstaker"` loads the wallet with the name `btcstaker`.
 
-##### 2.3.3 Generate a new address for the wallet
+#### 2.3.3 Generate a new address for the wallet
 
 ```bash
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
