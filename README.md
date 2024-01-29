@@ -176,8 +176,9 @@ journalctl -u bitcoind -f
 
 #### 2.3. Create legacy wallet and generate address:
 
+##### 2.3.1. Create a legacy wallet:
+
 ```bash
-# Create a new wallet
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<your_rpc_username> \
     -rpcpassword=<your_rpc_password> \
@@ -187,15 +188,38 @@ journalctl -u bitcoind -f
     passphrase="<passphrase>" \
     load_on_startup=true \
     descriptors=false
+```
 
-# Load the newly created wallet
+- Use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while setting up
+  the bitcoind systemd service.
+- `-named createwallet` indicates that a new wallet should be created with the
+  provided name.
+- `wallet_name=btcstaker` specifies the name of the new wallet and `<passphrase>` is
+  your wallet pass phrase, replace with your own passphrase. Ensure you use the
+  wallet and passphrase configured here in [walletconfig](#btc-wallet-configuration)
+  section of the `stakerd.conf` file.
+- Setting `load_on_startup=true` ensures that the wallet automatically loads during
+  system startup.
+- `descriptors=false` disables descriptors, which are not supported by BTC Staker at
+  present.
+
+##### 2.3.2. Load the wallet:
+
+```bash
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<your_rpc_username> \
     -rpcpassword=<your_rpc_password> \
     -rpcport=38332 \
     loadwallet "btcstaker"
+```
 
-# Generate a new address for the wallet
+- Use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while setting up
+  the bitcoind systemd service.
+- `loadwallet "btcstaker"` loads the wallet with the name `btcstaker`.
+
+##### 2.3.3 Generate a new address for the wallet
+
+```bash
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<your_rpc_username> \
     -rpcpassword=<your_rpc_password> \
@@ -203,11 +227,17 @@ journalctl -u bitcoind -f
     getnewaddress
 ```
 
+- Use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while setting up
+  the bitcoind systemd service.
+- `getnewaddress` generates a new btc address for the wallet, this will be used to
+  request funds from the faucet.
+
 #### 2.4. Request signet BTC from faucet:
 
 Use the faucet [link](https://signet.bc-2.jp/) to request signet BTC to the address
 generated in the previous step. You can use the following command to check the
-balance.
+balance. Use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while
+setting up the bitcoind systemd service.
 
 ```bash
 # Replace $TXID with the transaction id you received from the faucet
