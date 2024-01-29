@@ -251,6 +251,13 @@ To build without installing,
 make build
 ```
 
+### Create a Babylon keyring (keyring backend: test) with funds
+
+The `stakerd` daemon requires a keyring with loaded Babylon tokens to pay for the
+transactions. Follow this
+[guide](https://docs.babylonchain.io/docs/user-guides/btc-staking-testnet/getting-funds)
+to create a keyring and request funds.
+
 The above command will put the built binaries in a build directory with the following
 structure:
 
@@ -261,15 +268,6 @@ structure:
 ```
 
 ## 4. Setting up BTC Staker
-
-### Prerequisites
-
-#### Create a Babylon keyring (keyring backend: test) with funds
-
-The `stakerd` daemon requires a keyring with loaded Babylon tokens to pay for the
-transactions. Follow this
-[guide](https://docs.babylonchain.io/docs/user-guides/btc-staking-testnet/getting-funds)
-to create a keyring and request funds.
 
 ### Staker daemon (`stakerd`) configuration
 
@@ -304,7 +302,7 @@ In the following, we go through important parameters of the `stakerd.conf` file.
 
 1. The `Key` parameter in the config below is the name of the key in the keyring to
    use for signing transactions. Use the key name you created
-   in [Create a Babylon keyring with funds](#1-create-a-babylon-keyring-keyring-backend-test-with-funds).
+   in [Create a Babylon keyring](#create-a-babylon-keyring-keyring-backend-test-with-funds)
 2. Ensure that the `KeyringDirectory` is set to the location where the keyring is
    stored.
 3. Ensure to use the `test` keyring backend
