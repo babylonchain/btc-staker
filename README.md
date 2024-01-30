@@ -49,7 +49,7 @@ Please update the following configurations in the provided file:
    These credentials will also be utilized in the btc-staker configuration file later
    on.
 2. Ensure that the `<user>` is set to the machine user. In the guide below, it's set
-   to ubuntu.
+   to `ubuntu`.
 3. Note that `deprecatedrpc=create_bdb` is necessary to enable the creation of a
    legacy wallet, which has been deprecated in the latest core version. For more
    information, refer to the Bitcoin Core 26.0 release
