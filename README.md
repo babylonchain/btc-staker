@@ -186,7 +186,8 @@ using `gettransaction`
 
 where `$TXID` is the transaction id that you received from the faucet.
 
-Once the tx is confirmed you should be able to see it using `getbalance` command
+Once the tx is confirmed you can check the funds using `getbalance`
+command
 
 ```bash
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
