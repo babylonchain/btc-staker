@@ -181,10 +181,9 @@ while setting up the bitcoind systemd service.
 
 1. Ensure to run the Bitcoin node on the same network as the one the Babylon node
    connects to. For Babylon testnet, we are using BTC Signet.
-2. If you prefer not to run your own Bitcoin node, you can find an RPC to connect to.
-3. Expected sync times for the BTC node are as follows: Signet takes less than 20
+2. Expected sync times for the BTC node are as follows: Signet takes less than 20
    minutes, testnet takes a few hours, and mainnet could take a few days.
-4. You can check the sync progress in bitcoind systemd logs
+3. You can check the sync progress in bitcoind systemd logs
    using `journalctl -u bitcoind -f`. It should show you the progress percentage for
    example it is `progress=0.936446` in this log
    ```bash
@@ -196,7 +195,7 @@ while setting up the bitcoind systemd service.
    ```
    Alternatively, you can also check the latest block in a btc explorer like
    https://mempool.space/signet and compare it with the latest block in your node.
-5. Ensure that you use a legacy (non-descriptor) wallet, as BTC Staker doesn't
+4. Ensure that you use a legacy (non-descriptor) wallet, as BTC Staker doesn't
    currently support descriptor wallets. You can check the wallet format using
    ```bash
     ~/bitcoin-26.0/bin/bitcoin-cli -signet \
@@ -228,7 +227,7 @@ while setting up the bitcoind systemd service.
      "external_signer": false
    }
    ```
-6. You can also use `bitcoin.conf` instead of using flags in the `bitcoind` cmd.
+5. You can also use `bitcoin.conf` instead of using flags in the `bitcoind` cmd.
    Please check the Bitcoin signet [wiki](https://en.bitcoin.it/wiki/Signet) and this
    manual [here](https://manpages.org/bitcoinconf/5) to learn how to
    set `bitcoin.conf`. Ensure you have configured the `bitcoind.conf` correctly and
