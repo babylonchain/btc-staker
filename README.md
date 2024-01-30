@@ -127,6 +127,8 @@ journalctl -u bitcoind -f
 
 #### 2.3.2. Load the wallet:
 
+You can load the wallet with the `loadwallet` command:
+
 ```bash
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<your_rpc_username> \
@@ -135,11 +137,13 @@ journalctl -u bitcoind -f
     loadwallet "btcstaker"
 ```
 
-- Ensure use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while
-  setting up the bitcoind systemd service.
-- `loadwallet "btcstaker"` loads the wallet with the name `btcstaker`.
+where `rpcuser`, `rpcpassword`, and `rpcport` correspond to the RPC configuration you
+have set up and `"btcstaker"` should be replaced with the wallet name that you
+created.
 
 #### 2.3.3 Generate a new address for the wallet
+
+You can generate a btc address through the `getnewaddress` command:
 
 ```bash
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
@@ -149,27 +153,42 @@ journalctl -u bitcoind -f
     getnewaddress
 ```
 
-- Ensure use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while
-  setting up the bitcoind systemd service.
-- `getnewaddress` generates a new btc address for the wallet, this will be used to
-  request funds from the faucet.
+where `rpcuser`, `rpcpassword`, and `rpcport` correspond to the RPC configuration you
+have set up.
 
 ### 2.4. Request signet BTC from faucet:
 
 Use the faucet [link](https://signet.bc-2.jp/) to request signet BTC to the address
-generated in the previous step. You can use the following command to check the
-balance. Ensure use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used
-while setting up the bitcoind systemd service.
+generated in the previous step. You can use the following commands if you have
+received the funds
+
+You can immediately see the amount using `getunconfirmedbalance`
 
 ```bash
-# Replace $TXID with the transaction id you received from the faucet
+
+~/bitcoin-26.0/bin/bitcoin-cli -signet \
+    -rpcuser=<your_rpc_username> \
+    -rpcpassword=<your_rpc_password> \
+    -rpcport=38332 \
+    getunconfirmedbalance
+```
+
+You can also see info about the transaction that the faucet gave you
+using `gettransaction`
+
+```bash
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<your_rpc_username> \
     -rpcpassword=<your_rpc_password> \
     -rpcport=38332 \
     gettransaction $TXID
+````
 
-# You can check the balance, it should be there once the transaction is confirmed.
+where `$TXID` is the transaction id that you received from the faucet.
+
+Once the tx is confirmed you should be able to see it using `getbalance` command
+
+```bash
 ~/bitcoin-26.0/bin/bitcoin-cli -signet \
     -rpcuser=<your_rpc_username> \
     -rpcpassword=<your_rpc_password> \
@@ -180,7 +199,7 @@ while setting up the bitcoind systemd service.
 **Notes**:
 
 1. Ensure to run the Bitcoin node on the same network as the one the Babylon node
-   connects to. For Babylon testnet, we are using BTC Signet.
+   connects to. For the Babylon testnet, we are using the BTC Signet.
 2. Expected sync times for the BTC node are as follows: Signet takes less than 20
    minutes, testnet takes a few hours, and mainnet could take a few days.
 3. You can check the sync progress in bitcoind systemd logs
@@ -424,7 +443,8 @@ signet BTC.
 
 ```bash
 [walletconfig]
-# name of the wallet to sign Bitcoin transactions. This should be the same as set in createwallet command in bitcoind.
+# name of the wallet to sign Bitcoin transactions.
+# this should be the same as set in createwallet command in bitcoind.
 WalletName = btcstaker
 
 # passphrase to unlock the wallet
@@ -445,6 +465,7 @@ Pass = your_rpc_password
 
 # disables tls for the wallet rpc client
 DisableTls = true
+
 ```
 
 #### BTC Node type specific configuration
