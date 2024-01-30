@@ -112,18 +112,18 @@ journalctl -u bitcoind -f
     descriptors=false
 ```
 
-- Ensure use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while
+- Ensure you use the same rpc `rpcuser`, `rpcpassword`, `rpcport` that you used while
   setting up the bitcoind systemd service.
 - `-named createwallet` indicates that a new wallet should be created with the
   provided name.
-- `wallet_name=btcstaker` specifies the name of the new wallet and `<passphrase>` is
-  your wallet pass phrase, replace with your own passphrase. Ensure you use the
-  wallet and passphrase configured here in [walletconfig](#btc-wallet-configuration)
+- `wallet_name=btcstaker` specifies the name of the new wallet and `<passphrase>`
+  corresponds to the wallet pass phrase. Ensure you use the wallet name and
+  passphrase configured here in the [walletconfig](#btc-wallet-configuration)
   section of the `stakerd.conf` file.
 - Setting `load_on_startup=true` ensures that the wallet automatically loads during
   system startup.
-- `descriptors=false` disables descriptors, which are not supported by btc-staker at
-  present.
+- `descriptors=false` disables descriptors, which are not currently supported by the
+  btc-staker.
 
 #### 2.3.2. Load the wallet:
 
