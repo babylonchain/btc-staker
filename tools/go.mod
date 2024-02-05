@@ -5,8 +5,8 @@ go 1.21
 toolchain go1.21.4
 
 require (
-	github.com/babylonchain/babylon v0.8.0-rc.0.0.20240129125647-a606aebcbe8f
-	github.com/btcsuite/btcd v0.23.5-0.20230711222809-7faa9b266231
+	github.com/babylonchain/babylon v0.8.0-rc.0.0.20240205142652-d166d40b188b
+	github.com/btcsuite/btcd v0.24.0
 	github.com/btcsuite/btcwallet v0.16.9
 )
 
@@ -47,9 +47,9 @@ require (
 	github.com/bits-and-blooms/bitset v1.8.0 // indirect
 	github.com/boljen/go-bitmap v0.0.0-20151001105940-23cd2fb0ce7d // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
-	github.com/btcsuite/btcd/btcutil v1.1.3 // indirect
+	github.com/btcsuite/btcd/btcutil v1.1.5 // indirect
 	github.com/btcsuite/btcd/btcutil/psbt v1.1.8 // indirect
-	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2 // indirect
+	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
 	github.com/btcsuite/btcwallet/wallet/txauthor v1.3.2 // indirect
 	github.com/btcsuite/btcwallet/wallet/txrules v1.2.0 // indirect
@@ -74,7 +74,7 @@ require (
 	github.com/cosmos/btcutil v1.0.5 // indirect
 	github.com/cosmos/cosmos-db v1.0.0 // indirect
 	github.com/cosmos/cosmos-proto v1.0.0-beta.3 // indirect
-	github.com/cosmos/cosmos-sdk v0.50.3 // indirect
+	github.com/cosmos/cosmos-sdk v0.50.4-0.20240126152601-c4a2fe2b8987 // indirect
 	github.com/cosmos/go-bip39 v1.0.0 // indirect
 	github.com/cosmos/gogogateway v1.2.0 // indirect
 	github.com/cosmos/gogoproto v1.4.11 // indirect

@@ -8,19 +8,19 @@ require (
 	cosmossdk.io/errors v1.0.1
 	cosmossdk.io/math v1.2.0
 	github.com/avast/retry-go/v4 v4.5.1
-	github.com/babylonchain/babylon v0.8.0-rc.0.0.20240129125647-a606aebcbe8f
+	github.com/babylonchain/babylon v0.8.0-rc.0.0.20240205142652-d166d40b188b
 	github.com/babylonchain/rpc-client v0.7.0-rc.0
-	github.com/btcsuite/btcd v0.23.5-0.20230711222809-7faa9b266231
+	github.com/btcsuite/btcd v0.24.0
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
-	github.com/btcsuite/btcd/btcutil v1.1.3
-	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2
+	github.com/btcsuite/btcd/btcutil v1.1.5
+	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 	github.com/btcsuite/btcwallet v0.16.10-0.20230621165747-9c21f464ce13
 	github.com/btcsuite/btcwallet/wallet/txauthor v1.3.2
 	github.com/btcsuite/btcwallet/wallet/txrules v1.2.0
 	github.com/btcsuite/btcwallet/wallet/txsizes v1.2.3
 	github.com/btcsuite/btcwallet/walletdb v1.4.0
 	github.com/cometbft/cometbft v0.38.5
-	github.com/cosmos/cosmos-sdk v0.50.3
+	github.com/cosmos/cosmos-sdk v0.50.4-0.20240126152601-c4a2fe2b8987
 	github.com/cosmos/go-bip39 v1.0.0
 	github.com/cosmos/relayer/v2 v2.4.3-0.20231227002143-820caf5ab483
 	github.com/jessevdk/go-flags v1.5.0
