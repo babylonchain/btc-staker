@@ -8,8 +8,8 @@ require (
 	cosmossdk.io/errors v1.0.1
 	cosmossdk.io/math v1.2.0
 	github.com/avast/retry-go/v4 v4.5.1
-	github.com/babylonchain/babylon v0.8.0-rc.0.0.20240205142652-d166d40b188b
-	github.com/babylonchain/rpc-client v0.7.0-rc.0
+	github.com/babylonchain/babylon v0.8.0
+	github.com/babylonchain/rpc-client v0.8.0
 	github.com/btcsuite/btcd v0.24.0
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/btcsuite/btcd/btcutil v1.1.5
