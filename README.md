@@ -626,4 +626,4 @@ stakercli daemon withdrawable-transactions
 ```
 
 In order to `unstake` you'll need to wait for your staking/unbonding tx to be deep
-enough in btc so that timelock expires.
+enough in btc so that the timelock expires.
