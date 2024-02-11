@@ -306,27 +306,12 @@ export PATH=$HOME/go/bin:$PATH
 echo 'export PATH=$HOME/go/bin:$PATH' >> ~/.profile
 ```
 
-To build without installing,
-
-```bash
-make build
-```
-
 ### Create a Babylon keyring (keyring backend: test) with funds
 
 The `stakerd` daemon requires a keyring with loaded Babylon tokens to pay for the
 transactions. Follow this
 [guide](https://docs.babylonchain.io/docs/user-guides/btc-staking-testnet/getting-funds)
 to create a keyring and request funds.
-
-The above command will put the built binaries in a build directory with the following
-structure:
-
-```bash
- ls build
-     ├── stakerd
-     └── stakercli
-```
 
 ## 4. BTC Staker Setup
 
@@ -391,7 +376,7 @@ In the following, we go through important parameters of the `stakerd.conf` file.
 Key = btc-staker
 
 # Chain id of the chain (Babylon)
-ChainID = chain-test
+ChainID = bbn-test-3
 
 # Address of the chain's RPC server (Babylon)
 RPCAddr = http://localhost:26657
@@ -399,17 +384,8 @@ RPCAddr = http://localhost:26657
 # Address of the chain's GRPC server (Babylon)
 GRPCAddr = https://localhost:9090
 
-# Type of keyring backend to use 
-KeyringBackend = test
-
-# Adjustment factor when using gas estimation
-GasAdjustment = 1.2
-
-# Comma separated minimum gas prices to accept for transactions
-GasPrices = 0.01ubbn
-
 # Directory to store staker keys in
-KeyDirectory = /Users/<user>/Library/Application Support/Stakerd
+KeyDirectory = /path/to/stakerd-home/
 ```
 
 #### BTC Node configuration
@@ -507,7 +483,7 @@ You can start the staker daemon using the following command:
 stakerd
 ```
 
-This will start the RPC server at the address specified in the configuration under
+This will start the Staker daemon RPC server at the address specified in the configuration under
 the `RawRPCListeners` field. A custom address can also be specified using
 the `--rpclisten` flag.
 
@@ -648,3 +624,6 @@ db.
 ```bash
 stakercli daemon withdrawable-transactions
 ```
+
+In order to `unstake` you'll need to wait for your staking/unbonding tx to be deep
+enough in btc so that timelock expires.
