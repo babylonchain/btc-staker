@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -58,15 +59,15 @@ func (h *BitcoindTestHandler) Start() {
 	})
 
 	require.Eventually(h.t, func() bool {
-		_, err := h.GetBlockCount(h.t)
+		_, err := h.GetBlockCount()
 		h.t.Logf("failed to get block count: %v", err)
 		return err == nil
 	}, startTimeout, 500*time.Millisecond, "bitcoind did not start")
 
 }
 
-func (h *BitcoindTestHandler) GetBlockCount(t *testing.T) (int, error) {
-	buff, _, err := h.m.GetBlockCount(t)
+func (h *BitcoindTestHandler) GetBlockCount() (int, error) {
+	buff, _, err := h.m.ExecBitcoindCliCmd(h.t, []string{"getblockcount"})
 	if err != nil {
 		return 0, err
 	}
@@ -81,27 +82,26 @@ func (h *BitcoindTestHandler) GetBlockCount(t *testing.T) (int, error) {
 	}
 
 	return num, nil
-
 }
 
-func (h *BitcoindTestHandler) CreateWallet(t *testing.T, walletName string) *CreateWalletResponse {
-	buff, _, err := h.m.CreateWalletCmd(t, walletName)
-	require.NoError(t, err)
+func (h *BitcoindTestHandler) CreateWallet(walletName string, passphrase string) *CreateWalletResponse {
+	buff, _, err := h.m.ExecBitcoindCliCmd(h.t, []string{"createwallet", walletName, "false", "false", passphrase})
+	require.NoError(h.t, err)
 
 	var response CreateWalletResponse
 	err = json.Unmarshal(buff.Bytes(), &response)
-	require.NoError(t, err)
+	require.NoError(h.t, err)
 
 	return &response
 }
 
-func (h *BitcoindTestHandler) GenerateBlocks(t *testing.T, count int) *GenerateBlockResponse {
-	buff, _, err := h.m.GenerateBlockCmd(t, count)
-	require.NoError(t, err)
+func (h *BitcoindTestHandler) GenerateBlocks(count int) *GenerateBlockResponse {
+	buff, _, err := h.m.ExecBitcoindCliCmd(h.t, []string{"-generate", fmt.Sprintf("%d", count)})
+	require.NoError(h.t, err)
 
 	var response GenerateBlockResponse
 	err = json.Unmarshal(buff.Bytes(), &response)
-	require.NoError(t, err)
+	require.NoError(h.t, err)
 
 	return &response
 }

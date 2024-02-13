@@ -41,32 +41,16 @@ func NewManager() (docker *Manager, err error) {
 	return docker, nil
 }
 
-func (m *Manager) CreateWalletCmd(t *testing.T, walletName string) (bytes.Buffer, bytes.Buffer, error) {
-	cmd := []string{"createwallet", walletName}
-	return m.ExecBitcoindCliCmd(t, cmd)
-}
-
-func (m *Manager) GetBlockCount(t *testing.T) (bytes.Buffer, bytes.Buffer, error) {
-	cmd := []string{"getblockcount"}
-	return m.ExecBitcoindCliCmd(t, cmd)
-}
-
-func (m *Manager) GenerateBlockCmd(t *testing.T, count int) (bytes.Buffer, bytes.Buffer, error) {
-	cmd := []string{"-generate", fmt.Sprintf("%d", count)}
-	return m.ExecBitcoindCliCmd(t, cmd)
-}
-
 func (m *Manager) ExecBitcoindCliCmd(t *testing.T, command []string) (bytes.Buffer, bytes.Buffer, error) {
+	// this is currently hardcoded, as it will be the same for all tests
 	cmd := []string{"bitcoin-cli", "-chain=regtest", "-rpcuser=user", "-rpcpassword=pass"}
 	cmd = append(cmd, command...)
 	return m.ExecCmd(t, bitcoindContainerName, cmd)
 }
 
-// ExecCmd executes command by running it on the node container (specified by containerName)
-// success is the output of the command that needs to be observed for the command to be deemed successful.
-// It is found by checking if stdout or stderr contains the success string anywhere within it.
-// returns container std out, container std err, and error if any.
-// An error is returned if the command fails to execute or if the success string is not found in the output.
+// ExecCmd executes command by running it on the given container.
+// It word for word `error` in output to discern between error and regular output.
+// It retures stdout and stderr as bytes.Buffer and an error if the command fails.
 func (m *Manager) ExecCmd(t *testing.T, containerName string, command []string) (bytes.Buffer, bytes.Buffer, error) {
 	if _, ok := m.resources[containerName]; !ok {
 		return bytes.Buffer{}, bytes.Buffer{}, fmt.Errorf("no resource %s found", containerName)
@@ -118,11 +102,6 @@ func (m *Manager) ExecCmd(t *testing.T, containerName string, command []string) 
 
 				t.Log("\nstdout:")
 				t.Log(outBuf.String())
-				// N.B: We should not be returning false here
-				// because some applications such as Hermes might log
-				// "error" to stderr when they function correctly,
-				// causing test flakiness. This log is needed only for
-				// debugging purposes.
 				return false
 			}
 
@@ -153,6 +132,7 @@ func (m *Manager) RunBitcoindResource(
 				"28332",
 				"28333",
 				"18443",
+				"18444",
 			},
 			PortBindings: map[docker.Port][]docker.PortBinding{
 				"8332/tcp":  {{HostIP: "", HostPort: "8332"}},
@@ -160,9 +140,11 @@ func (m *Manager) RunBitcoindResource(
 				"28332/tcp": {{HostIP: "", HostPort: "28332"}},
 				"28333/tcp": {{HostIP: "", HostPort: "28333"}},
 				"18443/tcp": {{HostIP: "", HostPort: "18443"}},
+				"18444/tcp": {{HostIP: "", HostPort: "18444"}},
 			},
 			Cmd: []string{
 				"-regtest",
+				"-txindex",
 				"-rpcuser=user",
 				"-rpcpassword=pass",
 				"-rpcallowip=0.0.0.0/0",
@@ -176,49 +158,6 @@ func (m *Manager) RunBitcoindResource(
 	}
 	m.resources[bitcoindContainerName] = bitcoindResource
 	return bitcoindResource, nil
-}
-
-// PurgeResource purges the container resource and returns an error if any.
-func (m *Manager) PurgeResource(resource *dockertest.Resource) error {
-	return m.pool.Purge(resource)
-}
-
-// GetResource returns the node resource for containerName.
-func (m *Manager) GetResource(containerName string) (*dockertest.Resource, error) {
-	resource, exists := m.resources[containerName]
-	if !exists {
-		return nil, fmt.Errorf("node resource not found: container name: %s", containerName)
-	}
-	return resource, nil
-}
-
-// GetHostPort returns the port-forwarding address of the running host
-// necessary to connect to the portId exposed inside the container.
-// The container is determined by containerName.
-// Returns the host-port or error if any.
-func (m *Manager) GetHostPort(containerName string, portId string) (string, error) {
-	resource, err := m.GetResource(containerName)
-	if err != nil {
-		return "", err
-	}
-	return resource.GetHostPort(portId), nil
-}
-
-// RemoveResource removes a node container specified by containerName.
-// Returns error if any.
-func (m *Manager) RemoveResource(containerName string) error {
-	resource, err := m.GetResource(containerName)
-	if err != nil {
-		return err
-	}
-	var opts docker.RemoveContainerOptions
-	opts.ID = resource.Container.ID
-	opts.Force = true
-	if err := m.pool.Client.RemoveContainer(opts); err != nil {
-		return err
-	}
-	delete(m.resources, containerName)
-	return nil
 }
 
 // ClearResources removes all outstanding Docker resources created by the Manager.

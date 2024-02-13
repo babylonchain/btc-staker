@@ -55,6 +55,7 @@ var (
 	r = rand.New(rand.NewSource(time.Now().Unix()))
 
 	simnetParams     = &chaincfg.SimNetParams
+	regtest          = &chaincfg.RegressionNetParams
 	submitterAddrStr = "bbn1eppc73j56382wjn6nnq3quu5eye4pmm087xfdh"
 	babylonTag       = []byte{1, 2, 3, 4}
 	babylonTagHex    = hex.EncodeToString(babylonTag)
@@ -1404,4 +1405,84 @@ func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
 
 	go tm.mineNEmptyBlocks(t, staker.UnbondingTxConfirmations, false)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_UNBONDING_CONFIRMED_ON_BTC)
+}
+
+func containsOutput(outputs []walletcontroller.Utxo, address string, amount btcutil.Amount) bool {
+	for _, o := range outputs {
+		if o.Address == address && o.Amount == amount {
+			return true
+		}
+	}
+	return false
+}
+
+func TestBitcoindWalletRpcApi(t *testing.T) {
+	h := NewBitcoindHandler(t)
+	h.Start()
+	passphrase := "pass"
+	numMatureOutputs := 1
+	_ = h.CreateWallet("test-wallet", passphrase)
+	// only outputs which are 100 deep are mature
+	_ = h.GenerateBlocks(numMatureOutputs + 100)
+
+	// hardcoded config
+	scfg := stakercfg.DefaultConfig()
+	scfg.WalletRpcConfig.Host = "127.0.0.1:18443"
+	scfg.WalletRpcConfig.User = "user"
+	scfg.WalletRpcConfig.Pass = "pass"
+	scfg.ActiveNetParams.Name = "regtest"
+	scfg.WalletConfig.WalletPass = passphrase
+	scfg.BtcNodeBackendConfig.ActiveWalletBackend = types.BitcoindWalletBackend
+	scfg.ActiveNetParams = chaincfg.RegressionNetParams
+
+	// Create wallet controller the same way as in staker program
+	wc, err := walletcontroller.NewRpcWalletController(&scfg)
+	require.NoError(t, err)
+
+	outputs, err := wc.ListOutputs(true)
+	require.NoError(t, err)
+	require.Len(t, outputs, numMatureOutputs)
+
+	// easiest way to get address controlled by wallet is to retrive address from one
+	// of the outputs
+	output := outputs[0]
+	walletAddress, err := btcutil.DecodeAddress(output.Address, &scfg.ActiveNetParams)
+	require.NoError(t, err)
+	payScript, err := txscript.PayToAddrScript(walletAddress)
+	require.NoError(t, err)
+
+	// split this output into two: 49 and 1 BTC
+	toSend, err := btcutil.NewAmount(1)
+	require.NoError(t, err)
+	newOutput := wire.NewTxOut(int64(toSend), payScript)
+	err = wc.UnlockWallet(20)
+	require.NoError(t, err)
+
+	// create transaction which shouls split one of the wallet outputs into two
+	tx, err := wc.CreateAndSignTx(
+		[]*wire.TxOut{newOutput},
+		btcutil.Amount(2000),
+		walletAddress,
+	)
+	require.NoError(t, err)
+
+	// send transaction to bitcoin node, it should be accepted
+	txHash, err := wc.SendRawTransaction(
+		tx,
+		false,
+	)
+	require.NoError(t, err)
+
+	// generates enough blocks to make tx mature
+	h.GenerateBlocks(10)
+	outputs, err = wc.ListOutputs(true)
+	require.NoError(t, err)
+
+	// check that our wallet contains new output which should have 1 BTC
+	require.True(t, containsOutput(outputs, walletAddress.EncodeAddress(), toSend), "Not found expected output")
+
+	// check that tx is registered on node side. It requires maintaining txindex
+	_, status, err := wc.TxDetails(txHash, payScript)
+	require.NoError(t, err)
+	require.Equal(t, walletcontroller.TxInChain, status)
 }
