@@ -78,9 +78,14 @@ func (m *Manager) ExecCmd(t *testing.T, containerName string, command []string) 
 				AttachStdout: true,
 				AttachStderr: true,
 				Container:    containerId,
+				User:         "root",
 				Cmd:          command,
 			})
-			require.NoError(t, err)
+
+			if err != nil {
+				t.Logf("failed to create exec: %v", err)
+				return false
+			}
 
 			err = m.pool.Client.StartExec(exec.ID, docker.StartExecOptions{
 				Context:      ctx,
@@ -89,6 +94,7 @@ func (m *Manager) ExecCmd(t *testing.T, containerName string, command []string) 
 				ErrorStream:  &errBuf,
 			})
 			if err != nil {
+				t.Logf("failed to start exec: %v", err)
 				return false
 			}
 
@@ -108,7 +114,7 @@ func (m *Manager) ExecCmd(t *testing.T, containerName string, command []string) 
 			return true
 		},
 		timeout,
-		100*time.Millisecond,
+		500*time.Millisecond,
 		"command failed",
 	)
 
@@ -123,6 +129,7 @@ func (m *Manager) RunBitcoindResource(
 			Name:       bitcoindContainerName,
 			Repository: m.BitcoindRepository,
 			Tag:        m.BitcoindVersion,
+			User:       "root:root",
 			Mounts: []string{
 				fmt.Sprintf("%s/:/data/.bitcoin", bitcoindCfgPath),
 			},
