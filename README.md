@@ -563,7 +563,7 @@ stakercli daemon stake \
   --staker-address bcrt1q56ehztys752uzg7fzpear08l5mw8w2kxgz7644 \
   --staking-amount 1000000 \
   --finality-providers-pks 3328782c63404386d9cd905dba5a35975cba629e48192cea4a348937e865d312 \
-  --staking-time 100
+  --staking-time 10000 # ~70 days
 
 # Transaction details
 {
