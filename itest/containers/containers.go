@@ -22,7 +22,7 @@ var errRegex = regexp.MustCompile(`(E|e)rror`)
 // Manager is a wrapper around all Docker instances, and the Docker API.
 // It provides utilities to run and interact with all Docker containers used within e2e testing.
 type Manager struct {
-	ImageConfig
+	cfg       ImageConfig
 	pool      *dockertest.Pool
 	resources map[string]*dockertest.Resource
 }
@@ -31,8 +31,8 @@ type Manager struct {
 // all Docker specific utilities. Returns an error if initialization fails.
 func NewManager() (docker *Manager, err error) {
 	docker = &Manager{
-		ImageConfig: NewImageConfig(),
-		resources:   make(map[string]*dockertest.Resource),
+		cfg:       NewImageConfig(),
+		resources: make(map[string]*dockertest.Resource),
 	}
 	docker.pool, err = dockertest.NewPool("")
 	if err != nil {
@@ -127,8 +127,8 @@ func (m *Manager) RunBitcoindResource(
 	bitcoindResource, err := m.pool.RunWithOptions(
 		&dockertest.RunOptions{
 			Name:       bitcoindContainerName,
-			Repository: m.BitcoindRepository,
-			Tag:        m.BitcoindVersion,
+			Repository: m.cfg.BitcoindRepository,
+			Tag:        m.cfg.BitcoindVersion,
 			User:       "root:root",
 			Mounts: []string{
 				fmt.Sprintf("%s/:/data/.bitcoin", bitcoindCfgPath),
