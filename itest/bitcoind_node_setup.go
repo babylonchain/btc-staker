@@ -85,7 +85,10 @@ func (h *BitcoindTestHandler) GetBlockCount() (int, error) {
 }
 
 func (h *BitcoindTestHandler) CreateWallet(walletName string, passphrase string) *CreateWalletResponse {
-	buff, _, err := h.m.ExecBitcoindCliCmd(h.t, []string{"createwallet", walletName, "false", "false", passphrase})
+	// last false on the list will create legacy wallet. This is needed, as currently
+	// we are signing all taproot transactions by dumping the private key and signing it
+	// on app level. Descriptor wallets do not allow dumping private keys.
+	buff, _, err := h.m.ExecBitcoindCliCmd(h.t, []string{"createwallet", walletName, "false", "false", passphrase, "false", "false"})
 	require.NoError(h.t, err)
 
 	var response CreateWalletResponse
