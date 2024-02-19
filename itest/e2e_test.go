@@ -95,7 +95,9 @@ func defaultStakerConfig(t *testing.T, passphrase string) (*stakercfg.Config, *r
 	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCHost = bitcoindHost
 	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCUser = bitcoindUser
 	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCPass = bitcoindPass
-	// TODO: for now use polling to avoid issues with ZMQ
+
+	// Use rpc polling, as it is our default mode and it is a bit more troublesome
+	// to configure ZMQ from inside the bitcoind docker container
 	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCPolling = true
 	defaultConfig.BtcNodeBackendConfig.Bitcoind.BlockPollingInterval = 1 * time.Second
 	defaultConfig.BtcNodeBackendConfig.Bitcoind.TxPollingInterval = 1 * time.Second
