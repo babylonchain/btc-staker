@@ -80,17 +80,21 @@ func defaultStakerConfig(t *testing.T, passphrase string) (*stakercfg.Config, *r
 	defaultConfig.BtcNodeBackendConfig.FeeMode = "dynamic"
 	defaultConfig.BtcNodeBackendConfig.EstimationMode = types.DynamicFeeEstimation
 
+	bitcoindHost := "127.0.0.1:18443"
+	bitcoindUser := "user"
+	bitcoindPass := "pass"
+
 	// Wallet configuration
-	defaultConfig.WalletRpcConfig.Host = "127.0.0.1:18443"
-	defaultConfig.WalletRpcConfig.User = "user"
-	defaultConfig.WalletRpcConfig.Pass = "pass"
+	defaultConfig.WalletRpcConfig.Host = bitcoindHost
+	defaultConfig.WalletRpcConfig.User = bitcoindUser
+	defaultConfig.WalletRpcConfig.Pass = bitcoindPass
 	defaultConfig.WalletRpcConfig.DisableTls = true
 	defaultConfig.WalletConfig.WalletPass = passphrase
 
 	// node configuration
-	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCHost = "127.0.0.1:18443"
-	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCUser = "user"
-	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCPass = "pass"
+	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCHost = bitcoindHost
+	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCUser = bitcoindUser
+	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCPass = bitcoindPass
 	// TODO: for now use polling to avoid issues with ZMQ
 	defaultConfig.BtcNodeBackendConfig.Bitcoind.RPCPolling = true
 	defaultConfig.BtcNodeBackendConfig.Bitcoind.BlockPollingInterval = 1 * time.Second
@@ -100,9 +104,9 @@ func defaultStakerConfig(t *testing.T, passphrase string) (*stakercfg.Config, *r
 	defaultConfig.StakerConfig.UnbondingTxCheckInterval = 1 * time.Second
 
 	testRpcClient, err := rpcclient.New(&rpcclient.ConnConfig{
-		Host:                 "127.0.0.1:18443",
-		User:                 "user",
-		Pass:                 "pass",
+		Host:                 bitcoindHost,
+		User:                 bitcoindUser,
+		Pass:                 bitcoindPass,
 		DisableTLS:           true,
 		DisableConnectOnNew:  true,
 		DisableAutoReconnect: false,
@@ -184,9 +188,7 @@ func (td *testStakingData) withStakingAmout(amout int64) *testStakingData {
 
 func StartManager(
 	t *testing.T,
-	numMatureOutputsInWallet uint32,
-	numbersOfOutputsToWaitForDurintInit int,
-	handlers *rpcclient.NotificationHandlers) *TestManager {
+	numMatureOutputsInWallet uint32) *TestManager {
 	h := NewBitcoindHandler(t)
 	h.Start()
 	passphrase := "pass"
@@ -224,9 +226,6 @@ func StartManager(
 
 	err = bh.Start()
 	require.NoError(t, err)
-
-	// Wait for wallet to re-index the outputs
-	time.Sleep(5 * time.Second)
 
 	cfg, c := defaultStakerConfig(t, passphrase)
 
@@ -893,7 +892,7 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 
 func TestStakingFailures(t *testing.T) {
 	numMatureOutputs := uint32(200)
-	tm := StartManager(t, numMatureOutputs, 2, nil)
+	tm := StartManager(t, numMatureOutputs)
 	defer tm.Stop(t)
 	tm.insertAllMinedBlocksToBabylon(t)
 
@@ -933,7 +932,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
-	tm := StartManager(t, numMatureOutputs, 2, nil)
+	tm := StartManager(t, numMatureOutputs)
 	defer tm.Stop(t)
 	tm.insertAllMinedBlocksToBabylon(t)
 
@@ -1008,7 +1007,7 @@ func TestMultipleWithdrawableStakingTransactions(t *testing.T) {
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
-	tm := StartManager(t, numMatureOutputs, 2, nil)
+	tm := StartManager(t, numMatureOutputs)
 	defer tm.Stop(t)
 	tm.insertAllMinedBlocksToBabylon(t)
 
@@ -1074,7 +1073,7 @@ func TestSendingWatchedStakingTransaction(t *testing.T) {
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
-	tm := StartManager(t, numMatureOutputs, 2, nil)
+	tm := StartManager(t, numMatureOutputs)
 	defer tm.Stop(t)
 	tm.insertAllMinedBlocksToBabylon(t)
 
@@ -1096,7 +1095,7 @@ func TestRestartingTxNotDeepEnough(t *testing.T) {
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
-	tm := StartManager(t, numMatureOutputs, 2, nil)
+	tm := StartManager(t, numMatureOutputs)
 	defer tm.Stop(t)
 	tm.insertAllMinedBlocksToBabylon(t)
 
@@ -1121,7 +1120,7 @@ func TestRestartingTxNotOnBabylon(t *testing.T) {
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
-	tm := StartManager(t, numMatureOutputs, 2, nil)
+	tm := StartManager(t, numMatureOutputs)
 	defer tm.Stop(t)
 	tm.insertAllMinedBlocksToBabylon(t)
 
@@ -1163,7 +1162,7 @@ func TestStakingUnbonding(t *testing.T) {
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
-	tm := StartManager(t, numMatureOutputs, 2, nil)
+	tm := StartManager(t, numMatureOutputs)
 	defer tm.Stop(t)
 	tm.insertAllMinedBlocksToBabylon(t)
 
@@ -1234,7 +1233,7 @@ func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
-	tm := StartManager(t, numMatureOutputs, 2, nil)
+	tm := StartManager(t, numMatureOutputs)
 	defer tm.Stop(t)
 	tm.insertAllMinedBlocksToBabylon(t)
 
