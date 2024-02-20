@@ -2,12 +2,9 @@ DOCKER = $(shell which docker)
 BUILDDIR ?= $(CURDIR)/build
 TOOLS_DIR := tools
 
-BTCD_PKG := github.com/btcsuite/btcd
-BTCDW_PKG := github.com/btcsuite/btcwallet
 BABYLON_PKG := github.com/babylonchain/babylon/cmd/babylond
 
 GO_BIN := ${GOPATH}/bin
-BTCD_BIN := $(GO_BIN)/btcd
 
 ldflags := $(LDFLAGS)
 build_tags := $(BUILD_TAGS)
@@ -54,7 +51,7 @@ test:
 	go test ./...
 
 test-e2e:
-	cd $(TOOLS_DIR); go install -trimpath $(BTCD_PKG); go install -trimpath $(BTCDW_PKG); go install -trimpath $(BABYLON_PKG);
+	cd $(TOOLS_DIR); go install -trimpath $(BABYLON_PKG);
 	go test -mod=readonly -timeout=25m -v $(PACKAGES_E2E) -count=1 --tags=e2e
 
 proto-gen:

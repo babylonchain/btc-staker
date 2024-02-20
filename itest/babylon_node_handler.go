@@ -123,6 +123,8 @@ func NewBabylonNodeHandler(
 	covenantPk1 *btcec.PublicKey,
 	covenantPk2 *btcec.PublicKey,
 	covenantPk3 *btcec.PublicKey,
+	slashingAddress string,
+	baseHeaderHex string,
 ) (*BabylonNodeHandler, error) {
 	testDir, err := baseDirBabylondir()
 	if err != nil {
@@ -144,6 +146,9 @@ func NewBabylonNodeHandler(
 		"--chain-id=chain-test",
 		"--btc-finalization-timeout=4",
 		"--btc-confirmation-depth=2",
+		"--btc-network=regtest",
+		fmt.Sprintf("--slashing-address=%s", slashingAddress),
+		fmt.Sprintf("--btc-base-header=%s", baseHeaderHex),
 		"--additional-sender-account",
 		fmt.Sprintf("--covenant-quorum=%s", quorumString),
 		fmt.Sprintf("--covenant-pks=%s,%s,%s", pubBabylon1.MarshalHex(), pubBabylon2.MarshalHex(), pubBabylon3.MarshalHex()),
