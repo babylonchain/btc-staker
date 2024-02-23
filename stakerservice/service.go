@@ -557,6 +557,10 @@ func (s *StakerService) spendStakeNoDb(_ *rpctypes.Context,
 	stakingTimeBlocks int64) (*SpendTxDetails, error) {
 	txHash, err := chainhash.NewHashFromStr(stakingTxHash)
 
+	if err != nil {
+		return nil, err
+	}
+
 	if stakingAmount <= 0 {
 		return nil, fmt.Errorf("staking amount must be positive")
 	}
