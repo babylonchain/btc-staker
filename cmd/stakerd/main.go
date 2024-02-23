@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime/pprof"
 
+	"github.com/babylonchain/btc-staker/metrics"
 	staker "github.com/babylonchain/btc-staker/staker"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	service "github.com/babylonchain/btc-staker/stakerservice"
@@ -68,8 +69,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	stakerMetrics := metrics.NewStakerMetrics()
+
 	// TODO: consider moving this to stakerservice
-	staker, err := staker.NewStakerAppFromConfig(cfg, cfgLogger, zapLogger, dbBackend)
+	staker, err := staker.NewStakerAppFromConfig(
+		cfg,
+		cfgLogger,
+		zapLogger,
+		dbBackend,
+		stakerMetrics,
+	)
 
 	if err != nil {
 		cfgLogger.Errorf("failed to create staker app: %v", err)
@@ -83,6 +92,9 @@ func main() {
 		shutdownInterceptor,
 		dbBackend,
 	)
+
+	addr := fmt.Sprintf("%s:%d", cfg.MetricsConfig.Host, cfg.MetricsConfig.ServerPort)
+	metrics.Start(cfgLogger, addr, stakerMetrics.Registry)
 
 	err = service.RunUntilShutdown()
 	if err != nil {

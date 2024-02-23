@@ -24,6 +24,7 @@ import (
 	bbntypes "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/babylonchain/btc-staker/babylonclient"
+	"github.com/babylonchain/btc-staker/metrics"
 	"github.com/babylonchain/btc-staker/proto"
 	"github.com/babylonchain/btc-staker/staker"
 	"github.com/babylonchain/btc-staker/stakercfg"
@@ -254,7 +255,8 @@ func StartManager(
 	dbbackend, err := stakercfg.GetDbBackend(cfg.DBConfig)
 	require.NoError(t, err)
 
-	stakerApp, err := staker.NewStakerAppFromConfig(cfg, logger, zapLogger, dbbackend)
+	m := metrics.NewStakerMetrics()
+	stakerApp, err := staker.NewStakerAppFromConfig(cfg, logger, zapLogger, dbbackend, m)
 	require.NoError(t, err)
 	// we require separate client to send BTC headers to babylon node (interface does not need this method?)
 	bl, err := babylonclient.NewBabylonController(cfg.BabylonConfig, &cfg.ActiveNetParams, logger, zapLogger)
@@ -338,8 +340,8 @@ func (tm *TestManager) RestartApp(t *testing.T) {
 
 	dbbackend, err := stakercfg.GetDbBackend(tm.Config.DBConfig)
 	require.NoError(t, err)
-
-	stakerApp, err := staker.NewStakerAppFromConfig(tm.Config, logger, zapLogger, dbbackend)
+	m := metrics.NewStakerMetrics()
+	stakerApp, err := staker.NewStakerAppFromConfig(tm.Config, logger, zapLogger, dbbackend, m)
 	require.NoError(t, err)
 
 	interceptor, err := signal.Intercept()

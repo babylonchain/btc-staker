@@ -164,6 +164,8 @@ type Config struct {
 
 	StakerConfig *StakerConfig `group:"stakerconfig" namespace:"stakerconfig"`
 
+	MetricsConfig *MetricsConfig `group:"metricsconfig" namespace:"metricsconfig"`
+
 	JsonRpcServerConfig *JsonRpcServerConfig
 
 	ActiveNetParams chaincfg.Params
@@ -179,6 +181,7 @@ func DefaultConfig() Config {
 	bbnConfig := DefaultBBNConfig()
 	dbConfig := DefaultDBConfig()
 	stakerConfig := DefaultStakerConfig()
+	metricsCfg := DefaultMetricsConfig()
 	return Config{
 		StakerdDir:           DefaultStakerdDir,
 		ConfigFile:           DefaultConfigFile,
@@ -192,6 +195,7 @@ func DefaultConfig() Config {
 		BabylonConfig:        &bbnConfig,
 		DBConfig:             &dbConfig,
 		StakerConfig:         &stakerConfig,
+		MetricsConfig:        &metricsCfg,
 	}
 }
 
