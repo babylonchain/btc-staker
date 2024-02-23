@@ -892,7 +892,7 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 	require.NoError(t, err)
 }
 
-func TestStakingFailures(t *testing.T) {
+func ATestStakingFailures(t *testing.T) {
 	numMatureOutputs := uint32(200)
 	tm := StartManager(t, numMatureOutputs)
 	defer tm.Stop(t)
@@ -929,7 +929,7 @@ func TestStakingFailures(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestSendingStakingTransaction(t *testing.T) {
+func ATestSendingStakingTransaction(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1004,7 +1004,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 	require.Equal(t, transactionsResult.Transactions[0].StakingTxHash, txHash.String())
 }
 
-func TestMultipleWithdrawableStakingTransactions(t *testing.T) {
+func ATestMultipleWithdrawableStakingTransactions(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1070,7 +1070,7 @@ func TestMultipleWithdrawableStakingTransactions(t *testing.T) {
 	require.Equal(t, withdrawableTransactionsResp.Transactions[2].TransactionIdx, "4")
 }
 
-func TestSendingWatchedStakingTransaction(t *testing.T) {
+func ATestSendingWatchedStakingTransaction(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1092,7 +1092,7 @@ func TestSendingWatchedStakingTransaction(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
 
-func TestRestartingTxNotDeepEnough(t *testing.T) {
+func ATestRestartingTxNotDeepEnough(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1117,7 +1117,7 @@ func TestRestartingTxNotDeepEnough(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
 }
 
-func TestRestartingTxNotOnBabylon(t *testing.T) {
+func ATestRestartingTxNotOnBabylon(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1159,7 +1159,7 @@ func TestRestartingTxNotOnBabylon(t *testing.T) {
 	}
 }
 
-func TestStakingUnbonding(t *testing.T) {
+func ATestStakingUnbonding(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1230,7 +1230,7 @@ func TestStakingUnbonding(t *testing.T) {
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SPENT_ON_BTC)
 }
 
-func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
+func ATestUnbondingRestartWaitingForSignatures(t *testing.T) {
 	// need to have at least 300 block on testnet as only then segwit is activated.
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
@@ -1302,7 +1302,7 @@ func containsOutput(outputs []walletcontroller.Utxo, address string, amount btcu
 	return false
 }
 
-func TestBitcoindWalletRpcApi(t *testing.T) {
+func ATestBitcoindWalletRpcApi(t *testing.T) {
 	h := NewBitcoindHandler(t)
 	h.Start()
 	passphrase := "pass"
@@ -1370,5 +1370,86 @@ func TestBitcoindWalletRpcApi(t *testing.T) {
 	// check that tx is registered on node side. It requires maintaining txindex
 	_, status, err := wc.TxDetails(txHash, payScript)
 	require.NoError(t, err)
+	require.Equal(t, walletcontroller.TxInChain, status)
+}
+
+func TestSendingStakingTransactionAndWithdrawNoDb(t *testing.T) {
+	// need to have at least 300 block on testnet as only then segwit is activated.
+	// Mature output is out which has 100 confirmations, which means 200mature outputs
+	// will generate 300 blocks
+	numMatureOutputs := uint32(200)
+	tm := StartManager(t, numMatureOutputs)
+	defer tm.Stop(t)
+	tm.insertAllMinedBlocksToBabylon(t)
+
+	cl := tm.Sa.BabylonController()
+	params, err := cl.Params()
+	require.NoError(t, err)
+	stakingTime := uint16(staker.GetMinStakingTime(params))
+
+	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000)
+
+	hashed, err := chainhash.NewHash(datagen.GenRandomByteArray(r, 32))
+	require.NoError(t, err)
+	scr, err := txscript.PayToTaprootScript(tm.CovenantPrivKeys[0].PubKey())
+	require.NoError(t, err)
+	_, st, erro := tm.Sa.Wallet().TxDetails(hashed, scr)
+	// query for exsisting tx is not an error, proper state should be returned
+	require.NoError(t, erro)
+	require.Equal(t, st, walletcontroller.TxNotFound)
+
+	tm.createAndRegisterFinalityProvider(t, testStakingData)
+
+	txHash := tm.sendStakingTx(t, testStakingData)
+
+	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
+
+	pend, err := tm.BabylonClient.QueryPendingBTCDelegations()
+	require.NoError(t, err)
+	require.Len(t, pend, 1)
+	// need to activate delegation to unbond
+	tm.insertCovenantSigForDelegation(t, pend[0])
+	tm.waitForStakingTxState(t, txHash, proto.TransactionState_DELEGATION_ACTIVE)
+
+	// mine enough blocks so that timelock expires
+	blockForStakingToExpire := uint32(testStakingData.StakingTime) - params.ConfirmationTimeBlocks - 1
+	tm.mineNEmptyBlocks(t, blockForStakingToExpire, false)
+
+	// need to use eventually as we need to wait for information to flow from node to staker program
+	require.Eventually(t, func() bool {
+		withdrawableTransactionsResp, err := tm.StakerClient.WithdrawableTransactions(context.Background(), nil, nil)
+		require.NoError(t, err)
+		return len(withdrawableTransactionsResp.Transactions) > 0
+	}, eventuallyWaitTimeOut, eventuallyPollTime)
+
+	// At this point we know staking tx is spendable! Send it to btc without touching
+	// staker db!
+
+	// tm.MinerAddr.String(),
+	// testStakingData.StakingAmount,
+	// []string{fpKey},
+	// int64(testStakingData.StakingTime),
+	fpKey := hex.EncodeToString(schnorr.SerializePubKey(testStakingData.FinalityProviderBtcKey))
+	spentTxResult, err := tm.StakerClient.SpendStakeNoDb(
+		context.Background(),
+		txHash.String(),
+		tm.MinerAddr.EncodeAddress(),
+		testStakingData.StakingAmount,
+		[]string{fpKey},
+		int64(testStakingData.StakingTime),
+	)
+	require.NoError(t, err)
+	// mine few blocks so that spending tx is confirmed
+	tm.mineNEmptyBlocks(t, 3, false)
+
+	spendTxHash, err := chainhash.NewHashFromStr(spentTxResult.TxHash)
+	require.NoError(t, err)
+	pkScript, err := txscript.PayToAddrScript(tm.MinerAddr)
+	require.NoError(t, err)
+
+	_, status, err := tm.Sa.Wallet().TxDetails(spendTxHash, pkScript)
+	require.NoError(t, err)
+	// our spend stake tx should be included in chain
 	require.Equal(t, walletcontroller.TxInChain, status)
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/avast/retry-go/v4"
 	staking "github.com/babylonchain/babylon/btcstaking"
+	bbn "github.com/babylonchain/babylon/types"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/proto"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
@@ -1605,6 +1606,114 @@ func (app *StakerApp) waitForSpendConfirmation(stakingTxHash chainhash.Hash, ev 
 			return
 		}
 	}
+}
+
+func (app *StakerApp) SpendStakeNoDb(
+	stakingTxHash *chainhash.Hash,
+	stakerAddress btcutil.Address,
+	stakingAmount btcutil.Amount,
+	fpPks []*btcec.PublicKey,
+	stakingTimeBlocks uint16,
+) (*chainhash.Hash, error) {
+
+	data, err := app.retrieveExternalDelegationData(stakerAddress)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakingInfo, err := staking.BuildStakingInfo(
+		data.stakerPrivKey.PubKey(),
+		fpPks,
+		data.babylonParams.CovenantPks,
+		data.babylonParams.CovenantQuruomThreshold,
+		stakingTimeBlocks,
+		stakingAmount,
+		app.network,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build staking info: %w", err)
+	}
+
+	detailsStakinTx, status, err := app.wc.TxDetails(stakingTxHash, stakingInfo.StakingOutput.PkScript)
+
+	stakingTx := detailsStakinTx.Tx
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transaction details from index: %w", err)
+	}
+
+	if status != walletcontroller.TxInChain {
+		return nil, fmt.Errorf("cannot spend staking output. Staking transaction is not confirmed yet")
+	}
+
+	stakingOutputIdx, err := bbn.GetOutputIdxInBTCTx(stakingTx, stakingInfo.StakingOutput)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build time lock path info while spending staking transaction: %w", err)
+	}
+
+	transferTo, err := txscript.PayToAddrScript(stakerAddress)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build destination script: %w", err)
+	}
+
+	currentFeeRate := app.feeEstimator.EstimateFeePerKb()
+
+	stakingOutput := stakingTx.TxOut[stakingOutputIdx]
+	// transaction is only in sent to babylon state we try to spend staking output directly
+	spendTx, _, err := createSpendStakeTx(
+		transferTo,
+		stakingOutput,
+		stakingOutputIdx,
+		stakingTxHash,
+		stakingTimeBlocks,
+		currentFeeRate,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakingTimeLockPathInfo, err := stakingInfo.TimeLockPathSpendInfo()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build time lock path info while spending staking transaction: %w", err)
+	}
+
+	stakerSig, err := staking.SignTxWithOneScriptSpendInputFromTapLeaf(
+		spendTx,
+		stakingTx.TxOut[stakingOutputIdx],
+		data.stakerPrivKey,
+		stakingTimeLockPathInfo.RevealedLeaf,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("cannot spend staking output. Error building signature: %w", err)
+	}
+
+	witness, err := stakingTimeLockPathInfo.CreateTimeLockPathWitness(
+		stakerSig,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("cannot spend staking output. Error building witness: %w", err)
+	}
+
+	spendTx.TxIn[0].Witness = witness
+
+	// We do not check if transaction is spendable i.e the staking time has passed
+	// as this is validated in mempool so in of not meeting this time requirement
+	// we will receive error here: `transaction's sequence locks on inputs not met`
+	spendTxHash, err := app.wc.SendRawTransaction(spendTx, true)
+
+	if err != nil {
+		return nil, fmt.Errorf("cannot spend staking output. Error sending tx: %w", err)
+	}
+
+	return spendTxHash, nil
 }
 
 // SpendStake spends stake identified by stakingTxHash. Stake can be currently locked in
