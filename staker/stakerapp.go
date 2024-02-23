@@ -1187,7 +1187,7 @@ func (app *StakerApp) handleStakingEvents() {
 				app.logger.Fatalf("Error setting state for tx %s: %s", ev.stakingTxHash, err)
 			}
 
-			app.m.DelegationsSendToBabylon.Inc()
+			app.m.DelegationsSentToBabylon.Inc()
 			// start checking for covenant signatures on unbodning transactions
 			// when we receive them we treat delegation as active
 			app.wg.Add(1)

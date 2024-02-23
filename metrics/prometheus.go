@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"errors"
 	"net/http"
 	_ "net/http/pprof"
 	"regexp"
@@ -32,5 +33,10 @@ func start(logger *logrus.Logger, addr string, reg *prometheus.Registry) {
 	))
 
 	logger.Infof("Successfully started Prometheus metrics server at %s", addr)
-	logger.Fatal(http.ListenAndServe(addr, nil))
+
+	err := http.ListenAndServe(addr, nil)
+
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Errorf("prometheus server got err: %v", err)
+	}
 }

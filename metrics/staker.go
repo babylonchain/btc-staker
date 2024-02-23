@@ -9,7 +9,7 @@ type StakerMetrics struct {
 	Registry                        *prometheus.Registry
 	ValidReceivedDelegationRequests prometheus.Counter
 	DelegationsConfirmedOnBtc       prometheus.Counter
-	DelegationsSendToBabylon        prometheus.Counter
+	DelegationsSentToBabylon        prometheus.Counter
 	DelegationsActivatedOnBabylon   prometheus.Counter
 	NumberOfFatalErrors             prometheus.Counter
 	CurrentBtcBlockHeight           prometheus.Gauge
@@ -23,15 +23,15 @@ func NewStakerMetrics() *StakerMetrics {
 		Registry: registry,
 		ValidReceivedDelegationRequests: registerer.NewCounter(prometheus.CounterOpts{
 			Name: "staker_valid_received_delegation_requests",
-			Help: "Total number of recevied valid delegation requests",
+			Help: "Total number of received valid delegation requests",
 		}),
 		DelegationsConfirmedOnBtc: registerer.NewCounter(prometheus.CounterOpts{
 			Name: "staker_delegations_confirmed_on_btc",
 			Help: "Total number of delegations confirmed on btc",
 		}),
-		DelegationsSendToBabylon: registerer.NewCounter(prometheus.CounterOpts{
+		DelegationsSentToBabylon: registerer.NewCounter(prometheus.CounterOpts{
 			Name: "staker_delegations_send_to_babylon",
-			Help: "Total number of delegations send to babylon",
+			Help: "Total number of delegations sent to babylon",
 		}),
 		DelegationsActivatedOnBabylon: registerer.NewCounter(prometheus.CounterOpts{
 			Name: "staker_delegations_activated_on_babylon",
