@@ -14,6 +14,7 @@ import (
 	"github.com/avast/retry-go/v4"
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
+	"github.com/babylonchain/btc-staker/metrics"
 	"github.com/babylonchain/btc-staker/proto"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
@@ -140,6 +141,7 @@ type StakerApp struct {
 	logger           *logrus.Logger
 	txTracker        *stakerdb.TrackedTransactionStore
 	babylonMsgSender *cl.BabylonMsgSender
+	m                *metrics.StakerMetrics
 
 	stakingRequestedEvChan                        chan *stakingRequestedEvent
 	stakingTxBtcConfirmedEvChan                   chan *stakingTxBtcConfirmedEvent
@@ -156,6 +158,7 @@ func NewStakerAppFromConfig(
 	logger *logrus.Logger,
 	rpcClientLogger *zap.Logger,
 	db kvdb.Backend,
+	m *metrics.StakerMetrics,
 ) (*StakerApp, error) {
 	// TODO: If we want to support multiple wallet types, this is most probably the place to decide
 	// on concrete implementation
@@ -217,6 +220,7 @@ func NewStakerAppFromConfig(
 		feeEstimator,
 		tracker,
 		babylonMsgSender,
+		m,
 	)
 }
 
@@ -229,6 +233,7 @@ func NewStakerAppFromDeps(
 	feeEestimator FeeEstimator,
 	tracker *stakerdb.TrackedTransactionStore,
 	babylonMsgSender *cl.BabylonMsgSender,
+	metrics *metrics.StakerMetrics,
 ) (*StakerApp, error) {
 	return &StakerApp{
 		babylonClient:          cl,
@@ -238,6 +243,7 @@ func NewStakerAppFromDeps(
 		network:                &config.ActiveNetParams,
 		txTracker:              tracker,
 		babylonMsgSender:       babylonMsgSender,
+		m:                      metrics,
 		config:                 config,
 		logger:                 logger,
 		quit:                   make(chan struct{}),
@@ -332,6 +338,7 @@ func (app *StakerApp) handleNewBlocks(blockNotifier *notifier.BlockEpochEvent) {
 			if !ok {
 				return
 			}
+			app.m.CurrentBtcBlockHeight.Set(float64(block.Height))
 			app.currentBestBlockHeight.Store(uint32(block.Height))
 
 			app.logger.WithFields(logrus.Fields{
@@ -1138,6 +1145,7 @@ func (app *StakerApp) handleStakingEvents() {
 				continue
 			}
 
+			app.m.ValidReceivedDelegationRequests.Inc()
 			ev.successChan <- &ev.stakingTxHash
 			app.logStakingEventProcessed(ev)
 
@@ -1163,6 +1171,7 @@ func (app *StakerApp) handleStakingEvents() {
 
 			storedTx, stakerAddress := app.mustGetTransactionAndStakerAddress(&ev.stakingTxHash)
 
+			app.m.DelegationsConfirmedOnBtc.Inc()
 			// TODO: Introduce max number of sendToDelegationToBabylonTasks. It should be tied to
 			// accepting new staking delegations i.e we will hit it we should stop accepting new stakingrequests
 			// as either babylon node is not healthy or we are constructing invalid delegations
@@ -1178,6 +1187,7 @@ func (app *StakerApp) handleStakingEvents() {
 				app.logger.Fatalf("Error setting state for tx %s: %s", ev.stakingTxHash, err)
 			}
 
+			app.m.DelegationsSendToBabylon.Inc()
 			// start checking for covenant signatures on unbodning transactions
 			// when we receive them we treat delegation as active
 			app.wg.Add(1)
@@ -1196,6 +1206,7 @@ func (app *StakerApp) handleStakingEvents() {
 				app.logger.Fatalf("Error setting state for tx %s: %s", &ev.stakingTxHash, err)
 			}
 
+			app.m.DelegationsActivatedOnBabylon.Inc()
 			app.logStakingEventProcessed(ev)
 
 		case ev := <-app.unbondingTxConfirmedOnBtcEvChan:
@@ -1226,6 +1237,8 @@ func (app *StakerApp) handleStakingEvents() {
 			if errors.Is(ev.err, context.Canceled) {
 				continue
 			}
+
+			app.m.NumberOfFatalErrors.Inc()
 
 			// if app is configured to fail on critical error, just kill it, user then
 			// can investigate and restart it, and delegation process should continue
