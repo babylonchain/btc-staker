@@ -124,7 +124,9 @@ func (b *BabylonMsgSender) isBabylonBtcLcReady(
 }
 
 func (m *BabylonMsgSender) sendDelegationAsync(stakingTxHash *chainhash.Hash, req *sendDelegationRequest) {
-	m.s.Acquire(context.Background(), 1)
+	// do not check the error, as only way for it to return err is if provided context would be cancelled
+	// which can't happen here
+	_ = m.s.Acquire(context.Background(), 1)
 	m.wg.Add(1)
 	go func() {
 		defer m.s.Release(1)
@@ -154,7 +156,9 @@ func (m *BabylonMsgSender) sendDelegationAsync(stakingTxHash *chainhash.Hash, re
 }
 
 func (m *BabylonMsgSender) sendUndelegationAsync(stakingTxHash *chainhash.Hash, req *sendUndelegationRequest) {
-	m.s.Acquire(context.Background(), 1)
+	// do not check the error, as only way for it to return err is if provided context would be cancelled
+	// which can't happen here
+	_ = m.s.Acquire(context.Background(), 1)
 	m.wg.Add(1)
 	go func() {
 		defer m.s.Release(1)
