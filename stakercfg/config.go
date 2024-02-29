@@ -129,7 +129,7 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 type StakerConfig struct {
 	BabylonStallingInterval   time.Duration `long:"babylonstallinginterval" description:"The interval for Babylon node BTC light client to catch up with the real chain before re-sending delegation request"`
 	UnbondingTxCheckInterval  time.Duration `long:"unbondingtxcheckinterval" description:"The interval for staker whether delegation received all covenant signatures"`
-	MaxConcurrentTransactions time.Duration `long:"maxconcurrenttransactions" description:"Maximum concurrent transactions in flight to babylon node"`
+	MaxConcurrentTransactions uint64        `long:"maxconcurrenttransactions" description:"Maximum concurrent transactions in flight to babylon node"`
 	ExitOnCriticalError       bool          `long:"exitoncriticalerror" description:"Exit stakerd on critical error"`
 }
 
