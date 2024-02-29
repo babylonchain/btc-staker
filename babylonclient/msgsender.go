@@ -71,7 +71,7 @@ type BabylonMsgSender struct {
 func NewBabylonMsgSender(
 	cl BabylonClient,
 	logger *logrus.Logger,
-	maxConcurrentTransactions uint64,
+	maxConcurrentTransactions uint32,
 ) *BabylonMsgSender {
 	s := semaphore.NewWeighted(int64(maxConcurrentTransactions))
 	return &BabylonMsgSender{
