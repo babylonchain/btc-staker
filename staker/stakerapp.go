@@ -209,7 +209,7 @@ func NewStakerAppFromConfig(
 		return nil, fmt.Errorf("unknown fee estimation mode: %d", config.BtcNodeBackendConfig.EstimationMode)
 	}
 
-	babylonMsgSender := cl.NewBabylonMsgSender(babylonClient, logger)
+	babylonMsgSender := cl.NewBabylonMsgSender(babylonClient, logger, config.StakerConfig.MaxConcurrentTransactions)
 
 	return NewStakerAppFromDeps(
 		config,

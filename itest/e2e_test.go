@@ -105,6 +105,7 @@ func defaultStakerConfig(t *testing.T, passphrase string) (*stakercfg.Config, *r
 
 	defaultConfig.StakerConfig.BabylonStallingInterval = 1 * time.Second
 	defaultConfig.StakerConfig.UnbondingTxCheckInterval = 1 * time.Second
+	defaultConfig.StakerConfig.MaxConcurrentTransactions = 5
 
 	testRpcClient, err := rpcclient.New(&rpcclient.ConnConfig{
 		Host:                 bitcoindHost,
