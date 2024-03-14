@@ -83,6 +83,30 @@ func (c *StakerServiceJsonRpcClient) Stake(
 	return result, nil
 }
 
+func (c *StakerServiceJsonRpcClient) SpendStakeNoDb(
+	ctx context.Context,
+	txHash string,
+	stakerAddress string,
+	stakingAmount int64,
+	fpPks []string,
+	stakingTimeBlocks int64,
+) (*service.ResultStake, error) {
+	result := new(service.ResultStake)
+
+	params := make(map[string]interface{})
+	params["stakingTxHash"] = txHash
+	params["stakerAddress"] = stakerAddress
+	params["stakingAmount"] = stakingAmount
+	params["fpBtcPks"] = fpPks
+	params["stakingTimeBlocks"] = stakingTimeBlocks
+
+	_, err := c.client.Call(ctx, "spend_stake_no_db", params, result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (c *StakerServiceJsonRpcClient) ListStakingTransactions(ctx context.Context, offset *int, limit *int) (*service.ListStakingTransactionsResponse, error) {
 	result := new(service.ListStakingTransactionsResponse)
 

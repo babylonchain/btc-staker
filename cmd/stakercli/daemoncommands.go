@@ -20,6 +20,7 @@ var daemonCommands = []cli.Command{
 			listOutputsCmd,
 			babylonFinalityProvidersCmd,
 			stakeCmd,
+			spendStakeNoDbCmd,
 			unstakeCmd,
 			stakingDetailsCmd,
 			listStakingTransactionsCmd,
@@ -127,6 +128,45 @@ var stakeCmd = cli.Command{
 		},
 	},
 	Action: stake,
+}
+
+var spendStakeNoDbCmd = cli.Command{
+	Name:      "spend-stake-no-db",
+	ShortName: "stnd",
+	Usage:     "Stake an amount of BTC to Babylon",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+		cli.StringFlag{
+			Name:     stakingTransactionHashFlag,
+			Usage:    "Hash of original staking transaction in bitcoin hex format",
+			Required: true,
+		},
+		cli.StringFlag{
+			Name:     stakerAddressFlag,
+			Usage:    "BTC address of the staker in hex",
+			Required: true,
+		},
+		cli.Int64Flag{
+			Name:     stakingAmountFlag,
+			Usage:    "Staking amount in satoshis",
+			Required: true,
+		},
+		cli.StringSliceFlag{
+			Name:     fpPksFlag,
+			Usage:    "BTC public keys of the finality providers in hex",
+			Required: true,
+		},
+		cli.Int64Flag{
+			Name:     stakingTimeBlocksFlag,
+			Usage:    "Staking time in BTC blocks",
+			Required: true,
+		},
+	},
+	Action: spendStakeNoDb,
 }
 
 var unstakeCmd = cli.Command{
@@ -325,6 +365,30 @@ func stake(ctx *cli.Context) error {
 	stakingTimeBlocks := ctx.Int64(stakingTimeFlag)
 
 	results, err := client.Stake(sctx, stakerAddress, stakingAmount, fpPks, stakingTimeBlocks)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(results)
+
+	return nil
+}
+
+func spendStakeNoDb(ctx *cli.Context) error {
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+	stakingTxHash := ctx.String(stakingTransactionHashFlag)
+	stakerAddress := ctx.String(stakerAddressFlag)
+	stakingAmount := ctx.Int64(stakingAmountFlag)
+	fpPks := ctx.StringSlice(fpPksFlag)
+	stakingTimeBlocks := ctx.Int64(stakingTimeFlag)
+
+	results, err := client.SpendStakeNoDb(sctx, stakingTxHash, stakerAddress, stakingAmount, fpPks, stakingTimeBlocks)
 	if err != nil {
 		return err
 	}

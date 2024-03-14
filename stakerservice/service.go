@@ -549,6 +549,68 @@ func (s *StakerService) unbondStaking(_ *rpctypes.Context, stakingTxHash string,
 	}, nil
 }
 
+func (s *StakerService) spendStakeNoDb(_ *rpctypes.Context,
+	stakingTxHash string,
+	stakerAddress string,
+	stakingAmount int64,
+	fpBtcPks []string,
+	stakingTimeBlocks int64) (*SpendTxDetails, error) {
+	txHash, err := chainhash.NewHashFromStr(stakingTxHash)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if stakingAmount <= 0 {
+		return nil, fmt.Errorf("staking amount must be positive")
+	}
+
+	amount := btcutil.Amount(stakingAmount)
+
+	stakerAddr, err := btcutil.DecodeAddress(stakerAddress, &s.config.ActiveNetParams)
+	if err != nil {
+		return nil, err
+	}
+
+	var fpPubKeys []*btcec.PublicKey
+
+	for _, fpPk := range fpBtcPks {
+		fpPkBytes, err := hex.DecodeString(fpPk)
+		if err != nil {
+			return nil, err
+		}
+
+		fpSchnorrKey, err := schnorr.ParsePubKey(fpPkBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		fpPubKeys = append(fpPubKeys, fpSchnorrKey)
+	}
+
+	if stakingTimeBlocks <= 0 || stakingTimeBlocks > math.MaxUint16 {
+		return nil, fmt.Errorf("staking time must be positive and lower than %d", math.MaxUint16)
+	}
+
+	stakingTimeUint16 := uint16(stakingTimeBlocks)
+
+	spendTxHash, err := s.staker.SpendStakeNoDb(
+		txHash,
+		stakerAddr,
+		amount,
+		fpPubKeys,
+		stakingTimeUint16,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &SpendTxDetails{
+		TxHash: spendTxHash.String(),
+	}, nil
+}
+
 func (s *StakerService) GetRoutes() RoutesMap {
 	return RoutesMap{
 		// info AP
@@ -557,6 +619,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,fpBtcPks,stakingTimeBlocks"),
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),
+		"spend_stake_no_db":         rpc.NewRPCFunc(s.spendStakeNoDb, "stakingTxHash,stakerAddress,stakingAmount,fpBtcPks,stakingTimeBlocks"),
 		"list_staking_transactions": rpc.NewRPCFunc(s.listStakingTransactions, "offset,limit"),
 		"unbond_staking":            rpc.NewRPCFunc(s.unbondStaking, "stakingTxHash,feeRate"),
 		"withdrawable_transactions": rpc.NewRPCFunc(s.withdrawableTransactions, "offset,limit"),
