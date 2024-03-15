@@ -132,7 +132,9 @@ func (m *BabylonMsgSender) sendDelegationAsync(stakingTxHash *chainhash.Hash, re
 		defer m.s.Release(1)
 		defer m.wg.Done()
 		// TODO pass context to delegate
+		m.logger.Info("Sending delegation to babylon")
 		txResp, err := m.cl.Delegate(req.dg)
+		m.logger.Info("Delegation sent to babylon and included in block")
 
 		if err != nil {
 			if errors.Is(err, ErrInvalidBabylonExecution) {
@@ -151,6 +153,7 @@ func (m *BabylonMsgSender) sendDelegationAsync(stakingTxHash *chainhash.Hash, re
 
 			req.ErrorChan() <- fmt.Errorf("failed to send delegation for tx with hash: %s: %w", stakingTxHash.String(), err)
 		}
+		m.logger.Info("putting response on the channel")
 		req.ResultChan() <- txResp
 	}()
 }

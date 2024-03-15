@@ -400,13 +400,17 @@ func (bc *BabylonController) reliablySendMsgs(
 	msgs []sdk.Msg,
 ) (*pv.RelayerTxResponse, error) {
 	// TODO Empty errors ??
+	bc.logger.Info("Reliably sending messages to babylon in babylon client.")
 	return bc.bbnClient.ReliablySendMsgs(context.Background(), msgs, []*sdkErr.Error{}, []*sdkErr.Error{})
 }
 
 // TODO: for now return sdk.TxResponse, it will ease up debugging/testing
 // ultimately we should create our own type ate
 func (bc *BabylonController) Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error) {
-	delegateMsg, err := delegationDataToMsg(bc.getTxSigner(), dg)
+	bc.logger.Info("Getting tx signer")
+	signer := bc.getTxSigner()
+
+	delegateMsg, err := delegationDataToMsg(signer, dg)
 
 	if err != nil {
 		return nil, err
@@ -706,10 +710,10 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 
 		var udi *UndelegationInfo = nil
 
-		if resp.UndelegationInfo != nil {
+		if resp.BtcDelegation.UndelegationResponse != nil {
 			var coventSigInfos []CovenantSignatureInfo
 
-			for _, covenantSigInfo := range resp.UndelegationInfo.CovenantUnbondingSigList {
+			for _, covenantSigInfo := range resp.BtcDelegation.UndelegationResponse.CovenantUnbondingSigList {
 				covSig := covenantSigInfo
 				sig, err := covSig.Sig.ToBTCSig()
 
@@ -733,25 +737,25 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 				coventSigInfos = append(coventSigInfos, sigInfo)
 			}
 
-			tx, err := bbntypes.NewBTCTxFromBytes(resp.UndelegationInfo.UnbondingTx)
+			tx, _, err := bbntypes.NewBTCTxFromHex(resp.BtcDelegation.UndelegationResponse.UnbondingTxHex)
 
 			if err != nil {
 				return retry.Unrecoverable(fmt.Errorf("malformed unbonding transaction: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
 			}
 
-			if resp.UnbondingTime > math.MaxUint16 {
-				return retry.Unrecoverable(fmt.Errorf("malformed unbonding time: %d: %w", resp.UnbondingTime, ErrInvalidValueReceivedFromBabylonNode))
+			if resp.BtcDelegation.UnbondingTime > math.MaxUint16 {
+				return retry.Unrecoverable(fmt.Errorf("malformed unbonding time: %d: %w", resp.BtcDelegation.UnbondingTime, ErrInvalidValueReceivedFromBabylonNode))
 			}
 
 			udi = &UndelegationInfo{
 				UnbondingTransaction:        tx,
 				CovenantUnbondingSignatures: coventSigInfos,
-				UnbondingTime:               uint16(resp.UnbondingTime),
+				UnbondingTime:               uint16(resp.BtcDelegation.UnbondingTime),
 			}
 		}
 
 		di = &DelegationInfo{
-			Active:           resp.Active,
+			Active:           resp.BtcDelegation.Active,
 			UndelegationInfo: udi,
 		}
 		return nil
@@ -803,7 +807,7 @@ func (bc *BabylonController) SubmitCovenantSig(
 	return bc.reliablySendMsgs([]sdk.Msg{msg})
 }
 
-func (bc *BabylonController) QueryPendingBTCDelegations() ([]*btcstypes.BTCDelegation, error) {
+func (bc *BabylonController) QueryPendingBTCDelegations() ([]*btcstypes.BTCDelegationResponse, error) {
 	ctx, cancel := getQueryContext(bc.cfg.Timeout)
 	defer cancel()
 

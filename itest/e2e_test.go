@@ -105,7 +105,11 @@ func defaultStakerConfig(t *testing.T, passphrase string) (*stakercfg.Config, *r
 
 	defaultConfig.StakerConfig.BabylonStallingInterval = 1 * time.Second
 	defaultConfig.StakerConfig.UnbondingTxCheckInterval = 1 * time.Second
-	defaultConfig.StakerConfig.MaxConcurrentTransactions = 5
+
+	// TODO: After bumping relayer version sending transactions concurrently fails wih
+	// fatal error: concurrent map writes
+	// For now diable concurrent sends but this need to be sorted out
+	defaultConfig.StakerConfig.MaxConcurrentTransactions = 1
 
 	testRpcClient, err := rpcclient.New(&rpcclient.ConnConfig{
 		Host:                 bitcoindHost,
@@ -772,10 +776,13 @@ func (tm *TestManager) insertAllMinedBlocksToBabylon(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcstypes.BTCDelegation) {
-	slashingTx := btcDel.SlashingTx
-	stakingTx := btcDel.StakingTx
-	stakingMsgTx, err := bbntypes.NewBTCTxFromBytes(stakingTx)
+func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcstypes.BTCDelegationResponse) {
+	slashingTxBytes, err := hex.DecodeString(btcDel.SlashingTxHex)
+	require.NoError(t, err)
+
+	slashingTx := btcstypes.BTCSlashingTx(slashingTxBytes)
+	stakingTx := btcDel.StakingTxHex
+	stakingMsgTx, _, err := bbntypes.NewBTCTxFromHex(stakingTx)
 	require.NoError(t, err)
 
 	cl := tm.Sa.BabylonController()
@@ -788,7 +795,7 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 		[]*btcec.PublicKey{btcDel.FpBtcPkList[0].MustToBTCPK()},
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,
-		btcDel.GetStakingTime(),
+		uint16(btcDel.EndHeight-btcDel.StartHeight),
 		btcutil.Amount(btcDel.TotalSat),
 		regtestParams,
 	)
@@ -805,7 +812,7 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 	valEncKey, err := asig.NewEncryptionKeyFromBTCPK(btcDel.FpBtcPkList[0].MustToBTCPK())
 	require.NoError(t, err)
 
-	unbondingMsgTx, err := bbntypes.NewBTCTxFromBytes(btcDel.BtcUndelegation.UnbondingTx)
+	unbondingMsgTx, _, err := bbntypes.NewBTCTxFromHex(btcDel.UndelegationResponse.UnbondingTxHex)
 	require.NoError(t, err)
 	unbondingInfo, err := staking.BuildUnbondingInfo(
 		btcDel.BtcPk.MustToBTCPK(),
@@ -838,7 +845,11 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 	// slashing unbonding tx sig
 	unbondingTxSlashingPathInfo, err := unbondingInfo.SlashingPathSpendInfo()
 	require.NoError(t, err)
-	covenantAdaptorUnbondingSlashing1, err := btcDel.BtcUndelegation.SlashingTx.EncSign(
+	unbondingSlashingTxBytes, err := hex.DecodeString(btcDel.UndelegationResponse.SlashingTxHex)
+	require.NoError(t, err)
+	unbondingSlashingTx := btcstypes.BTCSlashingTx(unbondingSlashingTxBytes)
+
+	covenantAdaptorUnbondingSlashing1, err := unbondingSlashingTx.EncSign(
 		unbondingMsgTx,
 		0,
 		unbondingTxSlashingPathInfo.RevealedLeaf.Script,
@@ -875,7 +886,7 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcs
 
 	// slashing unbonding tx sig
 
-	covenantAdaptorUnbondingSlashing2, err := btcDel.BtcUndelegation.SlashingTx.EncSign(
+	covenantAdaptorUnbondingSlashing2, err := unbondingSlashingTx.EncSign(
 		unbondingMsgTx,
 		0,
 		unbondingTxSlashingPathInfo.RevealedLeaf.Script,
