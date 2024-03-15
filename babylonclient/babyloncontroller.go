@@ -400,14 +400,12 @@ func (bc *BabylonController) reliablySendMsgs(
 	msgs []sdk.Msg,
 ) (*pv.RelayerTxResponse, error) {
 	// TODO Empty errors ??
-	bc.logger.Info("Reliably sending messages to babylon in babylon client.")
 	return bc.bbnClient.ReliablySendMsgs(context.Background(), msgs, []*sdkErr.Error{}, []*sdkErr.Error{})
 }
 
 // TODO: for now return sdk.TxResponse, it will ease up debugging/testing
 // ultimately we should create our own type ate
 func (bc *BabylonController) Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error) {
-	bc.logger.Info("Getting tx signer")
 	signer := bc.getTxSigner()
 
 	delegateMsg, err := delegationDataToMsg(signer, dg)
