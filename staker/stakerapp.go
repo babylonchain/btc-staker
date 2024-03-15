@@ -1015,9 +1015,7 @@ func (app *StakerApp) buildAndSendDelegation(
 	if err != nil {
 		return nil, nil, err
 	}
-
 	resp, err := app.babylonMsgSender.SendDelegation(delegation, req.requiredInclusionBlockDepth)
-
 	if err != nil {
 		return nil, nil, err
 	}
