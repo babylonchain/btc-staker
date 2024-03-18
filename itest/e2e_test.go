@@ -805,92 +805,72 @@ func (tm *TestManager) insertAllMinedBlocksToBabylon(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, resp *btcstypes.BTCDelegationResponse) {
-	stakingTx, err := hex.DecodeString(resp.StakingTxHex)
+func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, btcDel *btcstypes.BTCDelegationResponse) {
+	fpBTCPKs, err := bbntypes.NewBTCPKsFromBIP340PKs(btcDel.FpBtcPkList)
 	require.NoError(t, err)
-	slashingTx, err := btcstypes.NewBTCSlashingTxFromHex(resp.SlashingTxHex)
+
+	slashingTxBytes, err := hex.DecodeString(btcDel.SlashingTxHex)
 	require.NoError(t, err)
-	slashingSig, err := bbntypes.NewBIP340SignatureFromHex(resp.DelegatorSlashSigHex)
+	slashingTx := btcstypes.BTCSlashingTx(slashingTxBytes)
+	stakingTx := btcDel.StakingTxHex
+	stakingMsgTx, _, err := bbntypes.NewBTCTxFromHex(stakingTx)
 	require.NoError(t, err)
-	unbondingTx, err := hex.DecodeString(resp.UndelegationResponse.UnbondingTxHex)
-	require.NoError(t, err)
-	unbondingSlashingTx, err := btcstypes.NewBTCSlashingTxFromHex(resp.UndelegationResponse.SlashingTxHex)
-	require.NoError(t, err)
-	delUnbondingSlashingSig, err := bbntypes.NewBIP340SignatureFromHex(resp.UndelegationResponse.DelegatorSlashingSigHex)
-	require.NoError(t, err)
-	btcDel := &btcstypes.BTCDelegation{
-		BtcPk:            resp.BtcPk,
-		FpBtcPkList:      resp.FpBtcPkList,
-		StartHeight:      resp.StartHeight,
-		EndHeight:        resp.EndHeight,
-		TotalSat:         resp.TotalSat,
-		StakingTx:        stakingTx,
-		StakingOutputIdx: resp.StakingOutputIdx,
-		SlashingTx:       slashingTx,
-		DelegatorSig:     slashingSig,
-		CovenantSigs:     resp.CovenantSigs,
-		UnbondingTime:    resp.UnbondingTime,
-		BtcUndelegation: &btcstypes.BTCUndelegation{
-			UnbondingTx:              unbondingTx,
-			SlashingTx:               unbondingSlashingTx,
-			DelegatorSlashingSig:     delUnbondingSlashingSig,
-			CovenantSlashingSigs:     resp.UndelegationResponse.CovenantSlashingSigs,
-			CovenantUnbondingSigList: resp.UndelegationResponse.CovenantUnbondingSigList,
-		},
-	}
 
 	cl := tm.Sa.BabylonController()
 	params, err := cl.Params()
 	require.NoError(t, err)
 
-	bsParams := &btcstypes.Params{
-		CovenantPks:         bbntypes.NewBIP340PKsFromBTCPKs(params.CovenantPks),
-		CovenantQuorum:      params.CovenantQuruomThreshold,
-		SlashingAddress:     params.SlashingAddress.EncodeAddress(),
-		MinSlashingTxFeeSat: int64(params.MinSlashingTxFeeSat),
-		SlashingRate:        params.SlashingRate,
-		MinUnbondingTime:    uint32(params.MinUnbondingTime),
-	}
-	stakingInfo, err := btcDel.GetStakingInfo(bsParams, regtestParams)
-	require.NoError(t, err)
-
-	unbondingPathInfo, err := stakingInfo.UnbondingPathSpendInfo()
-	require.NoError(t, err)
+	stakingInfo, err := staking.BuildStakingInfo(
+		btcDel.BtcPk.MustToBTCPK(),
+		fpBTCPKs,
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
+		uint16(btcDel.EndHeight-btcDel.StartHeight),
+		btcutil.Amount(btcDel.TotalSat),
+		regtestParams,
+	)
 	slashingPathInfo, err := stakingInfo.SlashingPathSpendInfo()
 	require.NoError(t, err)
 
-	fpBTCPKs, err := bbntypes.NewBTCPKsFromBIP340PKs(resp.FpBtcPkList)
-	require.NoError(t, err)
-	stakingMsgTx, err := bbntypes.NewBTCTxFromBytes(stakingTx)
-	require.NoError(t, err)
 	covenantSlashingTxSigs, err := datagen.GenCovenantAdaptorSigs(
 		tm.CovenantPrivKeys,
 		fpBTCPKs,
 		stakingMsgTx,
 		slashingPathInfo.GetPkScriptPath(),
-		slashingTx,
+		&slashingTx,
 	)
 	require.NoError(t, err)
 
 	// slash unbonding tx spends unbonding tx
-	unbondingInfo, err := btcDel.GetUnbondingInfo(bsParams, regtestParams)
+	unbondingMsgTx, _, err := bbntypes.NewBTCTxFromHex(btcDel.UndelegationResponse.UnbondingTxHex)
 	require.NoError(t, err)
+	unbondingInfo, err := staking.BuildUnbondingInfo(
+		btcDel.BtcPk.MustToBTCPK(),
+		fpBTCPKs,
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
+		uint16(btcDel.UnbondingTime),
+		btcutil.Amount(unbondingMsgTx.TxOut[0].Value),
+		regtestParams,
+	)
 	unbondingSlashingPathInfo, err := unbondingInfo.SlashingPathSpendInfo()
 	require.NoError(t, err)
 
 	// generate all covenant signatures from all covenant members
-	unbondingMsgTx, err := bbntypes.NewBTCTxFromBytes(unbondingTx)
+	unbondingSlashingTx, err := btcstypes.NewBTCSlashingTxFromHex(btcDel.UndelegationResponse.SlashingTxHex)
 	require.NoError(t, err)
 	covenantUnbondingSlashingTxSigs, err := datagen.GenCovenantAdaptorSigs(
 		tm.CovenantPrivKeys,
 		fpBTCPKs,
 		unbondingMsgTx,
 		unbondingSlashingPathInfo.GetPkScriptPath(),
-		btcDel.BtcUndelegation.SlashingTx,
+		unbondingSlashingTx,
 	)
 	require.NoError(t, err)
 
 	// each covenant member submits signatures
+	unbondingPathInfo, err := stakingInfo.UnbondingPathSpendInfo()
+	require.NoError(t, err)
 	covUnbondingSigs, err := datagen.GenCovenantUnbondingSigs(
 		tm.CovenantPrivKeys,
 		stakingMsgTx,
@@ -900,9 +880,9 @@ func (tm *TestManager) insertCovenantSigForDelegation(t *testing.T, resp *btcsty
 	)
 	require.NoError(t, err)
 
-	for i := 0; i < len(bsParams.CovenantPks); i++ {
+	for i := 0; i < len(tm.CovenantPrivKeys); i++ {
 		_, err = tm.BabylonClient.SubmitCovenantSig(
-			&bsParams.CovenantPks[i],
+			bbntypes.NewBIP340PubKeyFromBTCPK(tm.CovenantPrivKeys[i].PubKey()),
 			stakingMsgTx.TxHash().String(),
 			covenantSlashingTxSigs[i].AdaptorSigs,
 			bbntypes.NewBIP340SignatureFromBTCSig(covUnbondingSigs[i]),
