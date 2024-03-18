@@ -1422,7 +1422,7 @@ func TestSendingStakingTransaction_Restaking(t *testing.T) {
 	// Mature output is out which has 100 confirmations, which means 200mature outputs
 	// will generate 300 blocks
 	numMatureOutputs := uint32(200)
-	tm := StartManager(t, numMatureOutputs, 2, nil)
+	tm := StartManager(t, numMatureOutputs)
 	defer tm.Stop(t)
 	tm.insertAllMinedBlocksToBabylon(t)
 
