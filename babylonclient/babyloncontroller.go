@@ -585,6 +585,7 @@ func (bc *BabylonController) QueryFinalityProvider(btcPubKey *btcec.PublicKey) (
 		bscResp, bscErr := bscQueryClient.FinalityProvider(
 			ctx,
 			&bsctypes.QueryFinalityProviderRequest{
+				ChainId:    "test-consumer-chain", // TODO: don't hardcode
 				FpBtcPkHex: hexPubKey,
 			},
 		)
