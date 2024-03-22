@@ -37,6 +37,7 @@ const (
 	stakingTimeBlocksFlag      = "staking-time"
 	stakingTransactionHashFlag = "staking-transaction-hash"
 	feeRateFlag                = "fee-rate"
+	stakerAddressFlag          = "staker-address"
 )
 
 var (
@@ -322,7 +323,7 @@ func stake(ctx *cli.Context) error {
 	stakerAddress := ctx.String(stakerAddressFlag)
 	stakingAmount := ctx.Int64(stakingAmountFlag)
 	fpPks := ctx.StringSlice(fpPksFlag)
-	stakingTimeBlocks := ctx.Int64(stakingTimeFlag)
+	stakingTimeBlocks := ctx.Int64(stakingTimeBlocksFlag)
 
 	results, err := client.Stake(sctx, stakerAddress, stakingAmount, fpPks, stakingTimeBlocks)
 	if err != nil {
