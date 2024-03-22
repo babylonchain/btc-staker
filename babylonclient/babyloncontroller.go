@@ -589,11 +589,11 @@ func (bc *BabylonController) QueryFinalityProvider(btcPubKey *btcec.PublicKey) (
 			},
 		)
 		if err == nil {
-			slashedHeight = resp.FinalityProvider.Height
+			slashedHeight = resp.FinalityProvider.SlashedBabylonHeight
 			pk = resp.FinalityProvider.BtcPk
 			babylonPK = resp.FinalityProvider.BabylonPk
 		} else if bscErr == nil {
-			slashedHeight = bscResp.FinalityProvider.Height
+			slashedHeight = bscResp.FinalityProvider.SlashedBabylonHeight
 			pk = bscResp.FinalityProvider.BtcPk
 			babylonPK = bscResp.FinalityProvider.BabylonPk
 		} else {
