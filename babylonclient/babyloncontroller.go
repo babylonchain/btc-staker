@@ -16,6 +16,7 @@ import (
 	bcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
 	btclctypes "github.com/babylonchain/babylon/x/btclightclient/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
+	bsctypes "github.com/babylonchain/babylon/x/btcstkconsumer/types"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/babylonchain/btc-staker/utils"
@@ -563,28 +564,63 @@ func (bc *BabylonController) QueryFinalityProvider(btcPubKey *btcec.PublicKey) (
 	defer cancel()
 
 	clientCtx := client.Context{Client: bc.bbnClient.RPCClient}
+
 	queryClient := btcstypes.NewQueryClient(clientCtx)
+	bscQueryClient := bsctypes.NewQueryClient(clientCtx)
 
 	hexPubKey := hex.EncodeToString(schnorr.SerializePubKey(btcPubKey))
 
-	var response *btcstypes.QueryFinalityProviderResponse
+	var (
+		slashedHeight uint64
+		pk            *bbntypes.BIP340PubKey
+		babylonPK     *secp256k1.PubKey
+	)
 	if err := retry.Do(func() error {
+		// check if the finality provider is a Babylon one
 		resp, err := queryClient.FinalityProvider(
 			ctx,
 			&btcstypes.QueryFinalityProviderRequest{
 				FpBtcPkHex: hexPubKey,
 			},
 		)
-		if err != nil {
-			if strings.Contains(err.Error(), btcstypes.ErrFpNotFound.Error()) {
-				// if there is no finality provider with such key, we return unrecoverable error, as we not need to retry any more
-				return retry.Unrecoverable(fmt.Errorf("failed to get finality provider with key: %s: %w", hexPubKey, ErrFinalityProviderDoesNotExist))
-			}
-
-			return err
+		if err == nil {
+			slashedHeight = resp.FinalityProvider.SlashedBabylonHeight
+			pk = resp.FinalityProvider.BtcPk
+			babylonPK = resp.FinalityProvider.BabylonPk
+			return nil
 		}
-		response = resp
-		return nil
+
+		// check if the finality provider is a consumer chain one
+		bscResp, bscErr := bscQueryClient.FinalityProviderChain(
+			ctx,
+			&bsctypes.QueryFinalityProviderChainRequest{
+				FpBtcPkHex: hexPubKey,
+			},
+		)
+		if bscErr == nil {
+			consumerFPResp, consumerFPErr := bscQueryClient.FinalityProvider(
+				ctx,
+				&bsctypes.QueryFinalityProviderRequest{
+					ChainId:    bscResp.ChainId,
+					FpBtcPkHex: hexPubKey,
+				},
+			)
+			if consumerFPErr != nil {
+				return consumerFPErr
+			}
+			slashedHeight = consumerFPResp.FinalityProvider.SlashedBabylonHeight
+			pk = consumerFPResp.FinalityProvider.BtcPk
+			babylonPK = consumerFPResp.FinalityProvider.BabylonPk
+			return nil
+		}
+
+		// the finality provider cannot be found
+		if strings.Contains(err.Error(), btcstypes.ErrFpNotFound.Error()) &&
+			strings.Contains(bscErr.Error(), btcstypes.ErrFpNotFound.Error()) {
+			// if there is no finality provider with such key, we return unrecoverable error, as we not need to retry any more
+			return retry.Unrecoverable(fmt.Errorf("failed to get finality provider with key: %s: %w", hexPubKey, ErrFinalityProviderDoesNotExist))
+		}
+		return err
 	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
 		bc.logger.WithFields(logrus.Fields{
 			"attempt":      n + 1,
@@ -596,11 +632,11 @@ func (bc *BabylonController) QueryFinalityProvider(btcPubKey *btcec.PublicKey) (
 		return nil, err
 	}
 
-	if response.FinalityProvider.SlashedBabylonHeight > 0 {
+	if slashedHeight > 0 {
 		return nil, fmt.Errorf("failed to get finality provider with key: %s: %w", hexPubKey, ErrFinalityProviderIsSlashed)
 	}
 
-	btcPk, err := response.FinalityProvider.BtcPk.ToBTCPK()
+	btcPk, err := pk.ToBTCPK()
 
 	if err != nil {
 		return nil, fmt.Errorf("received malformed btc pk in babylon response: %w", err)
@@ -608,7 +644,7 @@ func (bc *BabylonController) QueryFinalityProvider(btcPubKey *btcec.PublicKey) (
 
 	return &FinalityProviderClientResponse{
 		FinalityProvider: FinalityProviderInfo{
-			BabylonPk: *response.FinalityProvider.BabylonPk,
+			BabylonPk: *babylonPK,
 			BtcPk:     *btcPk,
 		},
 	}, nil
@@ -668,11 +704,12 @@ func chainToChainBytes(chain []*wire.BlockHeader) []bbntypes.BTCHeaderBytes {
 	return chainBytes
 }
 
+// Test methods for e2e testing
 // RegisterFinalityProvider registers a BTC finality provider via a MsgCreateFinalityProvider to Babylon
 // it returns tx hash and error
 func (bc *BabylonController) RegisterFinalityProvider(
 	bbnPubKey *secp256k1.PubKey, btcPubKey *bbntypes.BIP340PubKey, commission *sdkmath.LegacyDec,
-	description *sttypes.Description, pop *btcstypes.ProofOfPossession) (*pv.RelayerTxResponse, error) {
+	description *sttypes.Description, pop *btcstypes.ProofOfPossession, chainID string) (*pv.RelayerTxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateFinalityProvider{
 		Signer:      bc.getTxSigner(),
 		Commission:  commission,
@@ -680,6 +717,7 @@ func (bc *BabylonController) RegisterFinalityProvider(
 		BtcPk:       btcPubKey,
 		Description: description,
 		Pop:         pop,
+		ChainId:     chainID,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{registerMsg})
@@ -800,6 +838,18 @@ func (bc *BabylonController) SubmitCovenantSig(
 		SlashingTxSigs:          slashStakingAdaptorSigs,
 		UnbondingTxSig:          unbondindgSig,
 		SlashingUnbondingTxSigs: slashUnbondingAdaptorSigs,
+	}
+
+	return bc.reliablySendMsgs([]sdk.Msg{msg})
+}
+
+// Test methods for e2e testing
+func (bc *BabylonController) RegisterConsumerChain(id, name, description string) (*pv.RelayerTxResponse, error) {
+	msg := &bsctypes.MsgRegisterChain{
+		Signer:           bc.getTxSigner(),
+		ChainId:          id,
+		ChainName:        name,
+		ChainDescription: description,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{msg})
