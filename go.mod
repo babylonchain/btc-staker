@@ -348,6 +348,6 @@ require (
 )
 
 replace (
-	github.com/babylonchain/babylon => github.com/babylonchain/babylon-private v0.0.0-20240322000016-21759718ea2a
+	github.com/babylonchain/babylon => github.com/babylonchain/babylon-private v0.8.6-0.20240322095331-1ebc154d8e32
 	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
 )

@@ -576,16 +576,10 @@ func (bc *BabylonController) QueryFinalityProvider(btcPubKey *btcec.PublicKey) (
 		babylonPK     *secp256k1.PubKey
 	)
 	if err := retry.Do(func() error {
+		// check if the finality provider is a Babylon one
 		resp, err := queryClient.FinalityProvider(
 			ctx,
 			&btcstypes.QueryFinalityProviderRequest{
-				FpBtcPkHex: hexPubKey,
-			},
-		)
-		bscResp, bscErr := bscQueryClient.FinalityProvider(
-			ctx,
-			&bsctypes.QueryFinalityProviderRequest{
-				ChainId:    "test-consumer-chain", // TODO: don't hardcode
 				FpBtcPkHex: hexPubKey,
 			},
 		)
@@ -593,20 +587,40 @@ func (bc *BabylonController) QueryFinalityProvider(btcPubKey *btcec.PublicKey) (
 			slashedHeight = resp.FinalityProvider.SlashedBabylonHeight
 			pk = resp.FinalityProvider.BtcPk
 			babylonPK = resp.FinalityProvider.BabylonPk
-		} else if bscErr == nil {
-			slashedHeight = bscResp.FinalityProvider.SlashedBabylonHeight
-			pk = bscResp.FinalityProvider.BtcPk
-			babylonPK = bscResp.FinalityProvider.BabylonPk
-		} else {
-			if strings.Contains(err.Error(), btcstypes.ErrFpNotFound.Error()) &&
-				strings.Contains(bscErr.Error(), btcstypes.ErrFpNotFound.Error()) {
-				// if there is no finality provider with such key, we return unrecoverable error, as we not need to retry any more
-				return retry.Unrecoverable(fmt.Errorf("failed to get finality provider with key: %s: %w", hexPubKey, ErrFinalityProviderDoesNotExist))
-			}
-			return err
+			return nil
 		}
 
-		return nil
+		// check if the finality provider is a consumer chain one
+		bscResp, bscErr := bscQueryClient.FinalityProviderChain(
+			ctx,
+			&bsctypes.QueryFinalityProviderChainRequest{
+				FpBtcPkHex: hexPubKey,
+			},
+		)
+		if bscErr == nil {
+			consumerFPResp, consumerFPErr := bscQueryClient.FinalityProvider(
+				ctx,
+				&bsctypes.QueryFinalityProviderRequest{
+					ChainId:    bscResp.ChainId,
+					FpBtcPkHex: hexPubKey,
+				},
+			)
+			if consumerFPErr != nil {
+				return consumerFPErr
+			}
+			slashedHeight = consumerFPResp.FinalityProvider.SlashedBabylonHeight
+			pk = consumerFPResp.FinalityProvider.BtcPk
+			babylonPK = consumerFPResp.FinalityProvider.BabylonPk
+			return nil
+		}
+
+		// the finality provider cannot be found
+		if strings.Contains(err.Error(), btcstypes.ErrFpNotFound.Error()) &&
+			strings.Contains(bscErr.Error(), btcstypes.ErrFpNotFound.Error()) {
+			// if there is no finality provider with such key, we return unrecoverable error, as we not need to retry any more
+			return retry.Unrecoverable(fmt.Errorf("failed to get finality provider with key: %s: %w", hexPubKey, ErrFinalityProviderDoesNotExist))
+		}
+		return err
 	}, RtyAtt, RtyDel, RtyErr, retry.OnRetry(func(n uint, err error) {
 		bc.logger.WithFields(logrus.Fields{
 			"attempt":      n + 1,
