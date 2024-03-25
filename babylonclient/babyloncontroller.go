@@ -704,11 +704,12 @@ func chainToChainBytes(chain []*wire.BlockHeader) []bbntypes.BTCHeaderBytes {
 	return chainBytes
 }
 
+// Test methods for e2e testing
 // RegisterFinalityProvider registers a BTC finality provider via a MsgCreateFinalityProvider to Babylon
 // it returns tx hash and error
 func (bc *BabylonController) RegisterFinalityProvider(
 	bbnPubKey *secp256k1.PubKey, btcPubKey *bbntypes.BIP340PubKey, commission *sdkmath.LegacyDec,
-	description *sttypes.Description, pop *btcstypes.ProofOfPossession) (*pv.RelayerTxResponse, error) {
+	description *sttypes.Description, pop *btcstypes.ProofOfPossession, chainID string) (*pv.RelayerTxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateFinalityProvider{
 		Signer:      bc.getTxSigner(),
 		Commission:  commission,
@@ -716,6 +717,7 @@ func (bc *BabylonController) RegisterFinalityProvider(
 		BtcPk:       btcPubKey,
 		Description: description,
 		Pop:         pop,
+		ChainId:     chainID,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{registerMsg})
@@ -836,6 +838,18 @@ func (bc *BabylonController) SubmitCovenantSig(
 		SlashingTxSigs:          slashStakingAdaptorSigs,
 		UnbondingTxSig:          unbondindgSig,
 		SlashingUnbondingTxSigs: slashUnbondingAdaptorSigs,
+	}
+
+	return bc.reliablySendMsgs([]sdk.Msg{msg})
+}
+
+// Test methods for e2e testing
+func (bc *BabylonController) RegisterConsumerChain(id, name, description string) (*pv.RelayerTxResponse, error) {
+	msg := &bsctypes.MsgRegisterChain{
+		Signer:           bc.getTxSigner(),
+		ChainId:          id,
+		ChainName:        name,
+		ChainDescription: description,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{msg})

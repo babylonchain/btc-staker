@@ -448,6 +448,7 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 				Moniker: "tester",
 			},
 			pop,
+			"", // Babylon finality provider
 		)
 
 		resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
