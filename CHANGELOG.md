@@ -1,15 +1,26 @@
 # Changelog
 
-## [Unreleased](https://github.com/babylonchain/btc-staker/tree/HEAD)
+## [euphrates-0.1.0-rc.0](https://github.com/babylonchain/btc-staker/tree/euphrates-0.1.0-rc.0) (2024-03-26)
 
-[Full Changelog](https://github.com/babylonchain/btc-staker/compare/v0.1.0...HEAD)
+[Full Changelog](https://github.com/babylonchain/btc-staker/compare/v0.1.0...euphrates-0.1.0-rc.0)
 
 **Closed issues:**
 
+- restaking: support restaking to consumer chain FPs [\#126](https://github.com/babylonchain/btc-staker/issues/126)
+- testing restaking support [\#124](https://github.com/babylonchain/btc-staker/issues/124)
+- Faucet scarcity  [\#118](https://github.com/babylonchain/btc-staker/issues/118)
 - Stakerd init fails if directory doesn't exist [\#108](https://github.com/babylonchain/btc-staker/issues/108)
 
 **Merged pull requests:**
 
+- e2e test for restaking [\#125](https://github.com/babylonchain/btc-staker/pull/125) ([SebastianElvis](https://github.com/SebastianElvis))
+- Add cli command to verify whether tx is valid phase1 staking tx [\#123](https://github.com/babylonchain/btc-staker/pull/123) ([KonradStaniec](https://github.com/KonradStaniec))
+- Bump babylon version [\#121](https://github.com/babylonchain/btc-staker/pull/121) ([KonradStaniec](https://github.com/KonradStaniec))
+- Add possiblity to send concurrent transactions [\#117](https://github.com/babylonchain/btc-staker/pull/117) ([KonradStaniec](https://github.com/KonradStaniec))
+- Add metrics [\#115](https://github.com/babylonchain/btc-staker/pull/115) ([KonradStaniec](https://github.com/KonradStaniec))
+- Switch e2e test to use bitcoind instead of btcd/btcd wallet combo [\#114](https://github.com/babylonchain/btc-staker/pull/114) ([KonradStaniec](https://github.com/KonradStaniec))
+- chore: Increase staking time in docs [\#113](https://github.com/babylonchain/btc-staker/pull/113) ([vitsalis](https://github.com/vitsalis))
+- Add CHANGELOG [\#112](https://github.com/babylonchain/btc-staker/pull/112) ([maurolacy](https://github.com/maurolacy))
 - Bitcoind tests [\#110](https://github.com/babylonchain/btc-staker/pull/110) ([KonradStaniec](https://github.com/KonradStaniec))
 - docs: Incorporate validator feedback [\#109](https://github.com/babylonchain/btc-staker/pull/109) ([gusin13](https://github.com/gusin13))
 - Bump staker to stable babylon version [\#106](https://github.com/babylonchain/btc-staker/pull/106) ([KonradStaniec](https://github.com/KonradStaniec))
