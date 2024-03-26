@@ -80,10 +80,12 @@ func DefaultWalletConfig() WalletConfig {
 }
 
 type WalletRpcConfig struct {
-	Host       string `long:"wallethost" description:"location of the wallet rpc server"`
-	User       string `long:"walletuser" description:"user auth for the wallet rpc server"`
-	Pass       string `long:"walletpassword" description:"password auth for the wallet rpc server"`
-	DisableTls bool   `long:"noclienttls" description:"disables tls for the wallet rpc client"`
+	Host             string `long:"wallethost" description:"location of the wallet rpc server"`
+	User             string `long:"walletuser" description:"user auth for the wallet rpc server"`
+	Pass             string `long:"walletpassword" description:"password auth for the wallet rpc server"`
+	DisableTls       bool   `long:"noclienttls" description:"disables tls for the wallet rpc client"`
+	RPCWalletCert    string `long:"rpcwalletcert" description:"File containing the wallet daemon's certificate file"`
+	RawRPCWalletCert string `long:"rawrpcwalletcert" description:"The raw bytes of the wallet daemon's PEM-encoded certificate chain which will be used to authenticate the RPC connection."`
 }
 
 func DefaultWalletRpcConfig() WalletRpcConfig {
