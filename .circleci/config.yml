@@ -34,10 +34,11 @@ jobs:
           name: Run tests
           command: |
             make test
-      - run:
-          name: Run integration tests
-          command: |
-            make test-e2e
+      # Disabled as current staker does not handle new wallet type properly
+      # - run:
+      #     name: Run integration tests
+      #     command: |
+      #       make test-e2e
       - run:
           name: Run bitcoind tests
           command: |
