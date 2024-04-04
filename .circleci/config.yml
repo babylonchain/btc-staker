@@ -38,6 +38,10 @@ jobs:
           name: Run integration tests
           command: |
             make test-e2e
+      - run:
+          name: Run bitcoind tests
+          command: |
+            make test-bitcoind
 
   build_docker:
     machine:
