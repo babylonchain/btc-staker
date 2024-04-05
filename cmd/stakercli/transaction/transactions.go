@@ -1,4 +1,4 @@
-package main
+package transaction
 
 import (
 	"encoding/hex"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/babylonchain/babylon/btcstaking"
 	bbn "github.com/babylonchain/babylon/types"
+	"github.com/babylonchain/btc-staker/cmd/stakercli/helpers"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -15,7 +16,6 @@ import (
 )
 
 const (
-	stakingAmountFlag       = "staking-amount"
 	stakingTransactionFlag  = "staking-transaction"
 	magicBytesFlag          = "magic-bytes"
 	covenantMembersPksFlag  = "covenant-committee-pks"
@@ -25,7 +25,7 @@ const (
 	finalityProviderKeyFlag = "finality-provider-pk"
 )
 
-var transactionCommands = []cli.Command{
+var TransactionCommands = []cli.Command{
 	{
 		Name:      "transaction",
 		ShortName: "tr",
@@ -96,7 +96,7 @@ func parseMagicBytesFromCliCtx(ctx *cli.Context) ([]byte, error) {
 }
 
 func parseStakingAmountFromCliCtx(ctx *cli.Context) (btcutil.Amount, error) {
-	amt := ctx.Int64(stakingAmountFlag)
+	amt := ctx.Int64(helpers.StakingAmountFlag)
 
 	if amt <= 0 {
 		return 0, fmt.Errorf("staking amount should be greater than 0")
@@ -106,7 +106,7 @@ func parseStakingAmountFromCliCtx(ctx *cli.Context) (btcutil.Amount, error) {
 }
 
 func parseStakingTimeBlocksFromCliCtx(ctx *cli.Context) (uint16, error) {
-	timeBlocks := ctx.Int64(stakingTimeBlocksFlag)
+	timeBlocks := ctx.Int64(helpers.StakingTimeBlocksFlag)
 
 	if timeBlocks <= 0 {
 		return 0, fmt.Errorf("staking time blocks should be greater than 0")
@@ -215,12 +215,12 @@ var createPhase1StakingTransactionCmd = cli.Command{
 			Required: true,
 		},
 		cli.Int64Flag{
-			Name:     stakingAmountFlag,
+			Name:     helpers.StakingAmountFlag,
 			Usage:    "Staking amount in satoshis",
 			Required: true,
 		},
 		cli.Int64Flag{
-			Name:     stakingTimeBlocksFlag,
+			Name:     helpers.StakingTimeBlocksFlag,
 			Usage:    "Staking time in BTC blocks",
 			Required: true,
 		},
@@ -324,7 +324,7 @@ func createPhase1StakingTransaction(ctx *cli.Context) error {
 		StakingTxHex: hex.EncodeToString(serializedTx),
 	}
 
-	printRespJSON(resp)
+	helpers.PrintRespJSON(resp)
 
 	return nil
 }
