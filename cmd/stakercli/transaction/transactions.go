@@ -259,10 +259,11 @@ var createPhase1StakingTransactionCmd = cli.Command{
 }
 
 var createPhase1StakingTransactionFromJsonCmd = cli.Command{
-	Name:      "create-phase1-staking-transaction-json",
-	ShortName: "crpst",
-	Usage:     "Creates unsigned and unfunded phase 1 staking transaction",
-	Action:    createPhase1StakingTransactionFromJson,
+	Name:        "create-phase1-staking-transaction-json",
+	ShortName:   "crpstjson",
+	Usage:       "stakercli transaction create-phase1-staking-transaction-json [fullpath/to/inputBtcStakingTx.json]",
+	Description: "Creates unsigned and unfunded phase 1 staking transaction",
+	Action:      createPhase1StakingTransactionFromJson,
 }
 
 type CreatePhase1StakingTxResponse struct {
