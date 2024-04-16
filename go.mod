@@ -9,7 +9,6 @@ require (
 	cosmossdk.io/math v1.3.0
 	github.com/avast/retry-go/v4 v4.5.1
 	github.com/babylonchain/babylon v0.8.6-0.20240416015120-ffeb9c5b930b
-	github.com/babylonchain/rpc-client v0.8.0-rc.0.0.20240416112010-592a731843a8
 	github.com/btcsuite/btcd v0.24.0
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/btcsuite/btcd/btcutil v1.1.5
@@ -256,6 +255,7 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
+	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/rogpeppe/fastuuid v1.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/rs/cors v1.8.3 // indirect
