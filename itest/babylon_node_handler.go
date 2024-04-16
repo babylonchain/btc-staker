@@ -147,6 +147,7 @@ func NewBabylonNodeHandler(
 		"--btc-finalization-timeout=4",
 		"--btc-confirmation-depth=2",
 		"--btc-network=regtest",
+		fmt.Sprintf("--epoch-interval=%d", 5),
 		fmt.Sprintf("--slashing-address=%s", slashingAddress),
 		fmt.Sprintf("--btc-base-header=%s", baseHeaderHex),
 		"--additional-sender-account",
