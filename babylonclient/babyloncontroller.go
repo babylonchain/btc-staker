@@ -672,14 +672,15 @@ func chainToChainBytes(chain []*wire.BlockHeader) []bbntypes.BTCHeaderBytes {
 // it returns tx hash and error
 func (bc *BabylonController) RegisterFinalityProvider(
 	bbnPubKey *secp256k1.PubKey, btcPubKey *bbntypes.BIP340PubKey, commission *sdkmath.LegacyDec,
-	description *sttypes.Description, pop *btcstypes.ProofOfPossession) (*pv.RelayerTxResponse, error) {
+	description *sttypes.Description, pop *btcstypes.ProofOfPossession, masterPubRand string) (*pv.RelayerTxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateFinalityProvider{
-		Signer:      bc.getTxSigner(),
-		Commission:  commission,
-		BabylonPk:   bbnPubKey,
-		BtcPk:       btcPubKey,
-		Description: description,
-		Pop:         pop,
+		Signer:        bc.getTxSigner(),
+		Commission:    commission,
+		BabylonPk:     bbnPubKey,
+		BtcPk:         btcPubKey,
+		Description:   description,
+		Pop:           pop,
+		MasterPubRand: masterPubRand,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{registerMsg})

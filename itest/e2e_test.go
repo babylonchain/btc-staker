@@ -6,6 +6,8 @@ package e2etest
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"math/rand"
@@ -19,6 +21,7 @@ import (
 	"time"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
+	"github.com/babylonchain/babylon/crypto/eots"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
@@ -144,6 +147,7 @@ type TestManager struct {
 }
 
 type testStakingData struct {
+	ConsumerChainID                   string
 	StakerKey                         *btcec.PublicKey
 	StakerBabylonPrivKey              *secp256k1.PrivKey
 	StakerBabylonPubKey               *secp256k1.PubKey
@@ -181,6 +185,7 @@ func (tm *TestManager) getTestStakingData(
 	stakerBabylonPubKey := stakerBabylonPrivKey.PubKey().(*secp256k1.PubKey)
 
 	return &testStakingData{
+		ConsumerChainID:                   tm.Config.BabylonConfig.ChainID,
 		StakerKey:                         stakerKey,
 		StakerBabylonPrivKey:              stakerBabylonPrivKey,
 		StakerBabylonPubKey:               stakerBabylonPubKey,
@@ -439,6 +444,12 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 		resp, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
 		require.NoError(t, err)
 
+		btcPrivFpKey := testStakingData.FinalityProviderBtcPrivKeys[i]
+
+		// 4. Create derive master public randomness
+		_, mpr, err := GenerateMasterRandPair(btcPrivFpKey.Serialize(), []byte(testStakingData.ConsumerChainID))
+		require.NoError(t, err)
+
 		// register the generated finality provider
 		_, err = tm.BabylonClient.RegisterFinalityProvider(
 			testStakingData.FinalityProviderBabylonPublicKeys[i],
@@ -448,6 +459,7 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 				Moniker: "tester",
 			},
 			pop,
+			mpr.MarshalBase58(),
 		)
 
 		resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
@@ -456,6 +468,22 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 		// After registration we should have one finality provider
 		require.Len(t, resp2.FinalityProviders, len(resp.FinalityProviders)+1)
 	}
+}
+
+// GenerateRandomness generates a random scalar with the given key and src
+// the result is deterministic with each given input
+func GenerateMasterRandPair(key []byte, chainID []byte) (*eots.MasterSecretRand, *eots.MasterPublicRand, error) {
+	// calculate the random hash of the key concatenated with chainID and height
+	hasher := hmac.New(sha256.New, key)
+	hasher.Write(chainID)
+	seedSlice := hasher.Sum(nil)
+
+	// convert to 32-byte seed
+	var seed [32]byte
+	copy(seed[:], seedSlice[:32])
+
+	// convert the hash into private random
+	return eots.NewMasterRandPairFromSeed(seed)
 }
 
 func (tm *TestManager) sendHeadersToBabylon(t *testing.T, headers []*wire.BlockHeader) {
