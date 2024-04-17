@@ -10,7 +10,7 @@ import (
 // InputBtcStakingTx json input structure to create a staking tx from json
 type InputBtcStakingTx struct {
 	// BtcNetwork type of btc network to use
-	// Needs to be one of "testnet3", "mainnet", "regtest", "simnet".
+	// Needs to be one of "testnet3", "mainnet", "regtest", "simnet", "signet".
 	BtcNetwork string `json:"btc_network"`
 	// StakerPublicKeyHex SchnorPubKey hex encoded.
 	StakerPublicKeyHex string `json:"staker_public_key_hex"`
