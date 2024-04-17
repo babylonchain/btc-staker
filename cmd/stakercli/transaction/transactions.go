@@ -1,21 +1,25 @@
-package main
+package transaction
 
 import (
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 
 	"github.com/babylonchain/babylon/btcstaking"
 	bbn "github.com/babylonchain/babylon/types"
+	"github.com/babylonchain/btc-staker/cmd/stakercli/helpers"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/cometbft/cometbft/libs/os"
 	"github.com/urfave/cli"
 )
 
 const (
-	stakingAmountFlag       = "staking-amount"
 	stakingTransactionFlag  = "staking-transaction"
 	magicBytesFlag          = "magic-bytes"
 	covenantMembersPksFlag  = "covenant-committee-pks"
@@ -25,7 +29,7 @@ const (
 	finalityProviderKeyFlag = "finality-provider-pk"
 )
 
-var transactionCommands = []cli.Command{
+var TransactionCommands = []cli.Command{
 	{
 		Name:      "transaction",
 		ShortName: "tr",
@@ -34,21 +38,23 @@ var transactionCommands = []cli.Command{
 		Subcommands: []cli.Command{
 			checkPhase1StakingTransactionCmd,
 			createPhase1StakingTransactionCmd,
+			createPhase1StakingTransactionFromJsonCmd,
 		},
 	},
 }
 
 func parseSchnorPubKeyFromCliCtx(ctx *cli.Context, flagName string) (*btcec.PublicKey, error) {
 	pkHex := ctx.String(flagName)
+	return parseSchnorPubKeyFromHex(pkHex)
+}
 
+func parseSchnorPubKeyFromHex(pkHex string) (*btcec.PublicKey, error) {
 	pkBytes, err := hex.DecodeString(pkHex)
-
 	if err != nil {
 		return nil, err
 	}
 
 	pk, err := schnorr.ParsePubKey(pkBytes)
-
 	if err != nil {
 		return nil, err
 	}
@@ -58,11 +64,13 @@ func parseSchnorPubKeyFromCliCtx(ctx *cli.Context, flagName string) (*btcec.Publ
 
 func parseCovenantKeysFromCliCtx(ctx *cli.Context) ([]*btcec.PublicKey, error) {
 	covenantMembersPks := ctx.StringSlice(covenantMembersPksFlag)
+	return parseCovenantKeysFromSlice(covenantMembersPks)
+}
 
-	var covenantPubKeys []*btcec.PublicKey
+func parseCovenantKeysFromSlice(covenantMembersPks []string) ([]*btcec.PublicKey, error) {
+	covenantPubKeys := make([]*btcec.PublicKey, len(covenantMembersPks))
 
-	for _, fpPk := range covenantMembersPks {
-
+	for i, fpPk := range covenantMembersPks {
 		fpPkBytes, err := hex.DecodeString(fpPk)
 		if err != nil {
 			return nil, err
@@ -73,7 +81,7 @@ func parseCovenantKeysFromCliCtx(ctx *cli.Context) ([]*btcec.PublicKey, error) {
 			return nil, err
 		}
 
-		covenantPubKeys = append(covenantPubKeys, fpSchnorrKey)
+		covenantPubKeys[i] = fpSchnorrKey
 	}
 
 	return covenantPubKeys, nil
@@ -81,9 +89,11 @@ func parseCovenantKeysFromCliCtx(ctx *cli.Context) ([]*btcec.PublicKey, error) {
 
 func parseMagicBytesFromCliCtx(ctx *cli.Context) ([]byte, error) {
 	magicBytesHex := ctx.String(magicBytesFlag)
+	return parseMagicBytesFromHex(magicBytesHex)
+}
 
+func parseMagicBytesFromHex(magicBytesHex string) ([]byte, error) {
 	magicBytes, err := hex.DecodeString(magicBytesHex)
-
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +106,7 @@ func parseMagicBytesFromCliCtx(ctx *cli.Context) ([]byte, error) {
 }
 
 func parseStakingAmountFromCliCtx(ctx *cli.Context) (btcutil.Amount, error) {
-	amt := ctx.Int64(stakingAmountFlag)
+	amt := ctx.Int64(helpers.StakingAmountFlag)
 
 	if amt <= 0 {
 		return 0, fmt.Errorf("staking amount should be greater than 0")
@@ -106,7 +116,7 @@ func parseStakingAmountFromCliCtx(ctx *cli.Context) (btcutil.Amount, error) {
 }
 
 func parseStakingTimeBlocksFromCliCtx(ctx *cli.Context) (uint16, error) {
-	timeBlocks := ctx.Int64(stakingTimeBlocksFlag)
+	timeBlocks := ctx.Int64(helpers.StakingTimeBlocksFlag)
 
 	if timeBlocks <= 0 {
 		return 0, fmt.Errorf("staking time blocks should be greater than 0")
@@ -215,12 +225,12 @@ var createPhase1StakingTransactionCmd = cli.Command{
 			Required: true,
 		},
 		cli.Int64Flag{
-			Name:     stakingAmountFlag,
+			Name:     helpers.StakingAmountFlag,
 			Usage:    "Staking amount in satoshis",
 			Required: true,
 		},
 		cli.Int64Flag{
-			Name:     stakingTimeBlocksFlag,
+			Name:     helpers.StakingTimeBlocksFlag,
 			Usage:    "Staking time in BTC blocks",
 			Required: true,
 		},
@@ -246,6 +256,14 @@ var createPhase1StakingTransactionCmd = cli.Command{
 		},
 	},
 	Action: createPhase1StakingTransaction,
+}
+
+var createPhase1StakingTransactionFromJsonCmd = cli.Command{
+	Name:        "create-phase1-staking-transaction-json",
+	ShortName:   "crpstjson",
+	Usage:       "stakercli transaction create-phase1-staking-transaction-json [fullpath/to/inputBtcStakingTx.json]",
+	Description: "Creates unsigned and unfunded phase 1 staking transaction",
+	Action:      createPhase1StakingTransactionFromJson,
 }
 
 type CreatePhase1StakingTxResponse struct {
@@ -299,7 +317,7 @@ func createPhase1StakingTransaction(ctx *cli.Context) error {
 
 	covenantQuorum := uint32(ctx.Uint64(covenantQuorumFlag))
 
-	_, tx, err := btcstaking.BuildV0IdentifiableStakingOutputsAndTx(
+	resp, err := MakeCreatePhase1StakingTxResponse(
 		magicBytes,
 		stakerPk,
 		fpPk,
@@ -309,22 +327,74 @@ func createPhase1StakingTransaction(ctx *cli.Context) error {
 		stakingAmount,
 		currentParams,
 	)
-
 	if err != nil {
 		return err
+	}
+
+	helpers.PrintRespJSON(*resp)
+	return nil
+}
+
+func createPhase1StakingTransactionFromJson(ctx *cli.Context) error {
+	inputFilePath := ctx.Args().First()
+	if len(inputFilePath) == 0 {
+		return errors.New("json file input is empty")
+	}
+
+	if !os.FileExists(inputFilePath) {
+		return fmt.Errorf("json file input %s does not exist", inputFilePath)
+	}
+
+	bz, err := os.ReadFile(inputFilePath)
+	if err != nil {
+		return fmt.Errorf("error reading file %s: %w", inputFilePath, err)
+	}
+
+	var input InputBtcStakingTx
+	if err := json.Unmarshal(bz, &input); err != nil {
+		return fmt.Errorf("error parsing file content %s to struct %+v: %w", bz, input, err)
+	}
+
+	resp, err := input.ToCreatePhase1StakingTxResponse()
+	if err != nil {
+		return err
+	}
+
+	helpers.PrintRespJSON(*resp)
+	return nil
+}
+
+// MakeCreatePhase1StakingTxResponse builds and serialize staking tx as hex response.
+func MakeCreatePhase1StakingTxResponse(
+	magicBytes []byte,
+	stakerPk *btcec.PublicKey,
+	fpPk *btcec.PublicKey,
+	covenantMembersPks []*btcec.PublicKey,
+	covenantQuorum uint32,
+	stakingTimeBlocks uint16,
+	stakingAmount btcutil.Amount,
+	net *chaincfg.Params,
+) (*CreatePhase1StakingTxResponse, error) {
+	_, tx, err := btcstaking.BuildV0IdentifiableStakingOutputsAndTx(
+		magicBytes,
+		stakerPk,
+		fpPk,
+		covenantMembersPks,
+		covenantQuorum,
+		stakingTimeBlocks,
+		stakingAmount,
+		net,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	serializedTx, err := utils.SerializeBtcTransaction(tx)
-
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	resp := CreatePhase1StakingTxResponse{
+	return &CreatePhase1StakingTxResponse{
 		StakingTxHex: hex.EncodeToString(serializedTx),
-	}
-
-	printRespJSON(resp)
-
-	return nil
+	}, nil
 }

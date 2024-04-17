@@ -1,4 +1,4 @@
-package main
+package admin
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ import (
 	"github.com/urfave/cli"
 )
 
-var adminCommands = []cli.Command{
+var AdminCommands = []cli.Command{
 	{
 		Name:      "admin",
 		ShortName: "ad",
