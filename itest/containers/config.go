@@ -10,7 +10,7 @@ type ImageConfig struct {
 //nolint:deadcode
 const (
 	dockerBitcoindRepository = "lncm/bitcoind"
-	dockerBitcoindVersionTag = "v24.0.1"
+	dockerBitcoindVersionTag = "v26.0"
 )
 
 // NewImageConfig returns ImageConfig needed for running e2e test.
