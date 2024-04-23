@@ -223,7 +223,7 @@ func createSpendStakeTx(
 	return spendTx, &fee, nil
 }
 
-func createSpendStakeTxFromStoredTx(
+func CreateSpendStakeTxFromStoredTx(
 	stakerBtcPk *btcec.PublicKey,
 	covenantPublicKeys []*btcec.PublicKey,
 	covenantThreshold uint32,

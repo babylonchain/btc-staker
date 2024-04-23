@@ -1679,7 +1679,7 @@ func (app *StakerApp) SpendStake(stakingTxHash *chainhash.Hash) (*chainhash.Hash
 
 	currentFeeRate := app.feeEstimator.EstimateFeePerKb()
 
-	spendStakeTxInfo, err := createSpendStakeTxFromStoredTx(
+	spendStakeTxInfo, err := CreateSpendStakeTxFromStoredTx(
 		privKey.PubKey(),
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,

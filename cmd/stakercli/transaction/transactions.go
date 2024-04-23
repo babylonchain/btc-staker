@@ -10,12 +10,16 @@ import (
 	"github.com/babylonchain/babylon/btcstaking"
 	bbn "github.com/babylonchain/babylon/types"
 	"github.com/babylonchain/btc-staker/cmd/stakercli/helpers"
+	"github.com/babylonchain/btc-staker/staker"
+	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/cometbft/cometbft/libs/os"
+	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 	"github.com/urfave/cli"
 )
 
@@ -26,6 +30,7 @@ const (
 	covenantQuorumFlag      = "covenant-quorum"
 	networkNameFlag         = "network"
 	stakerPublicKeyFlag     = "staker-pk"
+	destinationAddressFlag  = "dest"
 	finalityProviderKeyFlag = "finality-provider-pk"
 )
 
@@ -39,6 +44,7 @@ var TransactionCommands = []cli.Command{
 			checkPhase1StakingTransactionCmd,
 			createPhase1StakingTransactionCmd,
 			createPhase1StakingTransactionFromJsonCmd,
+			createPhase1WithdrawTransactionCmd,
 		},
 	},
 }
@@ -266,8 +272,56 @@ var createPhase1StakingTransactionFromJsonCmd = cli.Command{
 	Action:      createPhase1StakingTransactionFromJson,
 }
 
+var createPhase1WithdrawTransactionCmd = cli.Command{
+	Name:      "create-phase1-withdraw-transaction",
+	ShortName: "crpwt",
+	Usage:     "Creates unsigned and unfunded phase 1 withdraw transaction",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:     stakingTransactionFlag,
+			Usage:    "Staking transaction in hex",
+			Required: true,
+		},
+		cli.StringFlag{
+			Name:     destinationAddressFlag,
+			Usage:    "destination address",
+			Required: true,
+		},
+		cli.StringFlag{
+			Name:     stakerPublicKeyFlag,
+			Usage:    "staker public key in schnorr format (32 byte) in hex",
+			Required: true,
+		},
+		cli.StringFlag{
+			Name:     magicBytesFlag,
+			Usage:    "Magic bytes in op_return output in hex",
+			Required: true,
+		},
+		cli.StringSliceFlag{
+			Name:     covenantMembersPksFlag,
+			Usage:    "BTC public keys of the covenant committee members",
+			Required: true,
+		},
+		cli.Uint64Flag{
+			Name:     covenantQuorumFlag,
+			Usage:    "Required quorum for the covenant members",
+			Required: true,
+		},
+		cli.StringFlag{
+			Name:     networkNameFlag,
+			Usage:    "Bitcoin network on which staking should take place one of (mainnet, testnet3, regtest, simnet, signet)",
+			Required: true,
+		},
+	},
+	Action: createPhase1WithdrawTransaction,
+}
+
 type CreatePhase1StakingTxResponse struct {
 	StakingTxHex string `json:"staking_tx_hex"`
+}
+
+type CreatePhase1WithdrawTxResponse struct {
+	WithdrawTxHex string `json:"withdraw_tx_hex"`
 }
 
 func createPhase1StakingTransaction(ctx *cli.Context) error {
@@ -364,6 +418,53 @@ func createPhase1StakingTransactionFromJson(ctx *cli.Context) error {
 	return nil
 }
 
+func createPhase1WithdrawTransaction(ctx *cli.Context) error {
+	net := ctx.String(networkNameFlag)
+	stakingTxHex := ctx.String(stakingTransactionFlag)
+	dest := ctx.String(destinationAddressFlag)
+	tx, err := app.txTracker.GetTransaction(stakingTxHex)
+	tx, _, err := bbn.NewBTCTxFromHex(stakingTxHex)
+	if err != nil {
+		return err
+	}
+	currentParams, err := utils.GetBtcNetworkParams(net)
+
+	if err != nil {
+		return err
+	}
+	destAddress, err := btcutil.DecodeAddress(dest, currentParams)
+	destAddressScript, err := txscript.PayToAddrScript(destAddress)
+	stakerPk, err := parseSchnorPubKeyFromCliCtx(ctx, stakerPublicKeyFlag)
+
+	if err != nil {
+		return err
+	}
+
+	covenantMembersPks, err := parseCovenantKeysFromCliCtx(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	covenantQuorum := uint32(ctx.Uint64(covenantQuorumFlag))
+	feeRate := chainfee.SatPerKVByte(1000000)
+	resp, err := MakeCreatePhase1WithdrawTxResponse(
+		tx,
+		destAddressScript,
+		stakerPk,
+		feeRate,
+		covenantMembersPks,
+		covenantQuorum,
+		currentParams,
+	)
+	if err != nil {
+		return err
+	}
+
+	helpers.PrintRespJSON(*resp)
+	return nil
+}
+
 // MakeCreatePhase1StakingTxResponse builds and serialize staking tx as hex response.
 func MakeCreatePhase1StakingTxResponse(
 	magicBytes []byte,
@@ -396,5 +497,41 @@ func MakeCreatePhase1StakingTxResponse(
 
 	return &CreatePhase1StakingTxResponse{
 		StakingTxHex: hex.EncodeToString(serializedTx),
+	}, nil
+}
+
+// MakeCreatePhase1WithdrawTxResponse builds and serialize withdraw tx as hex response.
+func MakeCreatePhase1WithdrawTxResponse(
+	storedtx *stakerdb.StoredTransaction,
+	dest []byte,
+	stakerPk *btcec.PublicKey,
+	feeRate chainfee.SatPerKVByte,
+	covenantMembersPks []*btcec.PublicKey,
+	covenantQuorum uint32,
+	stakingTimeBlocks uint16,
+	stakingAmount btcutil.Amount,
+	net *chaincfg.Params,
+) (*CreatePhase1WithdrawTxResponse, error) {
+	spendStakeTxInfo, err := staker.CreateSpendStakeTxFromStoredTx(
+		stakerPk,
+		covenantMembersPks,
+		covenantQuorum,
+		storedtx,
+		dest,
+		feeRate,
+		net,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	serializedTx, err := utils.SerializeBtcTransaction(spendStakeTxInfo.spendStakeTx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CreatePhase1WithdrawTxResponse{
+		WithdrawTxHex: hex.EncodeToString(serializedTx),
 	}, nil
 }
