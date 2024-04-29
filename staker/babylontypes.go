@@ -74,19 +74,46 @@ func (app *StakerApp) buildOwnedDelegation(
 		return nil, fmt.Errorf("error creating undelegation data: %w", err)
 	}
 
-	dg := createDelegationData(
-		externalData.stakerPrivKey.PubKey(),
-		req.inclusionBlock,
-		req.txIndex,
-		storedTx,
-		slashingTx,
-		slashingTxSig,
-		externalData.babylonPubKey,
-		stakingTxInclusionProof,
-		undelegationData,
-	)
+	pop, err := app.generatePop(externalData.stakerPrivKey)
 
-	return dg, nil
+	if err != nil {
+		// TODO: Most probable couse for this error would be some kind of problem with fees
+		return nil, fmt.Errorf("error creating pop: %w", err)
+	}
+
+	inclusionBlockHash := req.inclusionBlock.BlockHash()
+
+	dbPop := babylonPopToDbPop(pop)
+
+	dg := cl.DelegationData{
+		StakingTransaction:                   storedTx.StakingTx,
+		StakingTransactionIdx:                req.txIndex,
+		StakingTransactionInclusionProof:     stakingTxInclusionProof,
+		StakingTransactionInclusionBlockHash: &inclusionBlockHash,
+		StakingTime:                          storedTx.StakingTime,
+		StakingValue:                         btcutil.Amount(storedTx.StakingTx.TxOut[storedTx.StakingOutputIndex].Value),
+		FinalityProvidersBtcPks:              storedTx.FinalityProvidersBtcPks,
+		StakerBtcPk:                          externalData.stakerPrivKey.PubKey(),
+		SlashingTransaction:                  slashingTx,
+		SlashingTransactionSig:               slashingTxSig,
+		BabylonPk:                            externalData.babylonPubKey,
+		BabylonPop:                           dbPop,
+		Ud:                                   undelegationData,
+	}
+
+	// dg1 := createDelegationData(
+	// 	externalData.stakerPrivKey.PubKey(),
+	// 	req.inclusionBlock,
+	// 	req.txIndex,
+	// 	storedTx,
+	// 	slashingTx,
+	// 	slashingTxSig,
+	// 	externalData.babylonPubKey,
+	// 	stakingTxInclusionProof,
+	// 	undelegationData,
+	// )
+
+	return &dg, nil
 }
 
 func (app *StakerApp) buildDelegation(
