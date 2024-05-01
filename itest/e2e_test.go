@@ -603,7 +603,7 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 				Moniker: "tester",
 			},
 			pop,
-			"", // Babylon finality provider
+			"",
 		)
 
 		require.Eventually(t, func() bool {

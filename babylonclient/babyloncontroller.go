@@ -710,8 +710,13 @@ func chainToChainBytes(chain []*wire.BlockHeader) []bbntypes.BTCHeaderBytes {
 // RegisterFinalityProvider registers a BTC finality provider via a MsgCreateFinalityProvider to Babylon
 // it returns tx hash and error
 func (bc *BabylonController) RegisterFinalityProvider(
-	bbnPubKey *secp256k1.PubKey, btcPubKey *bbntypes.BIP340PubKey, commission *sdkmath.LegacyDec,
-	description *sttypes.Description, pop *btcstypes.ProofOfPossession, chainID string) (*pv.RelayerTxResponse, error) {
+	bbnPubKey *secp256k1.PubKey,
+	btcPubKey *bbntypes.BIP340PubKey,
+	commission *sdkmath.LegacyDec,
+	description *sttypes.Description,
+	pop *btcstypes.ProofOfPossession,
+	consumerID string,
+) (*pv.RelayerTxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateFinalityProvider{
 		Signer:      bc.getTxSigner(),
 		Commission:  commission,
@@ -719,7 +724,7 @@ func (bc *BabylonController) RegisterFinalityProvider(
 		BtcPk:       btcPubKey,
 		Description: description,
 		Pop:         pop,
-		ConsumerId:  chainID,
+		ConsumerId:  consumerID,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{registerMsg})
