@@ -546,10 +546,9 @@ func parseWatchStakingRequest(
 
 	// 4. Check slashig tx sig is good. It implicitly verify staker pubkey, as script
 	// contain it.
-	err = staking.VerifyTransactionSigWithOutputData(
+	err = staking.VerifyTransactionSigWithOutput(
 		slashingTx,
-		stakingTx.TxOut[stakingOutputIdx].PkScript,
-		stakingTx.TxOut[stakingOutputIdx].Value,
+		stakingTx.TxOut[stakingOutputIdx],
 		stakingTxSlashingPathInfo.RevealedLeaf.Script,
 		stakerBtcPk,
 		slashingTxSig.Serialize(),
@@ -612,10 +611,9 @@ func parseWatchStakingRequest(
 		return nil, fmt.Errorf("failed to watch staking tx. Invalid unbonding slashing path info: %w", err)
 	}
 
-	err = staking.VerifyTransactionSigWithOutputData(
+	err = staking.VerifyTransactionSigWithOutput(
 		slashUnbondingTx,
-		unbondingTx.TxOut[0].PkScript,
-		unbondingTx.TxOut[0].Value,
+		unbondingTx.TxOut[0],
 		unbondingSlashingInfo.RevealedLeaf.Script,
 		stakerBtcPk,
 		slashUnbondingTxSig.Serialize(),

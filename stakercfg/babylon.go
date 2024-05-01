@@ -3,7 +3,7 @@ package stakercfg
 import (
 	"time"
 
-	bbncfg "github.com/babylonchain/rpc-client/config"
+	bbncfg "github.com/babylonchain/babylon/client/config"
 )
 
 type BBNConfig struct {
