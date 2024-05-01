@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net"
 	"net/netip"
@@ -18,10 +19,15 @@ import (
 	"testing"
 	"time"
 
+	btcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
+
 	staking "github.com/babylonchain/babylon/btcstaking"
+	txformat "github.com/babylonchain/babylon/btctxformatter"
+	"github.com/babylonchain/babylon/crypto/eots"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
+	ckpttypes "github.com/babylonchain/babylon/x/checkpointing/types"
 	"github.com/babylonchain/btc-staker/babylonclient"
 	"github.com/babylonchain/btc-staker/metrics"
 	"github.com/babylonchain/btc-staker/proto"
@@ -41,6 +47,7 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdkquerytypes "github.com/cosmos/cosmos-sdk/types/query"
 	sttypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/signal"
@@ -419,7 +426,162 @@ func GetAllMinedBtcHeadersSinceGenesis(t *testing.T, c *rpcclient.Client) []*wir
 	return headers
 }
 
+func opReturnScript(data []byte) []byte {
+	builder := txscript.NewScriptBuilder()
+	script, err := builder.AddOp(txscript.OP_RETURN).AddData(data).Script()
+	if err != nil {
+		panic(err)
+	}
+	return script
+}
+
+func txToBytes(tx *wire.MsgTx) []byte {
+	buf := bytes.NewBuffer(make([]byte, 0, tx.SerializeSize()))
+	_ = tx.Serialize(buf)
+	return buf.Bytes()
+}
+
+func txsToBytes(txs []*wire.MsgTx) [][]byte {
+	var txsBytes [][]byte
+	for _, tx := range txs {
+		txsBytes = append(txsBytes, txToBytes(tx))
+	}
+	return txsBytes
+}
+
+func (tm *TestManager) FinalizeUntilEpoch(t *testing.T, epoch uint64) {
+	bbnClient := tm.BabylonClient.GetBBNClient()
+	ckptParams, err := bbnClient.BTCCheckpointParams()
+	require.NoError(t, err)
+	// wait until the checkpoint of this epoch is sealed
+	require.Eventually(t, func() bool {
+		lastSealedCkpt, err := bbnClient.LatestEpochFromStatus(ckpttypes.Sealed)
+		if err != nil {
+			return false
+		}
+		return epoch <= lastSealedCkpt.RawCheckpoint.EpochNum
+	}, 1*time.Minute, 1*time.Second)
+
+	t.Logf("start finalizing epochs till %d", epoch)
+	// Random source for the generation of BTC data
+	// r := rand.New(rand.NewSource(time.Now().Unix()))
+
+	// get all checkpoints of these epochs
+	pagination := &sdkquerytypes.PageRequest{
+		Key:   ckpttypes.CkptsObjectKey(1),
+		Limit: epoch,
+	}
+	resp, err := bbnClient.RawCheckpoints(pagination)
+	require.NoError(t, err)
+	require.Equal(t, int(epoch), len(resp.RawCheckpoints))
+
+	submitter := tm.BabylonClient.GetKeyAddress()
+
+	for _, checkpoint := range resp.RawCheckpoints {
+		// currentBtcTipResp, err := tm.BabylonClient.QueryBtcLightClientTip()
+		// require.NoError(t, err)
+		// tipHeader, err := bbntypes.NewBTCHeaderBytesFromHex(currentBtcTipResp.HeaderHex)
+		// require.NoError(t, err)
+
+		rawCheckpoint, err := checkpoint.Ckpt.ToRawCheckpoint()
+		require.NoError(t, err)
+
+		btcCheckpoint, err := ckpttypes.FromRawCkptToBTCCkpt(rawCheckpoint, submitter)
+		require.NoError(t, err)
+
+		babylonTagBytes, err := hex.DecodeString("01020304")
+		require.NoError(t, err)
+
+		p1, p2, err := txformat.EncodeCheckpointData(
+			babylonTagBytes,
+			txformat.CurrentVersion,
+			btcCheckpoint,
+		)
+
+		err = tm.Sa.Wallet().UnlockWallet(60)
+		require.NoError(t, err)
+		tx1, err := tm.Sa.Wallet().CreateAndSignTx(
+			[]*wire.TxOut{
+				wire.NewTxOut(0, opReturnScript(p1)),
+			},
+			2000,
+			tm.MinerAddr,
+		)
+		require.NoError(t, err)
+		_, err = tm.Sa.Wallet().SendRawTransaction(tx1, true)
+		require.NoError(t, err)
+
+		resp1 := tm.BitcoindHandler.GenerateBlocks(1)
+
+		tx2, err := tm.Sa.Wallet().CreateAndSignTx(
+			[]*wire.TxOut{
+				wire.NewTxOut(0, opReturnScript(p2)),
+			},
+			2000,
+			tm.MinerAddr,
+		)
+		require.NoError(t, err)
+		_, err = tm.Sa.Wallet().SendRawTransaction(tx2, true)
+		require.NoError(t, err)
+		resp2 := tm.BitcoindHandler.GenerateBlocks(1)
+
+		block1Hash, err := chainhash.NewHashFromStr(resp1.Blocks[0])
+		require.NoError(t, err)
+		block2Hash, err := chainhash.NewHashFromStr(resp2.Blocks[0])
+		require.NoError(t, err)
+
+		block1, err := tm.TestRpcClient.GetBlock(block1Hash)
+		require.NoError(t, err)
+		block2, err := tm.TestRpcClient.GetBlock(block2Hash)
+		require.NoError(t, err)
+
+		_, err = tm.BabylonClient.InsertBtcBlockHeaders([]*wire.BlockHeader{
+			&block1.Header,
+			&block2.Header,
+		})
+
+		header1Bytes := bbntypes.NewBTCHeaderBytesFromBlockHeader(&block1.Header)
+		header2Bytes := bbntypes.NewBTCHeaderBytesFromBlockHeader(&block2.Header)
+
+		proof1, err := btcctypes.SpvProofFromHeaderAndTransactions(&header1Bytes, txsToBytes(block1.Transactions), 1)
+		require.NoError(t, err)
+		proof2, err := btcctypes.SpvProofFromHeaderAndTransactions(&header2Bytes, txsToBytes(block2.Transactions), 1)
+		require.NoError(t, err)
+
+		_, err = tm.BabylonClient.InsertSpvProofs(submitter.String(), []*btcctypes.BTCSpvProof{
+			proof1,
+			proof2,
+		})
+		require.NoError(t, err)
+
+		// 	// wait until this checkpoint is submitted
+		require.Eventually(t, func() bool {
+			ckpt, err := bbnClient.RawCheckpoint(checkpoint.Ckpt.EpochNum)
+			require.NoError(t, err)
+			return ckpt.RawCheckpoint.Status == ckpttypes.Submitted
+		}, eventuallyWaitTimeOut, eventuallyPollTime)
+	}
+
+	tm.mineNEmptyBlocks(t, uint32(ckptParams.Params.CheckpointFinalizationTimeout), true)
+
+	// // wait until the checkpoint of this epoch is finalised
+	require.Eventually(t, func() bool {
+		lastFinalizedCkpt, err := bbnClient.LatestEpochFromStatus(ckpttypes.Finalized)
+		if err != nil {
+			t.Logf("failed to get last finalized epoch: %v", err)
+			return false
+		}
+		return epoch <= lastFinalizedCkpt.RawCheckpoint.EpochNum
+	}, eventuallyWaitTimeOut, 1*time.Second)
+
+	t.Logf("epoch %d is finalised", epoch)
+}
+
 func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStakingData *testStakingData) {
+	params, err := tm.BabylonClient.QueryStakingTracker()
+	require.NoError(t, err)
+
+	var regEpoch uint64
 	for i := 0; i < testStakingData.GetNumRestakedFPs(); i++ {
 		// ensure the finality provider in testStakingData does not exist yet
 		fpResp, err := tm.BabylonClient.QueryFinalityProvider(testStakingData.FinalityProviderBtcKeys[i])
@@ -432,13 +594,12 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 
 		btcFpKey := bbntypes.NewBIP340PubKeyFromBTCPK(testStakingData.FinalityProviderBtcKeys[i])
 
-		params, err := tm.BabylonClient.QueryStakingTracker()
-		require.NoError(t, err)
-
 		// get current finality providers
 		resp, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
 		require.NoError(t, err)
-
+		r = rand.New(rand.NewSource(time.Now().Unix()))
+		_, p, err := eots.NewMasterRandPair(r)
+		require.NoError(t, err)
 		// register the generated finality provider
 		_, err = tm.BabylonClient.RegisterFinalityProvider(
 			testStakingData.FinalityProviderBabylonPublicKeys[i],
@@ -448,6 +609,7 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 				Moniker: "tester",
 			},
 			pop,
+			p.MarshalBase58(),
 		)
 
 		resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
@@ -455,7 +617,14 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 
 		// After registration we should have one finality provider
 		require.Len(t, resp2.FinalityProviders, len(resp.FinalityProviders)+1)
+
+		epoch, err := tm.BabylonClient.QueryFinalityProviderRegisteredEpoch(btcFpKey.MustToBTCPK())
+		require.NoError(t, err)
+		regEpoch = epoch
 	}
+
+	fmt.Printf("Wwaiting epoch %d to be registered\n", regEpoch)
+	tm.FinalizeUntilEpoch(t, regEpoch)
 }
 
 func (tm *TestManager) sendHeadersToBabylon(t *testing.T, headers []*wire.BlockHeader) {
