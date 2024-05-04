@@ -71,8 +71,8 @@ is the BTC staker public key in hex format.
 
 ## Create Raw Transaction
 
-The binary `stakercli` will be used to generate the transaction using the command
-of `transaction create-phase1-staking-transaction`.
+The binary `stakercli` will be used to generate the transaction using
+the `transaction create-phase1-staking-transaction` command.
 
 This command has several flag options:
 
@@ -86,8 +86,8 @@ This command has several flag options:
 - `--network` Specifies the BTC network this transaction will be sent, any of
 `[mainnet, testnet3, regtest, simnet, signet]`.
 
-By example to generate one staking transaction of 0.05 BTC and locked for one year,
-use `--staking-amount` as `5000000` and `--staking-time` as `52560`.
+For example to generate one staking transaction that locks `0.05` BTC for one
+year, use `--staking-amount=5000000` and `--staking-time=52560`.
 
 ```shell
 stakercli transaction create-phase1-staking-transaction \
