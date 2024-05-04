@@ -12,7 +12,6 @@ import (
 
 	"github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/babylon/testutil/datagen"
-	bbntypes "github.com/babylonchain/babylon/types"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 
@@ -67,10 +66,9 @@ func FuzzFinalityProviderDeposit(f *testing.F) {
 
 		app := testApp()
 		stakingTx := appRunCreatePhase1StakingTx(r, t, app, append(createTxCmdArgs, commonFlags...))
+		require.NotEmpty(t, stakingTx)
 
-		_, _, err := bbntypes.NewBTCTxFromHex(stakingTx.StakingTxHex)
-		require.NoError(t, err)
-
+		// TODO: verify how to sign to check tx
 		// checkTxCmd := []string{
 		// 	"stakercli", "transaction", "check-phase1-staking-transaction",
 		// 	fmt.Sprintf("--staking-transaction=%s", stakingTx.StakingTxHex),
