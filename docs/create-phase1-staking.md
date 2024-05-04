@@ -16,9 +16,9 @@ The generation of a phase-1 staking transaction does not require
 an active `stakerd` daemon that connects to a Babylon node.
 It can be generated in offline mode without any external connections.
 
-To create the transaction to stake and lock bitcoin, one funded wallet is needed,
-follow [steps 2 to 2.4](../README.md#2-setting-up-a-bitcoin-node) to create one
-**legacy** wallet and generate a valid btc address.
+The generation of the phase-1 staking transaction requires the specification
+of a funding address. Wallet creation and generating an address for it are
+covered by [this guide (steps 2 to 2.4)](../README.md#2-setting-up-a-bitcoin-node).
 
 ## Generate public key
 
