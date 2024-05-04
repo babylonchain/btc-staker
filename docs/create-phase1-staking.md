@@ -1,6 +1,10 @@
 # Phase1 Staking Transaction
 
-Creates a phase 1 staking transaction.
+The phase-1 staking transaction is a
+[Bitcoin Staking transaction](https://github.com/babylonchain/babylon/blob/v0.8.5/docs/staking-script.md)
+that includes an additional `OP_RETURN` field containing
+the staking parameters to enable for easy identification
+and taproot decoding through observing the Bitcoin ledger.
 
 ## Requirements
 
@@ -8,7 +12,9 @@ Creates a phase 1 staking transaction.
 - [bitcoin-cli](../README.md#21-download-and-extract-bitcoin-binary)
 - [jq](https://jqlang.github.io/jq/download/)
 
-Phase 1 staking transaction does not connects to `staked` daemon and neither to `babylon` node. Only needs bitcoin.
+The generation of a phase-1 staking transaction does not require
+an active `stakerd` daemon that connects to a Babylon node.
+It can be generated in offline mode without any external connections.
 
 To create the transaction to stake and lock bitcoin, one funded wallet is needed,
 follow [steps 2 to 2.4](../README.md#2-setting-up-a-bitcoin-node) to create one
