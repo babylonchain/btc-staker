@@ -20,11 +20,15 @@ The generation of the phase-1 staking transaction requires the specification
 of a funding address. Wallet creation and generating an address for it are
 covered by [this guide (steps 2 to 2.4)](../README.md#2-setting-up-a-bitcoin-node).
 
-## Generate public key
+## Identifying the Staker Public Key
 
-With one funded wallet is possible to generate the BTC staker public key. To do
-that, run [`bitcoin-cli listunspent`](https://chainquery.com/bitcoin-cli/listunspent).
-The output should be one slice with a list of unspent transaction outputs.:
+A Bitcoin staking transaction requires the specification
+of the staker public key, which corresponds to the public key
+of the wallet that is funding the staking transaction.
+Once you setup your wallet and an address for it,
+you can extract the public key corresponding to it through the
+[`bitcoin-cli listunspent`](https://chainquery.com/bitcoin-cli/listunspent).
+The output should be one slice with a list of unspent transaction outputs:
 
 ```shell
 bitcoin-cli -signet \
@@ -53,8 +57,8 @@ bitcoin-cli -signet \
 ]
 ```
 
-The BTC staker public key can be derived from the `desc` property by using jq to
-reduce it by using the following command:
+The BTC staker public key can be derived from the `desc` property.
+You can use the `jq` utility to reduce it as follows:
 
 ```shell
 bitcoin-cli -datadir=1 -rpcwallet=btc-staker listunspent | jq -r '.[0].desc | split("]") | .[-1] | split(")") | .[0] | .[2:]'
