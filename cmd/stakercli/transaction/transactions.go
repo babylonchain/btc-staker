@@ -226,7 +226,7 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 		stakerPkFromTx := schnorr.SerializePubKey(stakingTx.OpReturnData.StakerPublicKey.PubKey)
 		stakerPkHexFromTx := hex.EncodeToString(stakerPkFromTx)
 		if !strings.EqualFold(stakerPk, stakerPkHexFromTx) {
-			return fmt.Errorf("staker pk do not match: %s - %s", stakerPk, stakerPkHexFromTx)
+			return fmt.Errorf("staker pk in tx %s do not match with flag %s", stakerPkHexFromTx, stakerPk)
 		}
 	}
 
