@@ -151,10 +151,12 @@ func TestCheckPhase1StakingTransactionCmd(t *testing.T) {
 	validBtcPk := "b91ea4619bc7b3f93e5015976f52f666ae4eb5c98018a6c8e41424905fa8591f"
 	validFpPk := "a89e7caf57360bc8b791df72abc3fb6d2ddc0e06e171c9f17c4ea1299e677565"
 	validStakingTime := 52560
+	validStakingAmount := 5000000
 	validCheckArgs := append(stakerCliCheckP1StkTx,
 		fmt.Sprintf("--staker-pk=%s", validBtcPk),
 		fmt.Sprintf("--finality-provider-pk=%s", validFpPk),
 		fmt.Sprintf("--staking-time=%d", validStakingTime),
+		fmt.Sprintf("--staking-amount=%d", validStakingAmount),
 	)
 	err = app.Run(validCheckArgs)
 	require.NoError(t, err)
@@ -180,4 +182,11 @@ func TestCheckPhase1StakingTransactionCmd(t *testing.T) {
 	)
 	err = app.Run(invalidStakingTimeArgs)
 	require.EqualError(t, err, fmt.Errorf("staking time in tx %d do not match with flag %d", validStakingTime, invalidStakingTime).Error())
+
+	invalidStakingAmount := 156
+	invalidStakingAmountArgs := append(stakerCliCheckP1StkTx,
+		fmt.Sprintf("--staking-amount=%d", invalidStakingAmount),
+	)
+	err = app.Run(invalidStakingAmountArgs)
+	require.EqualError(t, err, fmt.Errorf("staking amount in tx %d do not match with flag %d", validStakingAmount, invalidStakingAmount).Error())
 }
