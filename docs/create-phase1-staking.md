@@ -2,9 +2,13 @@
 
 The phase-1 staking transaction is a
 [Bitcoin Staking transaction](https://github.com/babylonchain/babylon/blob/v0.8.5/docs/staking-script.md)
-that includes an additional `OP_RETURN` field containing
-the staking parameters to enable for easy identification
-and taproot decoding through observing the Bitcoin ledger.
+that includes an additional `OP_RETURN` field containing the staking parameters
+to enable for easy identification and taproot decoding through observing the
+Bitcoin ledger.
+
+In this document, we will be exploring how to build the phase-1 staking
+transaction using a bitcoind wallet, and later funding, signing, and propagating
+it to the BTC network.
 
 ## Requirements
 
@@ -174,8 +178,9 @@ f22b9a1892df0e50977455b85b65324b079a9f230c5a9dede5ac711b9415d15b
 ```
 
 It outputs the transaction hash. Wait a few minutes and make sure that
-the transaction is included in the blockchain by using the explorer or
-running the following command [`bitcoin-cli gettransaction`](https://chainquery.com/bitcoin-cli/gettransaction)
+the transaction is included in the blockchain by using a Bitcoin explorer or
+running the following command
+[`bitcoin-cli gettransaction`](https://chainquery.com/bitcoin-cli/gettransaction).
 
 ```shell
 bitcoin-cli -testnet3 \
