@@ -21,7 +21,6 @@ import (
 	cmdadmin "github.com/babylonchain/btc-staker/cmd/stakercli/admin"
 	cmddaemon "github.com/babylonchain/btc-staker/cmd/stakercli/daemon"
 	"github.com/babylonchain/btc-staker/cmd/stakercli/transaction"
-	cmdtx "github.com/babylonchain/btc-staker/cmd/stakercli/transaction"
 )
 
 const (
@@ -131,6 +130,6 @@ func testApp() *cli.App {
 	app.Name = "stakercli"
 	app.Commands = append(app.Commands, cmddaemon.DaemonCommands...)
 	app.Commands = append(app.Commands, cmdadmin.AdminCommands...)
-	app.Commands = append(app.Commands, cmdtx.TransactionCommands...)
+	app.Commands = append(app.Commands, transaction.TransactionCommands...)
 	return app
 }
