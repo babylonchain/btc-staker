@@ -76,8 +76,8 @@ the `transaction create-phase1-staking-transaction` command.
 
 This command has several flag options:
 
-- `--staker-pk` BTC staker public key in schnorr format as hex.
-- `--finality-provider-pk` The finality provider public key in schnorr format as hex.
+- `--staker-pk` Schnorr BTC staker public key in hex format.
+- `--finality-provider-pk` The finality provider Schnorr BTC public key in hex format.
 - `--staking-amount` The amount of satoshis to be locked.
 - `--staking-time` The amount of BTC blocks to lock for.
 - `--magic-bytes` Magic bytes in op_return output in hex.
