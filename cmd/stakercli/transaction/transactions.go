@@ -221,6 +221,7 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 		return err
 	}
 
+	// verify if optional flags match.
 	stakerPk := ctx.String(stakerPublicKeyFlag)
 	if len(stakerPk) > 0 {
 		stakerPkFromTx := schnorr.SerializePubKey(stakingTx.OpReturnData.StakerPublicKey.PubKey)

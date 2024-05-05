@@ -161,7 +161,7 @@ func TestCheckPhase1StakingTransactionCmd(t *testing.T) {
 	err = app.Run(validCheckArgs)
 	require.NoError(t, err)
 
-	// check if errors caught in flags --staker-pk, --finality-provider-pk
+	// check if errors are caught in flags --staker-pk, --finality-provider-pk, --staking-time, --staking-amount
 	invalidStakerPk := "badstakerpk"
 	invalidBtcStakerArgs := append(stakerCliCheckP1StkTx,
 		fmt.Sprintf("--staker-pk=%s", invalidStakerPk),
