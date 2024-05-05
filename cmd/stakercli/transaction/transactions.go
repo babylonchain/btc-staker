@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/babylonchain/babylon/btcstaking"
 	bbn "github.com/babylonchain/babylon/types"
@@ -159,6 +160,22 @@ var checkPhase1StakingTransactionCmd = cli.Command{
 			Usage:    "Bitcoin network on which staking should take place one of (mainnet, testnet3, regtest, simnet, signet)",
 			Required: true,
 		},
+		cli.StringFlag{
+			Name:  stakerPublicKeyFlag,
+			Usage: "Optional staker pub key hex to match the staker pub key in tx",
+		},
+		cli.StringFlag{
+			Name:  finalityProviderKeyFlag,
+			Usage: "Optional finality provider public key hex to match the finality provider public key in tx",
+		},
+		cli.Int64Flag{
+			Name:  helpers.StakingAmountFlag,
+			Usage: "Optional staking amount in satoshis to match the amount spent in tx",
+		},
+		cli.Int64Flag{
+			Name:  helpers.StakingTimeBlocksFlag,
+			Usage: "Optional staking time in BTC blocks to match how long it was locked for",
+		},
 	},
 	Action: checkPhase1StakingTransaction,
 }
@@ -193,16 +210,24 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 
 	covenantQuorum := uint32(ctx.Uint64(covenantQuorumFlag))
 
-	_, err = btcstaking.ParseV0StakingTx(
+	stakingTx, err := btcstaking.ParseV0StakingTx(
 		tx,
 		magicBytes,
 		covenantMembersPks,
 		covenantQuorum,
 		currentParams,
 	)
-
 	if err != nil {
 		return err
+	}
+
+	stakerPk := ctx.String(stakerPublicKeyFlag)
+	if len(stakerPk) > 0 {
+		stakerPkFromTx := schnorr.SerializePubKey(stakingTx.OpReturnData.StakerPublicKey.PubKey)
+		stakerPkHexFromTx := hex.EncodeToString(stakerPkFromTx)
+		if !strings.EqualFold(stakerPk, stakerPkHexFromTx) {
+			return fmt.Errorf("staker pk do not match: %s - %s", stakerPk, stakerPkHexFromTx)
+		}
 	}
 
 	fmt.Println("Provided transaction is valid staking transaction!")
