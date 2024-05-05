@@ -230,6 +230,15 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 		}
 	}
 
+	fpPk := ctx.String(finalityProviderKeyFlag)
+	if len(fpPk) > 0 {
+		fpPkFromTx := schnorr.SerializePubKey(stakingTx.OpReturnData.FinalityProviderPublicKey.PubKey)
+		fpPkHexFromTx := hex.EncodeToString(fpPkFromTx)
+		if !strings.EqualFold(fpPk, fpPkHexFromTx) {
+			return fmt.Errorf("finality provider pk in tx %s do not match with flag %s", fpPkHexFromTx, fpPk)
+		}
+	}
+
 	fmt.Println("Provided transaction is valid staking transaction!")
 	return nil
 }

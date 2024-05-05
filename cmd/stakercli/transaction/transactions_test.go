@@ -146,18 +146,27 @@ func TestCheckPhase1StakingTransactionCmd(t *testing.T) {
 	}
 
 	validBtcPk := "b91ea4619bc7b3f93e5015976f52f666ae4eb5c98018a6c8e41424905fa8591f"
+	validFpPk := "a89e7caf57360bc8b791df72abc3fb6d2ddc0e06e171c9f17c4ea1299e677565"
 	validCheckArgs := append(stakerCliCheckP1StkTx,
 		fmt.Sprintf("--staker-pk=%s", validBtcPk),
+		fmt.Sprintf("--finality-provider-pk=%s", validFpPk),
 	)
 	err := app.Run(validCheckArgs)
 	require.NoError(t, err)
 
-	// check err for btc staker pk
+	// check if errors caught in flags --staker-pk, --finality-provider-pk
 	invalidStakerPk := "badstakerpk"
 	invalidBtcStakerArgs := append(stakerCliCheckP1StkTx,
 		fmt.Sprintf("--staker-pk=%s", invalidStakerPk),
 	)
 	err = app.Run(invalidBtcStakerArgs)
 	require.EqualError(t, err, fmt.Errorf("staker pk in tx %s do not match with flag %s", validBtcPk, invalidStakerPk).Error())
+
+	invalidFpPk := "badfppk"
+	invalidFpPkArgs := append(stakerCliCheckP1StkTx,
+		fmt.Sprintf("--finality-provider-pk=%s", invalidFpPk),
+	)
+	err = app.Run(invalidFpPkArgs)
+	require.EqualError(t, err, fmt.Errorf("finality provider pk in tx %s do not match with flag %s", validFpPk, invalidFpPk).Error())
 
 }
