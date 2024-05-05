@@ -134,10 +134,11 @@ bitcoin-cli -testnet3 \
 
 ## Sign Transaction
 
-To submit the transaction onchain to the BTC network it needs to be signed.
-For signing the transaction use the following command
+For the transaction to be submitted to the BTC network it first needs to be signed.
+You can sign the raw funded transaction and output the signed format as hex
+using the
 [`bitcoin-cli signrawtransactionwithwallet`](https://chainquery.com/bitcoin-cli/signrawtransactionwithwallet)
-which signs the raw funded transaction and outputs it as hex.
+command.
 
 ```shell
 bitcoin-cli -testnet3 \
