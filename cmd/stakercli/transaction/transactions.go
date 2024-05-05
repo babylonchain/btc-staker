@@ -239,6 +239,11 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 		}
 	}
 
+	timeBlocks := ctx.Int64(helpers.StakingTimeBlocksFlag)
+	if timeBlocks > 0 && uint16(timeBlocks) != stakingTx.OpReturnData.StakingTime {
+		return fmt.Errorf("staking time in tx %d do not match with flag %d", stakingTx.OpReturnData.StakingTime, timeBlocks)
+	}
+
 	fmt.Println("Provided transaction is valid staking transaction!")
 	return nil
 }
