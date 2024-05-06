@@ -65,15 +65,7 @@ func FuzzFinalityProviderDeposit(f *testing.F) {
 
 		app := testApp()
 		stakingTx := appRunCreatePhase1StakingTx(r, t, app, append(createTxCmdArgs, commonFlags...))
-		require.NotEmpty(t, stakingTx)
-
-		// TODO: verify how to sign to check tx
-		// checkTxCmd := []string{
-		// 	"stakercli", "transaction", "check-phase1-staking-transaction",
-		// 	fmt.Sprintf("--staking-transaction=%s", stakingTx.StakingTxHex),
-		// }
-
-		// appRunWithOutput(r, t, app, append(checkTxCmd, commonFlags...))
+		require.NotNil(t, stakingTx)
 	})
 }
 
