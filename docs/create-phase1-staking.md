@@ -23,6 +23,19 @@ It can be generated in offline mode without any external connections.
 It only requires the specification of a funding Bitcoin public key. Wallet
 creation and generating a Bitcoin public key for it are covered by
 [this guide (steps 2 to 2.4)](../README.md#2-setting-up-a-bitcoin-node).
+In the guide to the last command needed to continue this document is
+the [`bitcoin-cli getnewaddress`](https://chainquery.com/bitcoin-cli/getnewaddress).
+
+```shell
+bitcoin-cli -signet \
+  -rpcuser=<your_rpc_username> \
+  -rpcpassword=<your_rpc_password> \
+  -rpcport=38332 \
+  -rpcwallet=btc-staker \
+  getnewaddress
+
+tb1q9hr5zxsvtzg3gxpewdc7ft9yam2c6cfeaz75jj
+```
 
 ## Identifying the Staker Public Key
 
@@ -40,7 +53,7 @@ bitcoin-cli -signet \
   -rpcpassword=<your_rpc_password> \
   -rpcport=38332 \
   -rpcwallet=btc-staker \
-  getaddressinfo <addr>
+  getaddressinfo tb1q9hr5zxsvtzg3gxpewdc7ft9yam2c6cfeaz75jj
 
 {
   "address": "tb1q9hr5zxsvtzg3gxpewdc7ft9yam2c6cfeaz75jj",
