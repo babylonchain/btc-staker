@@ -21,10 +21,10 @@ an active `stakerd` daemon that connects to a Babylon node.
 It can be generated in offline mode without any external connections.
 
 It only requires the specification of a funding Bitcoin public key. Wallet
-creation and generating a Bitcoin public key for it are covered by
+creation and generating a Bitcoin address for it are covered by
 [this guide (steps 2 to 2.4)](../README.md#2-setting-up-a-bitcoin-node).
-In the guide to the last command needed to continue this document is
-the [`bitcoin-cli getnewaddress`](https://chainquery.com/bitcoin-cli/getnewaddress).
+You can generate a new address by running the following command
+[`bitcoin-cli getnewaddress`](https://chainquery.com/bitcoin-cli/getnewaddress).
 
 ```shell
 bitcoin-cli -signet \
