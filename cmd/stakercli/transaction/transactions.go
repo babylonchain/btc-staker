@@ -16,7 +16,6 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/cometbft/cometbft/libs/os"
 	"github.com/urfave/cli"
 )
@@ -247,21 +246,12 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 	}
 
 	amt := ctx.Int64(helpers.StakingAmountFlag)
-	if amt > 0 && !isAmountInTxsOut(amt, tx.TxOut) {
+	if amt > 0 && amt != stakingTx.StakingOutput.Value {
 		return fmt.Errorf("staking amount in tx %d do not match with flag %d", tx.TxOut[0].Value, amt)
 	}
 
 	fmt.Println("Provided transaction is valid staking transaction!")
 	return nil
-}
-
-func isAmountInTxsOut(amt int64, txs []*wire.TxOut) bool {
-	for _, txOut := range txs {
-		if amt == txOut.Value {
-			return true
-		}
-	}
-	return false
 }
 
 var createPhase1StakingTransactionCmd = cli.Command{
