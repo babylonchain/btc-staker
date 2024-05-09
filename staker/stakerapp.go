@@ -1408,6 +1408,94 @@ func (app *StakerApp) WatchStaking(
 	}
 }
 
+func (app *StakerApp) GetStakeOutput(
+	stakerPubKey *btcec.PublicKey,
+	stakingAmount btcutil.Amount,
+	fpPks []*btcec.PublicKey,
+	stakingTimeBlocks uint16,
+) ([]byte, error) {
+	// check we are not shutting down
+	select {
+	case <-app.quit:
+		return nil, nil
+
+	default:
+	}
+
+	if len(fpPks) == 0 {
+		return nil, fmt.Errorf("no finality providers public keys provided")
+	}
+
+	if haveDuplicates(fpPks) {
+		return nil, fmt.Errorf("duplicate finality provider public keys provided")
+	}
+
+	for _, fpPk := range fpPks {
+		if err := app.finalityProviderExists(fpPk); err != nil {
+			return nil, err
+		}
+	}
+
+	params, err := app.babylonClient.Params()
+
+	if err != nil {
+		return nil, err
+	}
+
+	slashingFee := app.getSlashingFee(params.MinSlashingTxFeeSat)
+
+	if stakingAmount <= slashingFee {
+		return nil, fmt.Errorf("staking amount %d is less than minimum slashing fee %d",
+			stakingAmount, slashingFee)
+	}
+
+	minStakingTime := GetMinStakingTime(params)
+	if uint32(stakingTimeBlocks) < minStakingTime {
+		return nil, fmt.Errorf("staking time %d is less than minimum staking time %d",
+			stakingTimeBlocks, minStakingTime)
+	}
+	unspendableKeyPathKey := unspendableKeyPathInternalPubKey()
+
+	babylonScripts, err := newBabylonScriptPaths(
+		stakerPubKey,
+		fpPks,
+		params.CovenantPks,
+		params.CovenantQuruomThreshold,
+		stakingTimeBlocks,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var unbondingPaths [][]byte
+	unbondingPaths = append(unbondingPaths, babylonScripts.timeLockPathScript)
+	unbondingPaths = append(unbondingPaths, babylonScripts.unbondingPathScript)
+	unbondingPaths = append(unbondingPaths, babylonScripts.slashingPathScript)
+
+	sh, err := newTaprootScriptHolder(
+		&unspendableKeyPathKey,
+		unbondingPaths,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	taprootPkScript, err := sh.taprootPkScript(app.network)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stakingOutput := wire.NewTxOut(int64(stakingAmount), taprootPkScript)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build staking info: %w", err)
+	}
+
+	return stakingOutput.PkScript, nil
+}
+
 func (app *StakerApp) StakeFunds(
 	stakerAddress btcutil.Address,
 	stakingAmount btcutil.Amount,

@@ -96,6 +96,35 @@ var babylonFinalityProvidersCmd = cli.Command{
 	Action: babylonFinalityProviders,
 }
 
+var getStakeOutputCmd = cli.Command{
+	Name:      "getStakeOutput",
+	ShortName: "gsto",
+	Usage:     "Generate the output address of the staking position",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:     stakerAddressFlag,
+			Usage:    "BTC address of the staker in hex",
+			Required: true,
+		},
+		cli.Int64Flag{
+			Name:     helpers.StakingAmountFlag,
+			Usage:    "Staking amount in satoshis",
+			Required: true,
+		},
+		cli.StringSliceFlag{
+			Name:     fpPksFlag,
+			Usage:    "BTC public keys of the finality providers in hex",
+			Required: true,
+		},
+		cli.Int64Flag{
+			Name:     helpers.StakingTimeBlocksFlag,
+			Usage:    "Staking time in BTC blocks",
+			Required: true,
+		},
+	},
+	Action: getStakeOutput,
+}
+
 var stakeCmd = cli.Command{
 	Name:      "stake",
 	ShortName: "st",
@@ -307,6 +336,28 @@ func babylonFinalityProviders(ctx *cli.Context) error {
 	}
 
 	helpers.PrintRespJSON(finalityProviders)
+
+	return nil
+}
+
+func getStakeOutput(ctx *cli.Context) error {
+	stakerAddress := ctx.String(stakerAddressFlag)
+	stakingAmount := ctx.Int64(helpers.StakingAmountFlag)
+	fpPks := ctx.StringSlice(fpPksFlag)
+	stakingTimeBlocks := ctx.Int64(helpers.StakingTimeBlocksFlag)
+
+	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+	results, err := client.GetStakeOutput(sctx, stakerAddress, stakingAmount, fpPks, stakingTimeBlocks)
+	if err != nil {
+		return err
+	}
+	helpers.PrintRespJSON(results)
 
 	return nil
 }

@@ -78,6 +78,59 @@ func (s *StakerService) health(_ *rpctypes.Context) (*ResultHealth, error) {
 	return &ResultHealth{}, nil
 }
 
+func (s *StakerService) getStakeOutput(_ *rpctypes.Context,
+	stakerPk string,
+	stakingAmount int64,
+	fpBtcPks []string,
+	stakingTimeBlocks int64,
+) (*ResultStakeOutput, error) {
+	if stakingAmount <= 0 {
+		return nil, fmt.Errorf("staking amount must be positive")
+	}
+
+	amount := btcutil.Amount(stakingAmount)
+
+	var fpPubKeys []*btcec.PublicKey = make([]*btcec.PublicKey, 0)
+
+	stakerPkBytes, err := hex.DecodeString(stakerPk)
+	if err != nil {
+		return nil, err
+	}
+	stakerPubKey, err := schnorr.ParsePubKey(stakerPkBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, fpPk := range fpBtcPks {
+		fpPkBytes, err := hex.DecodeString(fpPk)
+		if err != nil {
+			return nil, err
+		}
+
+		fpSchnorrKey, err := schnorr.ParsePubKey(fpPkBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		fpPubKeys = append(fpPubKeys, fpSchnorrKey)
+	}
+
+	if stakingTimeBlocks <= 0 || stakingTimeBlocks > math.MaxUint16 {
+		return nil, fmt.Errorf("staking time must be positive and lower than %d", math.MaxUint16)
+	}
+
+	stakingTimeUint16 := uint16(stakingTimeBlocks)
+
+	outputAddr, err := s.staker.GetStakeOutput(stakerPubKey, amount, fpPubKeys, stakingTimeUint16)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ResultStakeOutput{
+		OutputAddress: string(outputAddr),
+	}, nil
+}
+
 func (s *StakerService) stake(_ *rpctypes.Context,
 	stakerAddress string,
 	stakingAmount int64,
@@ -554,6 +607,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
 		// staking API
+		"getStakeOutput":            rpc.NewRPCFunc(s.getStakeOutput, "stakerPubKey,stakingAmount,fbBtcPks,stakingTimeBlocks"),
 		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,fpBtcPks,stakingTimeBlocks"),
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),

@@ -6,6 +6,10 @@ type ResultStake struct {
 	TxHash string `json:"tx_hash"`
 }
 
+type ResultStakeOutput struct {
+	OutputAddress string `json:"output_address"`
+}
+
 type StakingDetails struct {
 	StakingTxHash  string `json:"staking_tx_hash"`
 	StakerAddress  string `json:"staker_address"`
