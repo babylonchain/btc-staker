@@ -104,6 +104,11 @@ var getStakeOutputCmd = cli.Command{
 	Usage:     "Generate the output address of the staking position",
 	Flags: []cli.Flag{
 		cli.StringFlag{
+			Name:  stakingDaemonAddressFlag,
+			Usage: "full address of the staker daemon in format tcp:://<host>:<port>",
+			Value: defaultStakingDaemonAddress,
+		},
+		cli.StringFlag{
 			Name:     stakerPubKeyFlag,
 			Usage:    "BTC public key of the staker",
 			Required: true,
