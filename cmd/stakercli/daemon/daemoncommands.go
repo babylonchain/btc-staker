@@ -348,19 +348,20 @@ func babylonFinalityProviders(ctx *cli.Context) error {
 }
 
 func getStakeOutput(ctx *cli.Context) error {
-	stakerPubKey := ctx.String(stakerPubKeyFlag)
-	stakingAmount := ctx.Int64(helpers.StakingAmountFlag)
-	fpPks := ctx.StringSlice(fpPksFlag)
-	stakingTimeBlocks := ctx.Int64(helpers.StakingTimeBlocksFlag)
-
 	daemonAddress := ctx.String(stakingDaemonAddressFlag)
+
 	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
 	if err != nil {
 		return err
 	}
-
 	sctx := context.Background()
-	results, err := client.GetStakeOutput(sctx, stakerPubKey, stakingAmount, fpPks, stakingTimeBlocks)
+
+	stakerKey := ctx.String(stakerPubKeyFlag)
+	stakingAmount := ctx.Int64(helpers.StakingAmountFlag)
+	fpPks := ctx.StringSlice(fpPksFlag)
+	stakingTimeBlocks := ctx.Int64(helpers.StakingTimeBlocksFlag)
+
+	results, err := client.GetStakeOutput(sctx, stakerKey, stakingAmount, fpPks, stakingTimeBlocks)
 	if err != nil {
 		return err
 	}
