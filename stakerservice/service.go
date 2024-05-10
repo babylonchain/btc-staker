@@ -607,7 +607,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
 		// staking API
-		"getStakeOutput":            rpc.NewRPCFunc(s.getStakeOutput, "stakerPubKey,stakingAmount,fbBtcPks,stakingTimeBlocks"),
+		"getStakeOutput":            rpc.NewRPCFunc(s.getStakeOutput, "stakerKey,stakingAmount,fbBtcPks,stakingTimeBlocks"),
 		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,fpBtcPks,stakingTimeBlocks"),
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),

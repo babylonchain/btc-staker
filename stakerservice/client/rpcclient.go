@@ -85,7 +85,7 @@ func (c *StakerServiceJsonRpcClient) Stake(
 
 func (c *StakerServiceJsonRpcClient) GetStakeOutput(
 	ctx context.Context,
-	stakerAddress string,
+	stakerKey string,
 	stakingAmount int64,
 	fpPks []string,
 	stakingTimeBlocks int64,
@@ -93,7 +93,7 @@ func (c *StakerServiceJsonRpcClient) GetStakeOutput(
 	result := new(service.ResultStakeOutput)
 
 	params := make(map[string]interface{})
-	params["stakerAddress"] = stakerAddress
+	params["stakerKey"] = stakerKey
 	params["stakingAmount"] = stakingAmount
 	params["fpBtcPks"] = fpPks
 	params["stakingTimeBlocks"] = stakingTimeBlocks
