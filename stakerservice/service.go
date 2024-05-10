@@ -90,8 +90,6 @@ func (s *StakerService) getStakeOutput(_ *rpctypes.Context,
 
 	amount := btcutil.Amount(stakingAmount)
 
-	var fpPubKeys []*btcec.PublicKey = make([]*btcec.PublicKey, 0)
-
 	stakerPkBytes, err := hex.DecodeString(stakerPk)
 	if err != nil {
 		return nil, err
@@ -100,6 +98,8 @@ func (s *StakerService) getStakeOutput(_ *rpctypes.Context,
 	if err != nil {
 		return nil, err
 	}
+
+	var fpPubKeys []*btcec.PublicKey = make([]*btcec.PublicKey, 0)
 
 	for _, fpPk := range fpBtcPks {
 		fpPkBytes, err := hex.DecodeString(fpPk)
@@ -607,7 +607,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		// info AP
 		"health": rpc.NewRPCFunc(s.health, ""),
 		// staking API
-		"getStakeOutput":            rpc.NewRPCFunc(s.getStakeOutput, "stakerKey,stakingAmount,fbBtcPks,stakingTimeBlocks"),
+		"getStakeOutput":            rpc.NewRPCFunc(s.getStakeOutput, "stakerKey,stakingAmount,fpBtcPks,stakingTimeBlocks"),
 		"stake":                     rpc.NewRPCFunc(s.stake, "stakerAddress,stakingAmount,fpBtcPks,stakingTimeBlocks"),
 		"staking_details":           rpc.NewRPCFunc(s.stakingDetails, "stakingTxHash"),
 		"spend_stake":               rpc.NewRPCFunc(s.spendStake, "stakingTxHash"),
