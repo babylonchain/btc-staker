@@ -280,7 +280,7 @@ git clone https://github.com/babylonchain/btc-staker.git
 ```
 
 You can choose a specific version from
-the [official releases page](https://github.com/babylonchain/btcstaker/releases)
+the [official releases page](https://github.com/babylonchain/btc-staker/releases)
 
 ```bash
 cd btc-staker # cd into the project directory
