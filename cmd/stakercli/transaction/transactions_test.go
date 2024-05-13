@@ -2,18 +2,27 @@ package transaction_test
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
 
+	bbn "github.com/babylonchain/babylon/types"
+
 	"github.com/babylonchain/babylon/btcstaking"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
+	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/btcutil/psbt"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/wire"
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli"
@@ -21,6 +30,7 @@ import (
 	cmdadmin "github.com/babylonchain/btc-staker/cmd/stakercli/admin"
 	cmddaemon "github.com/babylonchain/btc-staker/cmd/stakercli/daemon"
 	"github.com/babylonchain/btc-staker/cmd/stakercli/transaction"
+	"github.com/babylonchain/btc-staker/utils"
 )
 
 const (
@@ -81,11 +91,15 @@ func appRunCreatePhase1StakingTx(r *rand.Rand, t *testing.T, app *cli.App, argum
 	return data
 }
 
-func genSchnorPubKeyHex(t *testing.T) string {
+func genRandomPubKey(t *testing.T) *btcec.PublicKey {
 	privKey, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
 
-	btcPub := privKey.PubKey()
+	return privKey.PubKey()
+}
+
+func genSchnorPubKeyHex(t *testing.T) string {
+	btcPub := genRandomPubKey(t)
 	return hex.EncodeToString(schnorr.SerializePubKey(btcPub))
 }
 
@@ -195,4 +209,80 @@ func TestCheckPhase1StakingTransactionCmd(t *testing.T) {
 	)
 	err = app.Run(invalidStakingAmountArgs)
 	require.EqualError(t, err, fmt.Errorf("staking amount in tx %d do not match with flag %d", validStakingAmount, invalidStakingAmount).Error())
+}
+
+func appRunCreatePhase1UnbondingTx(r *rand.Rand, t *testing.T, app *cli.App, arguments []string) transaction.CreatePhase1UnbondingTxResponse {
+	args := []string{"stakercli", "transaction", "create-phase1-unbonding-transaction"}
+	args = append(args, arguments...)
+	output := appRunWithOutput(r, t, app, args)
+
+	var data transaction.CreatePhase1UnbondingTxResponse
+	err := json.Unmarshal([]byte(output), &data)
+	require.NoError(t, err)
+	return data
+}
+
+func genRandomUint16(r *rand.Rand) uint16 {
+	return uint16(r.Intn(math.MaxUint16-1) + 1)
+}
+
+func genRandomInt64(r *rand.Rand) int64 {
+	return int64(r.Intn(100000-1000) + 1000)
+}
+
+func FuzzCreateUnbondingTx(f *testing.F) {
+	datagen.AddRandomSeedsToFuzzer(f, 10)
+	f.Fuzz(func(t *testing.T, seed int64) {
+		r := rand.New(rand.NewSource(seed))
+		mb := datagen.GenRandomByteArray(r, btcstaking.MagicBytesLen)
+		stakerKey := genRandomPubKey(t)
+		fpKey := genRandomPubKey(t)
+		cov1Key := genRandomPubKey(t)
+		cov2Key := genRandomPubKey(t)
+
+		_, tx, err := btcstaking.BuildV0IdentifiableStakingOutputsAndTx(
+			mb,
+			stakerKey,
+			fpKey,
+			[]*btcec.PublicKey{cov1Key, cov2Key},
+			1,
+			genRandomUint16(r),
+			btcutil.Amount(genRandomInt64(r)),
+			&chaincfg.RegressionNetParams,
+		)
+		require.NoError(t, err)
+
+		fakeInputHash := sha256.Sum256([]byte{0x01})
+		tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{Hash: fakeInputHash, Index: 0}, nil, nil))
+
+		serializedStakingTx, err := utils.SerializeBtcTransaction(tx)
+		require.NoError(t, err)
+
+		unbondingTime := genRandomUint16(r)
+
+		createTxCmdArgs := []string{
+			fmt.Sprintf("--staking-transaction=%s", hex.EncodeToString(serializedStakingTx)),
+			fmt.Sprintf("--unbonding-fee=%d", 100),
+			fmt.Sprintf("--unbonding-time=%d", unbondingTime),
+			fmt.Sprintf("--magic-bytes=%s", hex.EncodeToString(mb)),
+			fmt.Sprintf("--covenant-committee-pks=%s", hex.EncodeToString(schnorr.SerializePubKey(cov1Key))),
+			fmt.Sprintf("--covenant-committee-pks=%s", hex.EncodeToString(schnorr.SerializePubKey(cov2Key))),
+			"--covenant-quorum=1",
+			"--network=regtest",
+		}
+
+		app := testApp()
+		unbondingTxResponse := appRunCreatePhase1UnbondingTx(r, t, app, createTxCmdArgs)
+		require.NotNil(t, unbondingTxResponse)
+		utx, _, err := bbn.NewBTCTxFromHex(unbondingTxResponse.UnbondingTxHex)
+		require.NoError(t, err)
+		require.NotNil(t, utx)
+
+		decodedBytes, err := base64.StdEncoding.DecodeString(unbondingTxResponse.UnbondingPsbtPacketBase64)
+		require.NoError(t, err)
+		require.NotNil(t, decodedBytes)
+		decoded, err := psbt.NewFromRawBytes(bytes.NewReader(decodedBytes), false)
+		require.NoError(t, err)
+		require.NotNil(t, decoded)
+	})
 }
