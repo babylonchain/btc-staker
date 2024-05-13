@@ -52,3 +52,21 @@ func Unbond(daemonAddress string, stakingTransactionHash string, feeRate int) er
 
 	return nil
 }
+
+func Unstake(daemonAddress string, stakingTransactionHash string) error {
+	client, err := dc.NewStakerServiceJsonRpcClient(daemonAddress)
+	if err != nil {
+		return err
+	}
+
+	sctx := context.Background()
+
+	result, err := client.SpendStakingTransaction(sctx, stakingTransactionHash)
+	if err != nil {
+		return err
+	}
+
+	helpers.PrintRespJSON(result)
+
+	return nil
+}
