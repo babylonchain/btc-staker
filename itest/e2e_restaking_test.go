@@ -75,9 +75,6 @@ func (tm *TestManager) createAndRegisterFinalityProvidersWithCZ(
 	t *testing.T,
 	data *testStakingDataWithCZFPs,
 ) {
-	// create and register finality providers for Babylon
-	tm.createAndRegisterFinalityProviders(t, data.testStakingData)
-
 	// register chain
 	_, err := tm.BabylonClient.RegisterConsumerChain(data.consumerRegister.ConsumerId, data.consumerRegister.ConsumerName, data.consumerRegister.ConsumerDescription)
 	require.NoError(t, err)
@@ -119,6 +116,9 @@ func (tm *TestManager) createAndRegisterFinalityProvidersWithCZ(
 		require.NoError(t, err)
 		require.Equal(t, bbntypes.NewBIP340PubKeyFromBTCPK(&fp.FinalityProvider.BtcPk), fpBTCPK)
 	}
+
+	// create and register finality providers for Babylon
+	tm.createAndRegisterFinalityProviders(t, data.testStakingData)
 }
 
 func (tm *TestManager) sendStakingTxWithCZFPs(t *testing.T, data *testStakingDataWithCZFPs) *chainhash.Hash {
