@@ -57,6 +57,8 @@ Please update the following configurations in the provided file:
    and this [link](https://github.com/bitcoin/bitcoin/pull/28597).
 4. If you want to enable remote connections to the node, you can add
    `rpcallowip=0.0.0.0/0` and `rpcbind=0.0.0.0` to the bitcoind command.
+5. Start the `bitcoind` with `-txindex` option to make sure btc-staker can get 
+   all needed bitcoin transaction data.
 
 ```bash 
 # Create the service file
@@ -72,6 +74,7 @@ ExecStart=/home/ubuntu/bitcoin-26.0/bin/bitcoind \
     -deprecatedrpc=create_bdb \
     -signet \
     -server \
+    -txindex \
     -rpcport=38332 \
     -rpcuser=<your_rpc_username> \
     -rpcpassword=<your_rpc_password>
@@ -306,27 +309,12 @@ export PATH=$HOME/go/bin:$PATH
 echo 'export PATH=$HOME/go/bin:$PATH' >> ~/.profile
 ```
 
-To build without installing,
-
-```bash
-make build
-```
-
 ### Create a Babylon keyring (keyring backend: test) with funds
 
 The `stakerd` daemon requires a keyring with loaded Babylon tokens to pay for the
 transactions. Follow this
 [guide](https://docs.babylonchain.io/docs/user-guides/btc-staking-testnet/getting-funds)
 to create a keyring and request funds.
-
-The above command will put the built binaries in a build directory with the following
-structure:
-
-```bash
- ls build
-     ├── stakerd
-     └── stakercli
-```
 
 ## 4. BTC Staker Setup
 
@@ -391,7 +379,7 @@ In the following, we go through important parameters of the `stakerd.conf` file.
 Key = btc-staker
 
 # Chain id of the chain (Babylon)
-ChainID = chain-test
+ChainID = bbn-test-3
 
 # Address of the chain's RPC server (Babylon)
 RPCAddr = http://localhost:26657
@@ -399,17 +387,8 @@ RPCAddr = http://localhost:26657
 # Address of the chain's GRPC server (Babylon)
 GRPCAddr = https://localhost:9090
 
-# Type of keyring backend to use 
-KeyringBackend = test
-
-# Adjustment factor when using gas estimation
-GasAdjustment = 1.2
-
-# Comma separated minimum gas prices to accept for transactions
-GasPrices = 0.01ubbn
-
 # Directory to store staker keys in
-KeyDirectory = /Users/<user>/Library/Application Support/Stakerd
+KeyDirectory = /path/to/stakerd-home/
 ```
 
 #### BTC Node configuration
@@ -507,7 +486,7 @@ You can start the staker daemon using the following command:
 stakerd
 ```
 
-This will start the RPC server at the address specified in the configuration under
+This will start the Staker daemon RPC server at the address specified in the configuration under
 the `RawRPCListeners` field. A custom address can also be specified using
 the `--rpclisten` flag.
 
@@ -587,7 +566,7 @@ stakercli daemon stake \
   --staker-address bcrt1q56ehztys752uzg7fzpear08l5mw8w2kxgz7644 \
   --staking-amount 1000000 \
   --finality-providers-pks 3328782c63404386d9cd905dba5a35975cba629e48192cea4a348937e865d312 \
-  --staking-time 100
+  --staking-time 10000 # ~70 days
 
 # Transaction details
 {
@@ -648,3 +627,6 @@ db.
 ```bash
 stakercli daemon withdrawable-transactions
 ```
+
+In order to `unstake` you'll need to wait for your staking/unbonding tx to be deep
+enough in btc so that the timelock expires.

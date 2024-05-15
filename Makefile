@@ -2,12 +2,9 @@ DOCKER = $(shell which docker)
 BUILDDIR ?= $(CURDIR)/build
 TOOLS_DIR := tools
 
-BTCD_PKG := github.com/btcsuite/btcd
-BTCDW_PKG := github.com/btcsuite/btcwallet
 BABYLON_PKG := github.com/babylonchain/babylon/cmd/babylond
 
 GO_BIN := ${GOPATH}/bin
-BTCD_BIN := $(GO_BIN)/btcd
 
 ldflags := $(LDFLAGS)
 build_tags := $(BUILD_TAGS)
@@ -25,6 +22,14 @@ endif
 
 BUILD_TARGETS := build install
 BUILD_FLAGS := --tags "$(build_tags)" --ldflags '$(ldflags)'
+
+# Update changelog vars
+ifneq (,$(SINCE_TAG))
+	sinceTag := --since-tag $(SINCE_TAG)
+endif
+ifneq (,$(UPCOMING_TAG))
+	upcomingTag := --future-release $(UPCOMING_TAG)
+endif
 
 all: build install
 
@@ -46,7 +51,7 @@ test:
 	go test ./...
 
 test-e2e:
-	cd $(TOOLS_DIR); go install -trimpath $(BTCD_PKG); go install -trimpath $(BTCDW_PKG); go install -trimpath $(BABYLON_PKG);
+	cd $(TOOLS_DIR); go install -trimpath $(BABYLON_PKG);
 	go test -mod=readonly -timeout=25m -v $(PACKAGES_E2E) -count=1 --tags=e2e
 
 proto-gen:
@@ -54,3 +59,9 @@ proto-gen:
 	cd ./proto; ./gen_protos_docker.sh
 
 .PHONY: proto-gen
+
+update-changelog:
+	@echo ./scripts/update_changelog.sh $(sinceTag) $(upcomingTag)
+	./scripts/update_changelog.sh $(sinceTag) $(upcomingTag)
+
+.PHONY: update-changelog

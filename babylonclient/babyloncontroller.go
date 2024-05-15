@@ -9,9 +9,12 @@ import (
 	"strings"
 	"time"
 
+	btcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
+
 	sdkErr "cosmossdk.io/errors"
 	sdkmath "cosmossdk.io/math"
 	"github.com/avast/retry-go/v4"
+	bbnclient "github.com/babylonchain/babylon/client/client"
 	bbntypes "github.com/babylonchain/babylon/types"
 	bcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
 	btclctypes "github.com/babylonchain/babylon/x/btclightclient/types"
@@ -19,7 +22,6 @@ import (
 	"github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/stakerdb"
 	"github.com/babylonchain/btc-staker/utils"
-	bbnclient "github.com/babylonchain/rpc-client/client"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
@@ -406,7 +408,9 @@ func (bc *BabylonController) reliablySendMsgs(
 // TODO: for now return sdk.TxResponse, it will ease up debugging/testing
 // ultimately we should create our own type ate
 func (bc *BabylonController) Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error) {
-	delegateMsg, err := delegationDataToMsg(bc.getTxSigner(), dg)
+	signer := bc.getTxSigner()
+
+	delegateMsg, err := delegationDataToMsg(signer, dg)
 
 	if err != nil {
 		return nil, err
@@ -669,15 +673,21 @@ func chainToChainBytes(chain []*wire.BlockHeader) []bbntypes.BTCHeaderBytes {
 // RegisterFinalityProvider registers a BTC finality provider via a MsgCreateFinalityProvider to Babylon
 // it returns tx hash and error
 func (bc *BabylonController) RegisterFinalityProvider(
-	bbnPubKey *secp256k1.PubKey, btcPubKey *bbntypes.BIP340PubKey, commission *sdkmath.LegacyDec,
-	description *sttypes.Description, pop *btcstypes.ProofOfPossession) (*pv.RelayerTxResponse, error) {
+	bbnPubKey *secp256k1.PubKey,
+	btcPubKey *bbntypes.BIP340PubKey,
+	commission *sdkmath.LegacyDec,
+	description *sttypes.Description,
+	pop *btcstypes.ProofOfPossession,
+	masterRandomness string,
+) (*pv.RelayerTxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateFinalityProvider{
-		Signer:      bc.getTxSigner(),
-		Commission:  commission,
-		BabylonPk:   bbnPubKey,
-		BtcPk:       btcPubKey,
-		Description: description,
-		Pop:         pop,
+		Signer:        bc.getTxSigner(),
+		Commission:    commission,
+		BabylonPk:     bbnPubKey,
+		BtcPk:         btcPubKey,
+		Description:   description,
+		Pop:           pop,
+		MasterPubRand: masterRandomness,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{registerMsg})
@@ -706,10 +716,10 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 
 		var udi *UndelegationInfo = nil
 
-		if resp.UndelegationInfo != nil {
+		if resp.BtcDelegation.UndelegationResponse != nil {
 			var coventSigInfos []CovenantSignatureInfo
 
-			for _, covenantSigInfo := range resp.UndelegationInfo.CovenantUnbondingSigList {
+			for _, covenantSigInfo := range resp.BtcDelegation.UndelegationResponse.CovenantUnbondingSigList {
 				covSig := covenantSigInfo
 				sig, err := covSig.Sig.ToBTCSig()
 
@@ -733,25 +743,25 @@ func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) 
 				coventSigInfos = append(coventSigInfos, sigInfo)
 			}
 
-			tx, err := bbntypes.NewBTCTxFromBytes(resp.UndelegationInfo.UnbondingTx)
+			tx, _, err := bbntypes.NewBTCTxFromHex(resp.BtcDelegation.UndelegationResponse.UnbondingTxHex)
 
 			if err != nil {
 				return retry.Unrecoverable(fmt.Errorf("malformed unbonding transaction: %s: %w", err.Error(), ErrInvalidValueReceivedFromBabylonNode))
 			}
 
-			if resp.UnbondingTime > math.MaxUint16 {
-				return retry.Unrecoverable(fmt.Errorf("malformed unbonding time: %d: %w", resp.UnbondingTime, ErrInvalidValueReceivedFromBabylonNode))
+			if resp.BtcDelegation.UnbondingTime > math.MaxUint16 {
+				return retry.Unrecoverable(fmt.Errorf("malformed unbonding time: %d: %w", resp.BtcDelegation.UnbondingTime, ErrInvalidValueReceivedFromBabylonNode))
 			}
 
 			udi = &UndelegationInfo{
 				UnbondingTransaction:        tx,
 				CovenantUnbondingSignatures: coventSigInfos,
-				UnbondingTime:               uint16(resp.UnbondingTime),
+				UnbondingTime:               uint16(resp.BtcDelegation.UnbondingTime),
 			}
 		}
 
 		di = &DelegationInfo{
-			Active:           resp.Active,
+			Active:           resp.BtcDelegation.Active,
 			UndelegationInfo: udi,
 		}
 		return nil
@@ -803,7 +813,7 @@ func (bc *BabylonController) SubmitCovenantSig(
 	return bc.reliablySendMsgs([]sdk.Msg{msg})
 }
 
-func (bc *BabylonController) QueryPendingBTCDelegations() ([]*btcstypes.BTCDelegation, error) {
+func (bc *BabylonController) QueryPendingBTCDelegations() ([]*btcstypes.BTCDelegationResponse, error) {
 	ctx, cancel := getQueryContext(bc.cfg.Timeout)
 	defer cancel()
 
@@ -821,4 +831,42 @@ func (bc *BabylonController) QueryPendingBTCDelegations() ([]*btcstypes.BTCDeleg
 	}
 
 	return res.BtcDelegations, nil
+}
+
+func (bc *BabylonController) GetBBNClient() *bbnclient.Client {
+	return bc.bbnClient
+}
+
+func (bc *BabylonController) InsertSpvProofs(submitter string, proofs []*btcctypes.BTCSpvProof) (*pv.RelayerTxResponse, error) {
+	msg := &btcctypes.MsgInsertBTCSpvProof{
+		Submitter: submitter,
+		Proofs:    proofs,
+	}
+
+	res, err := bc.reliablySendMsgs([]sdk.Msg{msg})
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (bc *BabylonController) QueryBtcLightClientTip() (*btclctypes.BTCHeaderInfoResponse, error) {
+	res, err := bc.bbnClient.QueryClient.BTCHeaderChainTip()
+	if err != nil {
+		return nil, fmt.Errorf("failed to query BTC tip: %v", err)
+	}
+
+	return res.Header, nil
+}
+
+func (bc *BabylonController) QueryFinalityProviderRegisteredEpoch(fpPk *btcec.PublicKey) (uint64, error) {
+	res, err := bc.bbnClient.QueryClient.FinalityProvider(
+		bbntypes.NewBIP340PubKeyFromBTCPK(fpPk).MarshalHex(),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query finality provider registered epoch: %w", err)
+	}
+
+	return res.FinalityProvider.RegisteredEpoch, nil
 }

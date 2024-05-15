@@ -38,6 +38,7 @@ jobs:
           name: Run integration tests
           command: |
             make test-e2e
+          no_output_timeout: 20m
 
   build_docker:
     machine:

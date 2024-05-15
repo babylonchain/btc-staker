@@ -80,10 +80,12 @@ func DefaultWalletConfig() WalletConfig {
 }
 
 type WalletRpcConfig struct {
-	Host       string `long:"wallethost" description:"location of the wallet rpc server"`
-	User       string `long:"walletuser" description:"user auth for the wallet rpc server"`
-	Pass       string `long:"walletpassword" description:"password auth for the wallet rpc server"`
-	DisableTls bool   `long:"noclienttls" description:"disables tls for the wallet rpc client"`
+	Host             string `long:"wallethost" description:"location of the wallet rpc server"`
+	User             string `long:"walletuser" description:"user auth for the wallet rpc server"`
+	Pass             string `long:"walletpassword" description:"password auth for the wallet rpc server"`
+	DisableTls       bool   `long:"noclienttls" description:"disables tls for the wallet rpc client"`
+	RPCWalletCert    string `long:"rpcwalletcert" description:"File containing the wallet daemon's certificate file"`
+	RawRPCWalletCert string `long:"rawrpcwalletcert" description:"The raw bytes of the wallet daemon's PEM-encoded certificate chain which will be used to authenticate the RPC connection."`
 }
 
 func DefaultWalletRpcConfig() WalletRpcConfig {
@@ -127,16 +129,18 @@ func DefaultBtcNodeBackendConfig() BtcNodeBackendConfig {
 }
 
 type StakerConfig struct {
-	BabylonStallingInterval  time.Duration `long:"babylonstallinginterval" description:"The interval for Babylon node BTC light client to catch up with the real chain before re-sending delegation request"`
-	UnbondingTxCheckInterval time.Duration `long:"unbondingtxcheckinterval" description:"The interval for staker whether delegation received all covenant signatures"`
-	ExitOnCriticalError      bool          `long:"exitoncriticalerror" description:"Exit stakerd on critical error"`
+	BabylonStallingInterval   time.Duration `long:"babylonstallinginterval" description:"The interval for Babylon node BTC light client to catch up with the real chain before re-sending delegation request"`
+	UnbondingTxCheckInterval  time.Duration `long:"unbondingtxcheckinterval" description:"The interval for staker whether delegation received all covenant signatures"`
+	MaxConcurrentTransactions uint32        `long:"maxconcurrenttransactions" description:"Maximum concurrent transactions in flight to babylon node"`
+	ExitOnCriticalError       bool          `long:"exitoncriticalerror" description:"Exit stakerd on critical error"`
 }
 
 func DefaultStakerConfig() StakerConfig {
 	return StakerConfig{
-		BabylonStallingInterval:  1 * time.Minute,
-		UnbondingTxCheckInterval: 30 * time.Second,
-		ExitOnCriticalError:      true,
+		BabylonStallingInterval:   1 * time.Minute,
+		UnbondingTxCheckInterval:  30 * time.Second,
+		MaxConcurrentTransactions: 1,
+		ExitOnCriticalError:       true,
 	}
 }
 
@@ -164,6 +168,8 @@ type Config struct {
 
 	StakerConfig *StakerConfig `group:"stakerconfig" namespace:"stakerconfig"`
 
+	MetricsConfig *MetricsConfig `group:"metricsconfig" namespace:"metricsconfig"`
+
 	JsonRpcServerConfig *JsonRpcServerConfig
 
 	ActiveNetParams chaincfg.Params
@@ -179,6 +185,7 @@ func DefaultConfig() Config {
 	bbnConfig := DefaultBBNConfig()
 	dbConfig := DefaultDBConfig()
 	stakerConfig := DefaultStakerConfig()
+	metricsCfg := DefaultMetricsConfig()
 	return Config{
 		StakerdDir:           DefaultStakerdDir,
 		ConfigFile:           DefaultConfigFile,
@@ -192,6 +199,7 @@ func DefaultConfig() Config {
 		BabylonConfig:        &bbnConfig,
 		DBConfig:             &dbConfig,
 		StakerConfig:         &stakerConfig,
+		MetricsConfig:        &metricsCfg,
 	}
 }
 
