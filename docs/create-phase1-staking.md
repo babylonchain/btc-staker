@@ -113,21 +113,17 @@ covenant pub key specified, the flag needs to be used again.
 - `--network` Specifies the BTC network this transaction will be sent, any of
 `[mainnet, testnet3, regtest, simnet, signet]`.
 
-For example to generate one staking transaction that locks `0.05` BTC for one
-year, use `--staking-amount=5000000` and `--staking-time=52560`.
+For example to generate one staking transaction that locks `0.1` BTC for one
+year, use `--staking-amount=10000000` and `--staking-time=52560`.
 
 ```shell
 stakercli transaction create-phase1-staking-transaction \
   --staker-pk 2dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558
-  --staking-amount 5000000 --staking-time 52560 \
+  --staking-amount 10000000 --staking-time 52560 \
   --magic-bytes <bbn_4byte_identifier> \
   --finality-provider-pk <fp_pk_chosen> \
-  --covenant-quorum 3 \
-  --covenant-committee-pks 05149a0c7a95320adf210e47bca8b363b7bd966be86be6392dd6cf4f96995869 \
-  --covenant-committee-pks e8d503cb52715249f32f3ee79cee88dfd48c2565cb0c79cf9640d291f46fd518 \
-  --covenant-committee-pks fe81b2409a32ddfd8ec1556557e8dd949b6e4fd37047523cb7f5fefca283d542 \
-  --covenant-committee-pks bc4a1ff485d7b44faeec320b81ad31c3cad4d097813c21fcf382b4305e4cfc82 \
-  --covenant-committee-pks 001e50601a4a1c003716d7a1ee7fe25e26e55e24e909b3642edb60d30e3c40c1 \
+  --covenant-quorum 1 \
+  --covenant-committee-pks 50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0 \
   --network signet
 
 {
