@@ -251,7 +251,7 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 
 	amt := ctx.Int64(helpers.StakingAmountFlag)
 	if amt > 0 && amt != stakingTx.StakingOutput.Value {
-		return fmt.Errorf("staking amount in tx %d do not match with flag %d", tx.TxOut[0].Value, amt)
+		return fmt.Errorf("staking amount in tx %d do not match with flag %d", stakingTx.StakingOutput.Value, amt)
 	}
 
 	fmt.Println("Provided transaction is valid staking transaction!")

@@ -181,6 +181,19 @@ func TestCheckPhase1StakingTransactionCmd(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	err = app.Run([]string{
+		"stakercli", "transaction", "check-phase1-staking-transaction",
+		"--covenant-quorum=1",
+		"--covenant-committee-pks=50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0",
+		"--magic-bytes=62627434",
+		"--network=signet",
+		"--staking-transaction=02000000000101b8eba8646e5fdb240af853d52c37b6159984c34bebb55c6097c4f0d276e536c80000000000fdffffff0344770d000000000016001461e09f8a6e653c6bdec644874dc119be1b60f27a404b4c00000000002251204a4b057a9fa0510ccdce480fdac5a3cd12329993bac2517afb784a64d11fc1b40000000000000000496a4762627434002dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558a89e7caf57360bc8b791df72abc3fb6d2ddc0e06e171c9f17c4ea1299e677565cd500247304402203bae17ac05c211e3c849595ef211f9a23ffc6d32d089e53cfaf81b94353f9e0c022063676b789a3fd85842552cd54408a8e92a1d37f51e0f4765ac29ef89ed707b750121032dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f355800000000",
+		"--staker-pk=2dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558",
+		"--finality-provider-pk=a89e7caf57360bc8b791df72abc3fb6d2ddc0e06e171c9f17c4ea1299e677565",
+		"--staking-time=52560", "--staking-amount=500000",
+	})
+	require.EqualError(t, err, fmt.Errorf("staking amount in tx %d do not match with flag 500000", validStakingAmount).Error())
+
 	// check if errors are caught in flags --staker-pk, --finality-provider-pk, --staking-time, --staking-amount
 	invalidStakerPk := "badstakerpk"
 	invalidBtcStakerArgs := append(stakerCliCheckP1StkTx,
