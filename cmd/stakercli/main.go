@@ -1,26 +1,18 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
+	cmdadmin "github.com/babylonchain/btc-staker/cmd/stakercli/admin"
+	cmddaemon "github.com/babylonchain/btc-staker/cmd/stakercli/daemon"
+	cmdtx "github.com/babylonchain/btc-staker/cmd/stakercli/transaction"
 	"github.com/urfave/cli"
 )
 
 func fatal(err error) {
 	fmt.Fprintf(os.Stderr, "[btc-staker] %v\n", err)
 	os.Exit(1)
-}
-
-func printRespJSON(resp interface{}) {
-	jsonBytes, err := json.MarshalIndent(resp, "", "    ")
-	if err != nil {
-		fmt.Println("unable to decode response: ", err)
-		return
-	}
-
-	fmt.Printf("%s\n", jsonBytes)
 }
 
 const (
@@ -68,8 +60,9 @@ func main() {
 		},
 	}
 
-	app.Commands = append(app.Commands, daemonCommands...)
-	app.Commands = append(app.Commands, adminCommands...)
+	app.Commands = append(app.Commands, cmddaemon.DaemonCommands...)
+	app.Commands = append(app.Commands, cmdadmin.AdminCommands...)
+	app.Commands = append(app.Commands, cmdtx.TransactionCommands...)
 
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)

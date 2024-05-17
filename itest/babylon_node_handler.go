@@ -151,6 +151,7 @@ func NewBabylonNodeHandler(
 		fmt.Sprintf("--btc-base-header=%s", baseHeaderHex),
 		"--additional-sender-account",
 		fmt.Sprintf("--covenant-quorum=%s", quorumString),
+		fmt.Sprintf("--epoch-interval=%d", 5),
 		fmt.Sprintf("--covenant-pks=%s,%s,%s", pubBabylon1.MarshalHex(), pubBabylon2.MarshalHex(), pubBabylon3.MarshalHex()),
 	)
 

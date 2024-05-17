@@ -1,15 +1,16 @@
-package main
+package daemon
 
 import (
 	"context"
 	"strconv"
 
+	"github.com/babylonchain/btc-staker/cmd/stakercli/helpers"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	dc "github.com/babylonchain/btc-staker/stakerservice/client"
 	"github.com/urfave/cli"
 )
 
-var daemonCommands = []cli.Command{
+var DaemonCommands = []cli.Command{
 	{
 		Name:      "daemon",
 		ShortName: "dn",
@@ -34,9 +35,9 @@ const (
 	offsetFlag                 = "offset"
 	limitFlag                  = "limit"
 	fpPksFlag                  = "finality-providers-pks"
-	stakingTimeBlocksFlag      = "staking-time"
 	stakingTransactionHashFlag = "staking-transaction-hash"
 	feeRateFlag                = "fee-rate"
+	stakerAddressFlag          = "staker-address"
 )
 
 var (
@@ -111,7 +112,7 @@ var stakeCmd = cli.Command{
 			Required: true,
 		},
 		cli.Int64Flag{
-			Name:     stakingAmountFlag,
+			Name:     helpers.StakingAmountFlag,
 			Usage:    "Staking amount in satoshis",
 			Required: true,
 		},
@@ -121,7 +122,7 @@ var stakeCmd = cli.Command{
 			Required: true,
 		},
 		cli.Int64Flag{
-			Name:     stakingTimeBlocksFlag,
+			Name:     helpers.StakingTimeBlocksFlag,
 			Usage:    "Staking time in BTC blocks",
 			Required: true,
 		},
@@ -253,7 +254,7 @@ func checkHealth(ctx *cli.Context) error {
 		return err
 	}
 
-	printRespJSON(health)
+	helpers.PrintRespJSON(health)
 
 	return nil
 }
@@ -273,7 +274,7 @@ func listOutputs(ctx *cli.Context) error {
 		return err
 	}
 
-	printRespJSON(outputs)
+	helpers.PrintRespJSON(outputs)
 
 	return nil
 }
@@ -305,7 +306,7 @@ func babylonFinalityProviders(ctx *cli.Context) error {
 		return err
 	}
 
-	printRespJSON(finalityProviders)
+	helpers.PrintRespJSON(finalityProviders)
 
 	return nil
 }
@@ -320,16 +321,16 @@ func stake(ctx *cli.Context) error {
 	sctx := context.Background()
 
 	stakerAddress := ctx.String(stakerAddressFlag)
-	stakingAmount := ctx.Int64(stakingAmountFlag)
+	stakingAmount := ctx.Int64(helpers.StakingAmountFlag)
 	fpPks := ctx.StringSlice(fpPksFlag)
-	stakingTimeBlocks := ctx.Int64(stakingTimeFlag)
+	stakingTimeBlocks := ctx.Int64(helpers.StakingTimeBlocksFlag)
 
 	results, err := client.Stake(sctx, stakerAddress, stakingAmount, fpPks, stakingTimeBlocks)
 	if err != nil {
 		return err
 	}
 
-	printRespJSON(results)
+	helpers.PrintRespJSON(results)
 
 	return nil
 }
@@ -350,7 +351,7 @@ func unstake(ctx *cli.Context) error {
 		return err
 	}
 
-	printRespJSON(result)
+	helpers.PrintRespJSON(result)
 
 	return nil
 }
@@ -382,7 +383,7 @@ func unbond(ctx *cli.Context) error {
 		return err
 	}
 
-	printRespJSON(result)
+	helpers.PrintRespJSON(result)
 
 	return nil
 }
@@ -403,7 +404,7 @@ func stakingDetails(ctx *cli.Context) error {
 		return err
 	}
 
-	printRespJSON(result)
+	helpers.PrintRespJSON(result)
 
 	return nil
 }
@@ -435,7 +436,7 @@ func listStakingTransactions(ctx *cli.Context) error {
 		return err
 	}
 
-	printRespJSON(transactions)
+	helpers.PrintRespJSON(transactions)
 
 	return nil
 }
@@ -467,7 +468,7 @@ func withdrawableTransactions(ctx *cli.Context) error {
 		return err
 	}
 
-	printRespJSON(transactions)
+	helpers.PrintRespJSON(transactions)
 
 	return nil
 }

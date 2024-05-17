@@ -9,6 +9,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/babylonchain/babylon/crypto/eots"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
@@ -29,11 +30,11 @@ import (
 
 type testStakingDataWithCZFPs struct {
 	*testStakingData
-	chainRegister  *bsctypes.ChainRegister
-	CZFPBabylonSKs []*secp256k1.PrivKey
-	CZFPBabylonPKs []*secp256k1.PubKey
-	CZFPBTCSKs     []*btcec.PrivateKey
-	CZFPBTCPKs     []*btcec.PublicKey
+	consumerRegister *bsctypes.ConsumerRegister
+	CZFPBabylonSKs   []*secp256k1.PrivKey
+	CZFPBabylonPKs   []*secp256k1.PubKey
+	CZFPBTCSKs       []*btcec.PrivateKey
+	CZFPBTCPKs       []*btcec.PublicKey
 }
 
 func (d *testStakingDataWithCZFPs) GetNumRestakedFPsInCZ() int {
@@ -66,7 +67,7 @@ func (tm *TestManager) getTestStakingDataWithCZFPs(
 	data.CZFPBabylonPKs = fpBBNPKs
 	data.CZFPBTCSKs = fpBTCSKs
 	data.CZFPBTCPKs = fpBTCPKs
-	data.chainRegister = datagen.GenRandomChainRegister(r)
+	data.consumerRegister = datagen.GenRandomConsumerRegister(r)
 
 	return data
 }
@@ -75,11 +76,8 @@ func (tm *TestManager) createAndRegisterFinalityProvidersWithCZ(
 	t *testing.T,
 	data *testStakingDataWithCZFPs,
 ) {
-	// create and register finality providers for Babylon
-	tm.createAndRegisterFinalityProviders(t, data.testStakingData)
-
 	// register chain
-	_, err := tm.BabylonClient.RegisterConsumerChain(data.chainRegister.ChainId, data.chainRegister.ChainName, data.chainRegister.ChainDescription)
+	_, err := tm.BabylonClient.RegisterConsumerChain(data.consumerRegister.ConsumerId, data.consumerRegister.ConsumerName, data.consumerRegister.ConsumerDescription)
 	require.NoError(t, err)
 
 	// create and register finality providers for consumer chains
@@ -100,6 +98,8 @@ func (tm *TestManager) createAndRegisterFinalityProvidersWithCZ(
 		require.NoError(t, err)
 
 		// register the generated finality provider
+		_, mpr, err := eots.NewMasterRandPair(r)
+		require.NoError(t, err)
 		_, err = tm.BabylonClient.RegisterFinalityProvider(
 			data.CZFPBabylonPKs[i],
 			fpBTCPK,
@@ -108,7 +108,8 @@ func (tm *TestManager) createAndRegisterFinalityProvidersWithCZ(
 				Moniker: "tester",
 			},
 			pop,
-			data.chainRegister.ChainId,
+			data.consumerRegister.ConsumerId,
+			mpr.MarshalBase58(),
 		)
 
 		// ensure the finality provider has been registered
@@ -116,6 +117,9 @@ func (tm *TestManager) createAndRegisterFinalityProvidersWithCZ(
 		require.NoError(t, err)
 		require.Equal(t, bbntypes.NewBIP340PubKeyFromBTCPK(&fp.FinalityProvider.BtcPk), fpBTCPK)
 	}
+
+	// create and register finality providers for Babylon
+	tm.createAndRegisterFinalityProviders(t, data.testStakingData)
 }
 
 func (tm *TestManager) sendStakingTxWithCZFPs(t *testing.T, data *testStakingDataWithCZFPs) *chainhash.Hash {

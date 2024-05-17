@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/babylonchain/btc-staker/stakercfg"
+	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/types"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
@@ -39,8 +40,9 @@ func NewRpcWalletController(scfg *stakercfg.Config) (*RpcWalletController, error
 		scfg.WalletConfig.WalletPass,
 		scfg.BtcNodeBackendConfig.ActiveWalletBackend,
 		&scfg.ActiveNetParams,
-		// TODO for now just disable tls
-		true,
+		scfg.WalletRpcConfig.DisableTls,
+		scfg.WalletRpcConfig.RawRPCWalletCert,
+		scfg.WalletRpcConfig.RPCWalletCert,
 	)
 }
 
@@ -53,6 +55,7 @@ func NewRpcWalletControllerFromArgs(
 	nodeBackend types.SupportedWalletBackend,
 	params *chaincfg.Params,
 	disableTls bool,
+	rawWalletCert string, walletCertFilePath string,
 ) (*RpcWalletController, error) {
 
 	connCfg := &rpcclient.ConnConfig{
@@ -67,8 +70,15 @@ func NewRpcWalletControllerFromArgs(
 		HTTPPostMode: true,
 	}
 
-	rpcclient, err := rpcclient.New(connCfg, nil)
+	if !connCfg.DisableTLS {
+		cert, err := scfg.ReadCertFile(rawWalletCert, walletCertFilePath)
+		if err != nil {
+			return nil, err
+		}
+		connCfg.Certificates = cert
+	}
 
+	rpcclient, err := rpcclient.New(connCfg, nil)
 	if err != nil {
 		return nil, err
 	}
