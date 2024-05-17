@@ -118,7 +118,7 @@ year, use `--staking-amount=5000000` and `--staking-time=52560`.
 
 ```shell
 stakercli transaction create-phase1-staking-transaction \
-  --staker-pk 2dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558
+  --staker-pk 2dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558 \
   --staking-amount 5000000 --staking-time 52560 \
   --magic-bytes <bbn_4byte_identifier> \
   --finality-provider-pk <fp_pk_chosen> \
