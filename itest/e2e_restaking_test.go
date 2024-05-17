@@ -96,9 +96,6 @@ func (tm *TestManager) createAndRegisterFinalityProvidersWithCZ(
 		params, err := tm.BabylonClient.QueryStakingTracker()
 		require.NoError(t, err)
 
-		_, p, err := eots.NewMasterRandPair(r)
-		require.NoError(t, err)
-
 		// register the generated finality provider
 		_, err = tm.BabylonClient.RegisterFinalityProvider(
 			data.CZFPBabylonPKs[i],
