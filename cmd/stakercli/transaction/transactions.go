@@ -255,9 +255,15 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 		return fmt.Errorf("staking time in tx %d do not match with flag %d", stakingTx.OpReturnData.StakingTime, timeBlocks)
 	}
 
+	txAmount := stakingTx.StakingOutput.Value
 	minAmount := ctx.Int64(minStakingAmountFlag)
-	if minAmount > 0 && minAmount > stakingTx.StakingOutput.Value {
-		return fmt.Errorf("staking amount in tx %d is less than the min-staking-amount in flag %d", stakingTx.StakingOutput.Value, minAmount)
+	if minAmount > 0 && txAmount < minAmount {
+		return fmt.Errorf("staking amount in tx %d is less than the min-staking-amount in flag %d", txAmount, minAmount)
+	}
+
+	maxAmount := ctx.Int64(maxStakingAmountFlag)
+	if maxAmount > 0 && txAmount > maxAmount {
+		return fmt.Errorf("staking amount in tx %d is more than the max-staking-amount in flag %d", txAmount, maxAmount)
 	}
 
 	fmt.Println("Provided transaction is valid staking transaction!")
