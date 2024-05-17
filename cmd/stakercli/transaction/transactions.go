@@ -31,6 +31,8 @@ const (
 	networkNameFlag         = "network"
 	stakerPublicKeyFlag     = "staker-pk"
 	finalityProviderKeyFlag = "finality-provider-pk"
+	minStakingAmountFlag    = "min-staking-amount"
+	maxStakingAmountFlag    = "max-staking-amount"
 )
 
 var TransactionCommands = []cli.Command{
@@ -173,8 +175,12 @@ var checkPhase1StakingTransactionCmd = cli.Command{
 			Usage: "Optional finality provider public key hex to match the finality provider public key in tx",
 		},
 		cli.Int64Flag{
-			Name:  helpers.StakingAmountFlag,
-			Usage: "Optional staking amount in satoshis to match the amount spent in tx",
+			Name:  minStakingAmountFlag,
+			Usage: "Optional minimum staking amount in satoshis to check if the amount spent in tx is higher than the flag",
+		},
+		cli.Int64Flag{
+			Name:  maxStakingAmountFlag,
+			Usage: "Optional maximum staking amount in satoshis to check if the amount spent in tx is lower than the flag",
 		},
 		cli.Int64Flag{
 			Name:  helpers.StakingTimeBlocksFlag,
@@ -249,9 +255,9 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 		return fmt.Errorf("staking time in tx %d do not match with flag %d", stakingTx.OpReturnData.StakingTime, timeBlocks)
 	}
 
-	amt := ctx.Int64(helpers.StakingAmountFlag)
-	if amt > 0 && amt != stakingTx.StakingOutput.Value {
-		return fmt.Errorf("staking amount in tx %d do not match with flag %d", stakingTx.StakingOutput.Value, amt)
+	minAmount := ctx.Int64(minStakingAmountFlag)
+	if minAmount > 0 && minAmount > stakingTx.StakingOutput.Value {
+		return fmt.Errorf("staking amount in tx %d is less than the min-staking-amount in flag %d", stakingTx.StakingOutput.Value, minAmount)
 	}
 
 	fmt.Println("Provided transaction is valid staking transaction!")
