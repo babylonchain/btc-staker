@@ -93,7 +93,8 @@ bitcoin-cli -signet \
 ```
 
 In this example the value `2dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558`
-is the BTC staker public key in hex format.
+is the BTC staker public key in hex format. It is the value to be used
+in the `--staker-pk` flag of `create-phase1-staking-transaction` command.
 
 ## Create Raw Transaction
 
@@ -118,7 +119,7 @@ year, use `--staking-amount=10000000` and `--staking-time=52560`.
 
 ```shell
 stakercli transaction create-phase1-staking-transaction \
-  --staker-pk 2dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558
+  --staker-pk <staker_pk> \
   --staking-amount 10000000 --staking-time 52560 \
   --magic-bytes <bbn_4byte_identifier> \
   --finality-provider-pk <fp_pk_chosen> \
