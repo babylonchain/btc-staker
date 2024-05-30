@@ -163,6 +163,8 @@ using the
 [`bitcoin-cli signrawtransactionwithwallet`](https://chainquery.com/bitcoin-cli/signrawtransactionwithwallet)
 command.
 
+> The transaction must be funded (`fundrawtransaction`) before is signed.
+
 ```shell
 bitcoin-cli -signet \
   -rpcuser=<your_rpc_username> \
