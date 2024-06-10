@@ -605,11 +605,13 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 			pop,
 		)
 
-		resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
-		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
+			require.NoError(t, err)
 
-		// After registration we should have one finality provider
-		require.Len(t, resp2.FinalityProviders, len(resp.FinalityProviders)+1)
+			// After registration we should have one finality provider
+			return len(resp2.FinalityProviders) == len(resp.FinalityProviders)+1
+		}, time.Minute, 250*time.Millisecond)
 	}
 }
 
