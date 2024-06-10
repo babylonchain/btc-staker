@@ -678,16 +678,14 @@ func (bc *BabylonController) RegisterFinalityProvider(
 	commission *sdkmath.LegacyDec,
 	description *sttypes.Description,
 	pop *btcstypes.ProofOfPossession,
-	masterRandomness string,
 ) (*pv.RelayerTxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateFinalityProvider{
-		Signer:        bc.getTxSigner(),
-		Commission:    commission,
-		BabylonPk:     bbnPubKey,
-		BtcPk:         btcPubKey,
-		Description:   description,
-		Pop:           pop,
-		MasterPubRand: masterRandomness,
+		Signer:      bc.getTxSigner(),
+		Commission:  commission,
+		BabylonPk:   bbnPubKey,
+		BtcPk:       btcPubKey,
+		Description: description,
+		Pop:         pop,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{registerMsg})
@@ -858,15 +856,4 @@ func (bc *BabylonController) QueryBtcLightClientTip() (*btclctypes.BTCHeaderInfo
 	}
 
 	return res.Header, nil
-}
-
-func (bc *BabylonController) QueryFinalityProviderRegisteredEpoch(fpPk *btcec.PublicKey) (uint64, error) {
-	res, err := bc.bbnClient.QueryClient.FinalityProvider(
-		bbntypes.NewBIP340PubKeyFromBTCPK(fpPk).MarshalHex(),
-	)
-	if err != nil {
-		return 0, fmt.Errorf("failed to query finality provider registered epoch: %w", err)
-	}
-
-	return res.FinalityProvider.RegisteredEpoch, nil
 }
