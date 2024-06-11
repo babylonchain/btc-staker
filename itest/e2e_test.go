@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"math/rand"
 	"net"
 	"net/netip"
@@ -23,7 +22,6 @@ import (
 
 	staking "github.com/babylonchain/babylon/btcstaking"
 	txformat "github.com/babylonchain/babylon/btctxformatter"
-	"github.com/babylonchain/babylon/crypto/eots"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
@@ -581,7 +579,6 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 	params, err := tm.BabylonClient.QueryStakingTracker()
 	require.NoError(t, err)
 
-	var regEpoch uint64
 	for i := 0; i < testStakingData.GetNumRestakedFPs(); i++ {
 		// ensure the finality provider in testStakingData does not exist yet
 		fpResp, err := tm.BabylonClient.QueryFinalityProvider(testStakingData.FinalityProviderBtcKeys[i])
@@ -597,9 +594,6 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 		// get current finality providers
 		resp, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
 		require.NoError(t, err)
-		r = rand.New(rand.NewSource(time.Now().Unix()))
-		_, p, err := eots.NewMasterRandPair(r)
-		require.NoError(t, err)
 		// register the generated finality provider
 		_, err = tm.BabylonClient.RegisterFinalityProvider(
 			testStakingData.FinalityProviderBabylonPublicKeys[i],
@@ -609,22 +603,16 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 				Moniker: "tester",
 			},
 			pop,
-			p.MarshalBase58(),
 		)
 
-		resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
-		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
+			require.NoError(t, err)
 
-		// After registration we should have one finality provider
-		require.Len(t, resp2.FinalityProviders, len(resp.FinalityProviders)+1)
-
-		epoch, err := tm.BabylonClient.QueryFinalityProviderRegisteredEpoch(btcFpKey.MustToBTCPK())
-		require.NoError(t, err)
-		regEpoch = epoch
+			// After registration we should have one finality provider
+			return len(resp2.FinalityProviders) == len(resp.FinalityProviders)+1
+		}, time.Minute, 250*time.Millisecond)
 	}
-
-	fmt.Printf("Wwaiting epoch %d to be registered\n", regEpoch)
-	tm.FinalizeUntilEpoch(t, regEpoch)
 }
 
 func (tm *TestManager) sendHeadersToBabylon(t *testing.T, headers []*wire.BlockHeader) {
