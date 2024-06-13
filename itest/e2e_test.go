@@ -45,6 +45,7 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkquerytypes "github.com/cosmos/cosmos-sdk/types/query"
 	sttypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/lightningnetwork/lnd/kvdb"
@@ -152,6 +153,7 @@ type testStakingData struct {
 	StakerKey                         *btcec.PublicKey
 	StakerBabylonPrivKey              *secp256k1.PrivKey
 	StakerBabylonPubKey               *secp256k1.PubKey
+	StakerBabylonAddr                 sdk.AccAddress
 	FinalityProviderBabylonPrivKeys   []*secp256k1.PrivKey
 	FinalityProviderBabylonPublicKeys []*secp256k1.PubKey
 	FinalityProviderBtcPrivKeys       []*btcec.PrivateKey
@@ -189,6 +191,7 @@ func (tm *TestManager) getTestStakingData(
 		StakerKey:                         stakerKey,
 		StakerBabylonPrivKey:              stakerBabylonPrivKey,
 		StakerBabylonPubKey:               stakerBabylonPubKey,
+		StakerBabylonAddr:                 sdk.AccAddress(stakerBabylonPubKey.Address()),
 		FinalityProviderBabylonPrivKeys:   fpBBNSKs,
 		FinalityProviderBabylonPublicKeys: fpBBNPKs,
 		FinalityProviderBtcPrivKeys:       fpBTCSKs,
@@ -851,8 +854,8 @@ func (tm *TestManager) sendWatchedStakingTx(
 
 	// TODO: Update pop when new version will be ready, for now using schnorr as we don't have
 	// easy way to generate bip322 sig on backend side
-	pop, err := btcstypes.NewPoP(
-		testStakingData.StakerBabylonPrivKey,
+	pop, err := btcstypes.NewPoPBTC(
+		testStakingData.StakerBabylonAddr,
 		tm.WalletPrivKey,
 	)
 	require.NoError(t, err)
@@ -871,9 +874,8 @@ func (tm *TestManager) sendWatchedStakingTx(
 		fpBTCPKs,
 		hex.EncodeToString(serializedSlashingTx),
 		hex.EncodeToString(slashSig.Serialize()),
-		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
+		testStakingData.StakerBabylonAddr.String(),
 		tm.MinerAddr.String(),
-		hex.EncodeToString(pop.BabylonSig),
 		hex.EncodeToString(pop.BtcSig),
 		hex.EncodeToString(serializedUnbondingTx),
 		hex.EncodeToString(serializedSlashUnbondingTx),

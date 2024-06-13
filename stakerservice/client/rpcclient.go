@@ -160,7 +160,6 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	slashingTxSig string,
 	stakerBabylonAddr string,
 	stakerAddress string,
-	stakerBabylonSig string,
 	stakerBtcSig string,
 	unbondingTx string,
 	slashUnbondingTx string,
