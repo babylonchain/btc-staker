@@ -152,8 +152,6 @@ type TestManager struct {
 
 type testStakingData struct {
 	StakerKey                         *btcec.PublicKey
-	StakerBabylonPrivKey              *secp256k1.PrivKey
-	StakerBabylonPubKey               *secp256k1.PubKey
 	StakerBabylonAddr                 sdk.AccAddress
 	FinalityProviderBabylonPrivKeys   []*secp256k1.PrivKey
 	FinalityProviderBabylonPublicKeys []*secp256k1.PubKey
@@ -185,14 +183,11 @@ func (tm *TestManager) getTestStakingData(
 		fpBBNPKs = append(fpBBNPKs, fpBBNPK)
 	}
 
-	stakerBabylonPrivKey := secp256k1.GenPrivKey()
-	stakerBabylonPubKey := stakerBabylonPrivKey.PubKey().(*secp256k1.PubKey)
-
 	return &testStakingData{
-		StakerKey:                         stakerKey,
-		StakerBabylonPrivKey:              stakerBabylonPrivKey,
-		StakerBabylonPubKey:               stakerBabylonPubKey,
-		StakerBabylonAddr:                 sdk.AccAddress(stakerBabylonPubKey.Address()),
+		StakerKey: stakerKey,
+		// the staker babylon addr needs to be the same one that is going to sign
+		// the transaction in the end
+		StakerBabylonAddr:                 tm.BabylonClient.GetKeyAddress(),
 		FinalityProviderBabylonPrivKeys:   fpBBNSKs,
 		FinalityProviderBabylonPublicKeys: fpBBNPKs,
 		FinalityProviderBtcPrivKeys:       fpBTCSKs,
@@ -939,7 +934,7 @@ func (tm *TestManager) waitForStakingTxState(t *testing.T, txHash *chainhash.Has
 			fmt.Printf("\nerr on waitForStakingTxState: %s", err.Error())
 			return false
 		}
-		fmt.Printf("\nwaitForStakingTxState state: %+v !== expected %s", detailResult, expectedState.String())
+		fmt.Printf("\nwaitForStakingTxState state: %+v !== expected %s\n", detailResult, expectedState.String())
 		return detailResult.StakingState == expectedState.String()
 	}, 1*time.Minute, eventuallyPollTime)
 }
