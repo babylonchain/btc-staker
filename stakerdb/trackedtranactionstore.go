@@ -14,8 +14,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/walletdb"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
-
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	pm "google.golang.org/protobuf/proto"
 
 	"github.com/lightningnetwork/lnd/kvdb"
@@ -43,18 +42,15 @@ type TrackedTransactionStore struct {
 }
 
 type ProofOfPossession struct {
-	BtcSigType           uint32
-	BabylonSigOverBtcPk  []byte
-	BtcSigOverBabylonSig []byte
+	BtcSigType            uint32
+	BtcSigOverBabylonAddr []byte
 }
 
 func NewProofOfPossession(
-	babylonSigOverBtcPk []byte,
-	btcSchnorrSigOverBabylonSig []byte,
+	btcSchnorrSigOverBabylonAddr []byte,
 ) *ProofOfPossession {
 	return &ProofOfPossession{
-		BabylonSigOverBtcPk:  babylonSigOverBtcPk,
-		BtcSigOverBabylonSig: btcSchnorrSigOverBabylonSig,
+		BtcSigOverBabylonAddr: btcSchnorrSigOverBabylonAddr,
 	}
 }
 
@@ -143,10 +139,10 @@ func (t *StoredTransaction) IsUnbonded() bool {
 }
 
 type WatchedTransactionData struct {
-	SlashingTx          *wire.MsgTx
-	SlashingTxSig       *schnorr.Signature
-	StakerBabylonPubKey *secp256k1.PubKey
-	StakerBtcPubKey     *btcec.PublicKey
+	SlashingTx        *wire.MsgTx
+	SlashingTxSig     *schnorr.Signature
+	StakerBabylonAddr sdk.AccAddress
+	StakerBtcPubKey   *btcec.PublicKey
 	// Unbonding Related data
 	UnbondingTx            *wire.MsgTx
 	SlashingUnbondingTx    *wire.MsgTx
@@ -358,9 +354,8 @@ func protoTxToStoredTransaction(ttx *proto.TrackedTransaction) (*StoredTransacti
 		StakingTime:               uint16(ttx.StakingTime),
 		FinalityProvidersBtcPks:   fpPubkeys,
 		Pop: &ProofOfPossession{
-			BtcSigType:           ttx.BtcSigType,
-			BabylonSigOverBtcPk:  ttx.BabylonSigBtcPk,
-			BtcSigOverBabylonSig: ttx.BtcSigBabylonSig,
+			BtcSigType:            ttx.BtcSigType,
+			BtcSigOverBabylonAddr: ttx.BtcSigOverBbnStakerAddr,
 		},
 		StakerAddress:   ttx.StakerAddress,
 		State:           ttx.State,
@@ -377,17 +372,11 @@ func protoWatchedDataToWatchedTransactionData(wd *proto.WatchedTxData) (*Watched
 	}
 
 	schnorSig, err := schnorr.ParseSignature(wd.SlashingTransactionSig)
-
 	if err != nil {
 		return nil, err
 	}
 
-	stakerBabylonKey := secp256k1.PubKey{
-		Key: wd.StakerBabylonPk,
-	}
-
 	stakerBtcKey, err := schnorr.ParsePubKey(wd.StakerBtcPk)
-
 	if err != nil {
 		return nil, err
 	}
@@ -405,23 +394,24 @@ func protoWatchedDataToWatchedTransactionData(wd *proto.WatchedTxData) (*Watched
 	}
 
 	slashUnbondingTxSig, err := schnorr.ParseSignature(wd.SlashingUnbondingTransactionSig)
-
 	if err != nil {
 		return nil, err
 	}
 
-	var unbondingTime uint16
-
 	if wd.UnbondingTime > math.MaxUint16 {
 		return nil, fmt.Errorf("unbonding time is too large. Max value is %d", math.MaxUint16)
-	} else {
-		unbondingTime = uint16(wd.UnbondingTime)
+	}
+	unbondingTime := uint16(wd.UnbondingTime)
+
+	stakerBabylonAddr, err := sdk.AccAddressFromBech32(wd.StakerBabylonAddr)
+	if err != nil {
+		return nil, err
 	}
 
 	return &WatchedTransactionData{
 		SlashingTx:             &slashingTx,
 		SlashingTxSig:          schnorSig,
-		StakerBabylonPubKey:    &stakerBabylonKey,
+		StakerBabylonAddr:      stakerBabylonAddr,
 		StakerBtcPubKey:        stakerBtcKey,
 		UnbondingTx:            &unbondingTx,
 		SlashingUnbondingTx:    &slashingUnbondingTx,
@@ -598,8 +588,7 @@ func (c *TrackedTransactionStore) AddTransaction(
 		FinalityProvidersBtcPks:      fpPubKeysBytes,
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
-		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
-		BtcSigBabylonSig:             pop.BtcSigOverBabylonSig,
+		BtcSigOverBbnStakerAddr:      pop.BtcSigOverBabylonAddr,
 		State:                        proto.TransactionState_SENT_TO_BTC,
 		Watched:                      false,
 		UnbondingTxData:              nil,
@@ -619,7 +608,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	stakerAddress btcutil.Address,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
-	stakerBabylonPk *secp256k1.PubKey,
+	stakerBabylonAddr sdk.AccAddress,
 	stakerBtcPk *btcec.PublicKey,
 	unbondingTx *wire.MsgTx,
 	slashUnbondingTx *wire.MsgTx,
@@ -654,8 +643,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 		FinalityProvidersBtcPks:      fpPubKeysBytes,
 		StakingTxBtcConfirmationInfo: nil,
 		BtcSigType:                   pop.BtcSigType,
-		BabylonSigBtcPk:              pop.BabylonSigOverBtcPk,
-		BtcSigBabylonSig:             pop.BtcSigOverBabylonSig,
+		BtcSigOverBbnStakerAddr:      pop.BtcSigOverBabylonAddr,
 		State:                        proto.TransactionState_SENT_TO_BTC,
 		Watched:                      true,
 		UnbondingTxData:              nil,
@@ -684,7 +672,7 @@ func (c *TrackedTransactionStore) AddWatchedTransaction(
 	watchedData := proto.WatchedTxData{
 		SlashingTransaction:             serializedSlashingtx,
 		SlashingTransactionSig:          serializedSig,
-		StakerBabylonPk:                 stakerBabylonPk.Bytes(),
+		StakerBabylonAddr:               stakerBabylonAddr.String(),
 		StakerBtcPk:                     schnorr.SerializePubKey(stakerBtcPk),
 		UnbondingTransaction:            serializedUnbondingTx,
 		SlashingUnbondingTransaction:    serializedSlashUnbondingTx,

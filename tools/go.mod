@@ -4,7 +4,7 @@ go 1.21
 
 toolchain go1.21.4
 
-require github.com/babylonchain/babylon v0.8.6-0.20240610115448-58c28046b75d
+require github.com/babylonchain/babylon v0.8.6-0.20240612162353-c39fc5f6d825
 
 require (
 	cloud.google.com/go v0.112.0 // indirect

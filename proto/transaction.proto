@@ -16,7 +16,7 @@ enum TransactionState {
 message WatchedTxData {
     bytes slashing_transaction = 1;
     bytes slashing_transaction_sig = 2;
-    bytes staker_babylon_pk = 3;
+    string staker_babylon_addr = 3;
     bytes staker_btc_pk = 4;
     // TODO: Consider improving data model as currently for watched transactions
     // unbonding_transaction and unbonding_time are duplicated with UnbondingTxData
@@ -61,10 +61,9 @@ message TrackedTransaction {
     // this data is only filed if tracked transactions state is >= CONFIRMED_ON_BTC
     BTCConfirmationInfo staking_tx_btc_confirmation_info = 7;
     uint32 btc_sig_type = 8;
-    bytes babylon_sig_btc_pk = 9;
-    bytes btc_sig_babylon_sig = 10;
-    TransactionState state = 11;
-    bool watched = 12;
+    bytes btc_sig_over_bbn_staker_addr = 9;
+    TransactionState state = 10;
+    bool watched = 11;
    // this data is only filled if tracked transactions state is >= SENT_TO_BABYLON
-    UnbondingTxData unbonding_tx_data = 13;
+    UnbondingTxData unbonding_tx_data = 12;
 }

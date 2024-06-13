@@ -83,8 +83,7 @@ func genStoredTransaction(t *testing.T, r *rand.Rand, maxStakingTime uint16) *st
 		StakingTime:             uint16(stakingTime),
 		FinalityProvidersBtcPks: fpBtcPks,
 		Pop: &stakerdb.ProofOfPossession{
-			BabylonSigOverBtcPk:  datagen.GenRandomByteArray(r, 64),
-			BtcSigOverBabylonSig: datagen.GenRandomByteArray(r, 64),
+			BtcSigOverBabylonAddr: datagen.GenRandomByteArray(r, 64),
 		},
 		StakerAddress: stakerAddr.String(),
 	}

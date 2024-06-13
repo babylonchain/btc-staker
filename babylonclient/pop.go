@@ -7,7 +7,7 @@ import (
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 type BabylonBtcPopType int
@@ -19,20 +19,18 @@ const (
 )
 
 type BabylonPop struct {
-	popType                  BabylonBtcPopType
-	BabylonEcdsaSigOverBtcPk []byte
-	BtcSig                   []byte
+	popType BabylonBtcPopType
+	BtcSig  []byte
 }
 
-func NewBabylonPop(t BabylonBtcPopType, babylonSig []byte, btcSig []byte) (*BabylonPop, error) {
-	if len(babylonSig) == 0 || len(btcSig) == 0 {
+func NewBabylonPop(t BabylonBtcPopType, btcSigOverBbnAddr []byte) (*BabylonPop, error) {
+	if len(btcSigOverBbnAddr) == 0 {
 		return nil, fmt.Errorf("cannot create BabylonPop with empty signatures")
 	}
 
 	return &BabylonPop{
-		popType:                  t,
-		BabylonEcdsaSigOverBtcPk: babylonSig,
-		BtcSig:                   btcSig,
+		popType: t,
+		BtcSig:  btcSigOverBbnAddr,
 	}, nil
 }
 
@@ -66,26 +64,25 @@ func (pop *BabylonPop) PopTypeNum() uint32 {
 	return uint32(pop.popType)
 }
 
-func (pop *BabylonPop) ToBtcStakingPop() (*btcstypes.ProofOfPossession, error) {
+func (pop *BabylonPop) ToBtcStakingPop() (*btcstypes.ProofOfPossessionBTC, error) {
 	popType, err := NewBTCSigType(pop.popType)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &btcstypes.ProofOfPossession{
+	return &btcstypes.ProofOfPossessionBTC{
 		BtcSigType: popType,
-		BabylonSig: pop.BabylonEcdsaSigOverBtcPk,
 		BtcSig:     pop.BtcSig,
 	}, nil
 }
 
 func (pop *BabylonPop) ValidatePop(
-	babylonPk *secp256k1.PubKey,
+	bbnAddr sdk.AccAddress,
 	btcPk *btcec.PublicKey,
 	net *chaincfg.Params,
 ) error {
-	if babylonPk == nil || btcPk == nil || net == nil {
+	if btcPk == nil || net == nil {
 		return fmt.Errorf("cannot validate pop with nil parameters")
 	}
 
@@ -96,9 +93,8 @@ func (pop *BabylonPop) ValidatePop(
 	}
 
 	btcPkBabylonFormat := bbn.NewBIP340PubKeyFromBTCPK(btcPk)
-
 	return bPop.Verify(
-		babylonPk,
+		bbnAddr,
 		btcPkBabylonFormat,
 		net,
 	)

@@ -7,7 +7,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/sirupsen/logrus"
 )
 
@@ -74,10 +74,10 @@ func newOwnedStakingRequest(
 }
 
 type watchTxData struct {
-	slashingTx          *wire.MsgTx
-	slashingTxSig       *schnorr.Signature
-	stakerBabylonPubKey *secp256k1.PubKey
-	stakerBtcPk         *btcec.PublicKey
+	slashingTx        *wire.MsgTx
+	slashingTxSig     *schnorr.Signature
+	stakerBabylonAddr sdk.AccAddress
+	stakerBtcPk       *btcec.PublicKey
 	// unbonding related data
 	unbondingTx         *wire.MsgTx
 	slashUnbondingTx    *wire.MsgTx
@@ -97,7 +97,7 @@ func newWatchedStakingRequest(
 	pop *cl.BabylonPop,
 	slashingTx *wire.MsgTx,
 	slashingTxSignature *schnorr.Signature,
-	stakerBabylonPubKey *secp256k1.PubKey,
+	stakerBabylonAddr sdk.AccAddress,
 	stakerBtcPk *btcec.PublicKey,
 	unbondingTx *wire.MsgTx,
 	slashUnbondingTx *wire.MsgTx,
@@ -118,7 +118,7 @@ func newWatchedStakingRequest(
 		watchTxData: &watchTxData{
 			slashingTx:          slashingTx,
 			slashingTxSig:       slashingTxSignature,
-			stakerBabylonPubKey: stakerBabylonPubKey,
+			stakerBabylonAddr:   stakerBabylonAddr,
 			stakerBtcPk:         stakerBtcPk,
 			unbondingTx:         unbondingTx,
 			slashUnbondingTx:    slashUnbondingTx,

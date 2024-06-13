@@ -273,7 +273,7 @@ type DelegationData struct {
 	FinalityProvidersBtcPks              []*btcec.PublicKey
 	SlashingTransaction                  *wire.MsgTx
 	SlashingTransactionSig               *schnorr.Signature
-	BabylonPk                            *secp256k1.PubKey
+	BabylonStakerAddr                    sdk.AccAddress
 	StakerBtcPk                          *btcec.PublicKey
 	BabylonPop                           *stakerdb.ProofOfPossession
 	Ud                                   *UndelegationData
@@ -365,13 +365,11 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 	slashUnbondingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(dg.Ud.SlashUnbondingTransactionSig)
 
 	return &btcstypes.MsgCreateBTCDelegation{
-		Signer:    signer,
-		BabylonPk: dg.BabylonPk,
-		Pop: &btcstypes.ProofOfPossession{
-			// Note: this should be always safe conversion as we received data from our db
+		// Note: this should be always safe conversion as we received data from our db
+		StakerAddr: dg.BabylonStakerAddr.String(),
+		Pop: &btcstypes.ProofOfPossessionBTC{
 			BtcSigType: btcstypes.BTCSigType(dg.BabylonPop.BtcSigType),
-			BabylonSig: dg.BabylonPop.BabylonSigOverBtcPk,
-			BtcSig:     dg.BabylonPop.BtcSigOverBabylonSig,
+			BtcSig:     dg.BabylonPop.BtcSigOverBabylonAddr,
 		},
 		BtcPk:        bbntypes.NewBIP340PubKeyFromBTCPK(dg.StakerBtcPk),
 		FpBtcPkList:  fpPksList,
