@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net"
 	"net/netip"
@@ -607,6 +608,7 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 			},
 			pop,
 		)
+		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
 			resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
@@ -651,7 +653,7 @@ func (tm *TestManager) mineBlock(t *testing.T) *wire.MsgBlock {
 	return header
 }
 
-func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingData) *chainhash.Hash {
+func (tm *TestManager) sendStakingTxBTC(t *testing.T, testStakingData *testStakingData) *chainhash.Hash {
 	fpBTCPKs := []string{}
 	for i := 0; i < testStakingData.GetNumRestakedFPs(); i++ {
 		fpBTCPK := hex.EncodeToString(schnorr.SerializePubKey(testStakingData.FinalityProviderBtcKeys[i]))
@@ -743,7 +745,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 		btcutil.Amount(testStakingData.StakingAmount),
 		regtestParams,
 	)
-
 	require.NoError(t, err)
 
 	err = tm.Sa.Wallet().UnlockWallet(20)
@@ -790,7 +791,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 	require.NoError(t, err)
 
 	stakingTxSlashingPathInfo, err := stakingInfo.SlashingPathSpendInfo()
-
 	require.NoError(t, err)
 
 	slashSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
@@ -799,7 +799,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 		tm.WalletPrivKey,
 		stakingTxSlashingPathInfo.RevealedLeaf.Script,
 	)
-
 	require.NoError(t, err)
 
 	serializedStakingTx, err := utils.SerializeBtcTransaction(tx)
@@ -937,8 +936,10 @@ func (tm *TestManager) waitForStakingTxState(t *testing.T, txHash *chainhash.Has
 	require.Eventually(t, func() bool {
 		detailResult, err := tm.StakerClient.StakingDetails(context.Background(), txHash.String())
 		if err != nil {
+			fmt.Printf("\nerr on waitForStakingTxState: %s", err.Error())
 			return false
 		}
+		fmt.Printf("\nwaitForStakingTxState state: %+v !== expected %s", detailResult, expectedState.String())
 		return detailResult.StakingState == expectedState.String()
 	}, 1*time.Minute, eventuallyPollTime)
 }
@@ -1115,7 +1116,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	tm.createAndRegisterFinalityProviders(t, testStakingData)
 
-	txHash := tm.sendStakingTx(t, testStakingData)
+	txHash := tm.sendStakingTxBTC(t, testStakingData)
 
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
@@ -1267,7 +1268,7 @@ func TestRestartingTxNotDeepEnough(t *testing.T) {
 	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000, 1)
 
 	tm.createAndRegisterFinalityProviders(t, testStakingData)
-	txHash := tm.sendStakingTx(t, testStakingData)
+	txHash := tm.sendStakingTxBTC(t, testStakingData)
 
 	// restart app when tx is not deep enough
 	tm.RestartApp(t)
@@ -1336,7 +1337,7 @@ func TestStakingUnbonding(t *testing.T) {
 
 	tm.createAndRegisterFinalityProviders(t, testStakingData)
 
-	txHash := tm.sendStakingTx(t, testStakingData)
+	txHash := tm.sendStakingTxBTC(t, testStakingData)
 
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
@@ -1407,7 +1408,7 @@ func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
 
 	tm.createAndRegisterFinalityProviders(t, testStakingData)
 
-	txHash := tm.sendStakingTx(t, testStakingData)
+	txHash := tm.sendStakingTxBTC(t, testStakingData)
 
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
@@ -1560,7 +1561,7 @@ func TestSendingStakingTransaction_Restaking(t *testing.T) {
 
 	tm.createAndRegisterFinalityProviders(t, testStakingData)
 
-	txHash := tm.sendStakingTx(t, testStakingData)
+	txHash := tm.sendStakingTxBTC(t, testStakingData)
 
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
