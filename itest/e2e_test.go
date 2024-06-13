@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"math/rand"
 	"net"
 	"net/netip"
@@ -931,10 +930,8 @@ func (tm *TestManager) waitForStakingTxState(t *testing.T, txHash *chainhash.Has
 	require.Eventually(t, func() bool {
 		detailResult, err := tm.StakerClient.StakingDetails(context.Background(), txHash.String())
 		if err != nil {
-			fmt.Printf("\nerr on waitForStakingTxState: %s", err.Error())
 			return false
 		}
-		fmt.Printf("\nwaitForStakingTxState state: %+v !== expected %s\n", detailResult, expectedState.String())
 		return detailResult.StakingState == expectedState.String()
 	}, 1*time.Minute, eventuallyPollTime)
 }
