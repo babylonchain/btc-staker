@@ -63,7 +63,7 @@ var (
 	eventuallyPollTime    = 250 * time.Millisecond
 )
 
-// keyToAddr maps the passed private to corresponding p2pkh address.
+// keyToAddr maps the passed private to the corresponding p2pkh address.
 func keyToAddr(key *btcec.PrivateKey, net *chaincfg.Params) (btcutil.Address, error) {
 	serializedKey := key.PubKey().SerializeCompressed()
 	pubKeyAddr, err := btcutil.NewAddressPubKey(serializedKey, net)
