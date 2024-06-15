@@ -23,7 +23,7 @@ type NodeBackend struct {
 
 // TODO  This should be moved to a more appropriate place, most probably to config
 // and be connected to validation of rpc host/port.
-// According to chain.BitcoindConfig docs it should also support tor if node backend
+// According to chain.BitcoindConfig docs it should also support tor if the node backend
 // works over tor.
 func BuildDialer(rpcHost string) func(string) (net.Conn, error) {
 	return func(addr string) (net.Conn, error) {
