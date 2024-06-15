@@ -50,7 +50,7 @@ func (m *Manager) ExecBitcoindCliCmd(t *testing.T, command []string) (bytes.Buff
 
 // ExecCmd executes command by running it on the given container.
 // It word for word `error` in output to discern between error and regular output.
-// It retures stdout and stderr as bytes.Buffer and an error if the command fails.
+// It returns stdout and stderr as bytes.Buffer and an error if the command fails.
 func (m *Manager) ExecCmd(t *testing.T, containerName string, command []string) (bytes.Buffer, bytes.Buffer, error) {
 	if _, ok := m.resources[containerName]; !ok {
 		return bytes.Buffer{}, bytes.Buffer{}, fmt.Errorf("no resource %s found", containerName)
