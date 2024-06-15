@@ -54,7 +54,7 @@ func newSendUndelegationRequest(
 // BabylonMsgSender is responsible for sending delegation and undelegation requests to babylon
 // It makes sure:
 // - that babylon is ready for either delgetion or undelegation
-// - only one messegae is sent to babylon at a time
+// - only one message is sent to babylon at a time
 type BabylonMsgSender struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -254,7 +254,7 @@ func (m *BabylonMsgSender) SendDelegation(
 
 }
 
-// TODO: Curenttly not used.
+// TODO: Currently not used.
 // We may introduce the option for staker to self report unbonding tx to babylon.
 func (m *BabylonMsgSender) SendUndelegation(
 	ur *UndelegationRequest,

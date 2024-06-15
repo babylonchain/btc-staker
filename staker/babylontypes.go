@@ -15,9 +15,9 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// TODO: All functions and types declared in this file should be moved to separate package
+// TODO: All functions and types declared in this file should be moved to a separate package
 // and be part of new module which will be responsible for communication with babylon chain i.e
-// retrieving data from babylon chain, sending data to babylon chain, queuing data to be send etc.
+// retrieving data from babylon chain, sending data to babylon chain, queuing data to be sent etc.
 
 type sendDelegationRequest struct {
 	txHash                      chainhash.Hash
@@ -70,7 +70,7 @@ func (app *StakerApp) buildOwnedDelegation(
 	)
 
 	if err != nil {
-		// TODO: Most probable couse for this error would be some kind of problem with fees
+		// TODO: Most probable cause for this error would be some kind of problem with fees
 		return nil, fmt.Errorf("error creating undelegation data: %w", err)
 	}
 

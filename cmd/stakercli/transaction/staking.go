@@ -29,7 +29,7 @@ type InputBtcStakingTx struct {
 	CovenantQuorum uint32 `json:"covenant_quorum"`
 }
 
-// ToCreatePhase1StakingTxResponse from the data input parses and build parameters to create and serialize response tx structure.
+// ToCreatePhase1StakingTxResponse from the data input parses and builds parameters to create and serialize response tx structure.
 func (tx InputBtcStakingTx) ToCreatePhase1StakingTxResponse() (*CreatePhase1StakingTxResponse, error) {
 	magicBytes, err := parseMagicBytesFromHex(tx.MagicBytesHex)
 	if err != nil {
