@@ -89,7 +89,7 @@ const (
 	// this gives us 904 satoshi fee. Lets round it 1000 satoshi
 	minSlashingFee = btcutil.Amount(1000)
 
-	// after this many confirmations we consider transaction which spends staking tx as
+	// after this many confirmations we consider transaction that spends staking tx as
 	// confirmed on btc
 	SpendStakeTxConfirmations = 3
 
@@ -265,7 +265,7 @@ func NewStakerAppFromDeps(
 		unbondingTxConfirmedOnBtcEvChan: make(chan *unbondingTxConfirmedOnBtcEvent),
 
 		// channel which receives critical errors, critical errors are errors which we do not know
-		// how to handle, so we just log them. It is up to user to investigate, what had happend
+		// how to handle them, so we just log them. It is up to the user to investigate, what had happened
 		// and report the situation
 		criticalErrorEvChan: make(chan *criticalErrorEvent),
 	}, nil
