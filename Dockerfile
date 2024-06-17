@@ -1,11 +1,5 @@
 FROM golang:1.21 as builder
 
-# Version to build. Default is the Git HEAD.
-ARG VERSION="HEAD"
-ARG LEDGER_ENABLED="false"
-ARG COSMOS_BUILD_OPTIONS=""
-
-
 # Install cli tools for building and final image
 RUN apt-get update && apt-get install -y make git bash gcc curl jq
 
@@ -20,15 +14,13 @@ COPY ./ /go/src/github.com/babylonchain/btc-staker/
 
 RUN BUILD_TAGS=netgo \
     LDFLAGS="-w -s" \
-    make build --trace
+    make build
 
 # FINAL IMAGE
 FROM debian:bookworm-slim AS run
 
 RUN addgroup --gid 1138 --system btcstaker && adduser --uid 1138 --system --home /home/btcstaker btcstaker
-
 RUN apt-get update && apt-get install -y bash curl jq wget
-
 
 COPY --from=builder /go/src/github.com/babylonchain/btc-staker/go.mod /tmp
 RUN WASMVM_VERSION=$(grep github.com/CosmWasm/wasmvm /tmp/go.mod | cut -d' ' -f2) && \
