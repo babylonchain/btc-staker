@@ -308,7 +308,7 @@ type DelegationInfo struct {
 	UndelegationInfo *UndelegationInfo
 }
 
-func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
+func delegationDataToMsg(dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
 	if dg == nil {
 		return nil, fmt.Errorf("nil delegation data")
 	}
@@ -406,10 +406,7 @@ func (bc *BabylonController) reliablySendMsgs(
 // TODO: for now return sdk.TxResponse, it will ease up debugging/testing
 // ultimately we should create our own type ate
 func (bc *BabylonController) Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error) {
-	signer := bc.getTxSigner()
-
-	delegateMsg, err := delegationDataToMsg(signer, dg)
-
+	delegateMsg, err := delegationDataToMsg(dg)
 	if err != nil {
 		return nil, err
 	}
