@@ -378,7 +378,6 @@ func (s *StakerService) watchStaking(
 	unbondingTime int,
 	popType int,
 ) (*ResultStake, error) {
-
 	stkTx, err := decodeBtcTx(stakingTx)
 	if err != nil {
 		return nil, err
@@ -482,6 +481,14 @@ func (s *StakerService) watchStaking(
 	bbnStakerAddr, err := sdk.AccAddressFromBech32(stakerBabylonAddr)
 	if err != nil {
 		return nil, err
+	}
+
+	bbnSignerAddrInConfig := s.staker.BabylonController().GetKeyAddress()
+	if !bbnStakerAddr.Equals(bbnSignerAddrInConfig) {
+		return nil, fmt.Errorf(
+			"bbn staking address in config: %s must match with stakerBabylonAddr in parameters: %s",
+			bbnSignerAddrInConfig.String(), bbnStakerAddr.String(),
+		)
 	}
 
 	hash, err := s.staker.WatchStaking(
