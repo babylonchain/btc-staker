@@ -603,6 +603,7 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 				Moniker: "tester",
 			},
 			pop,
+			"",
 		)
 
 		require.Eventually(t, func() bool {

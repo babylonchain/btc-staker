@@ -9,12 +9,15 @@ ARG COSMOS_BUILD_OPTIONS=""
 # Install cli tools for building and final image
 RUN apt-get update && apt-get install -y make git bash gcc curl jq
 
+RUN mkdir -p /root/.ssh && ssh-keyscan github.com >> /root/.ssh/known_hosts
+RUN git config --global url."git@github.com:".insteadOf "https://github.com/"
+ENV GOPRIVATE=github.com/babylonchain/*
+
 # Build
 WORKDIR /go/src/github.com/babylonchain/btc-staker
 # Cache dependencies
 COPY go.mod go.sum /go/src/github.com/babylonchain/btc-staker/
-RUN go mod download
-
+RUN --mount=type=secret,id=sshKey,target=/root/.ssh/id_rsa go mod download
 # Copy the rest of the files
 COPY ./ /go/src/github.com/babylonchain/btc-staker/
 
