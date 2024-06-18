@@ -7,8 +7,7 @@ import (
 )
 
 type BBNConfig struct {
-	// Key is the BTC staker key name inside the keyring.
-	Key            string        `long:"key" description:"name of the key to sign transactions with"`
+	Key            string        `long:"key" description:"name of the BTC staker key name inside the keyring to sign transactions with"`
 	ChainID        string        `long:"chain-id" description:"chain id of the chain to connect to"`
 	RPCAddr        string        `long:"rpc-address" description:"address of the rpc server to connect to"`
 	GRPCAddr       string        `long:"grpc-address" description:"address of the grpc server to connect to"`
