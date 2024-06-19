@@ -273,7 +273,7 @@ type DelegationData struct {
 	FinalityProvidersBtcPks              []*btcec.PublicKey
 	SlashingTransaction                  *wire.MsgTx
 	SlashingTransactionSig               *schnorr.Signature
-	BabylonPk                            *secp256k1.PubKey
+	BabylonStakerAddr                    sdk.AccAddress
 	StakerBtcPk                          *btcec.PublicKey
 	BabylonPop                           *stakerdb.ProofOfPossession
 	Ud                                   *UndelegationData
@@ -308,7 +308,7 @@ type DelegationInfo struct {
 	UndelegationInfo *UndelegationInfo
 }
 
-func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
+func delegationDataToMsg(dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
 	if dg == nil {
 		return nil, fmt.Errorf("nil delegation data")
 	}
@@ -365,13 +365,11 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 	slashUnbondingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(dg.Ud.SlashUnbondingTransactionSig)
 
 	return &btcstypes.MsgCreateBTCDelegation{
-		Signer:    signer,
-		BabylonPk: dg.BabylonPk,
-		Pop: &btcstypes.ProofOfPossession{
-			// Note: this should be always safe conversion as we received data from our db
+		// Note: this should be always safe conversion as we received data from our db
+		StakerAddr: dg.BabylonStakerAddr.String(),
+		Pop: &btcstypes.ProofOfPossessionBTC{
 			BtcSigType: btcstypes.BTCSigType(dg.BabylonPop.BtcSigType),
-			BabylonSig: dg.BabylonPop.BabylonSigOverBtcPk,
-			BtcSig:     dg.BabylonPop.BtcSigOverBabylonSig,
+			BtcSig:     dg.BabylonPop.BtcSigOverBabylonAddr,
 		},
 		BtcPk:        bbntypes.NewBIP340PubKeyFromBTCPK(dg.StakerBtcPk),
 		FpBtcPkList:  fpPksList,
@@ -408,10 +406,7 @@ func (bc *BabylonController) reliablySendMsgs(
 // TODO: for now return sdk.TxResponse, it will ease up debugging/testing
 // ultimately we should create our own type ate
 func (bc *BabylonController) Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error) {
-	signer := bc.getTxSigner()
-
-	delegateMsg, err := delegationDataToMsg(signer, dg)
-
+	delegateMsg, err := delegationDataToMsg(dg)
 	if err != nil {
 		return nil, err
 	}

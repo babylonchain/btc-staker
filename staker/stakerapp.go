@@ -31,7 +31,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/cometbft/cometbft/crypto/tmhash"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	notifier "github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/kvdb"
@@ -42,8 +42,8 @@ import (
 type externalDelegationData struct {
 	// stakerPrivKey needs to be retrieved from btc wallet
 	stakerPrivKey *btcec.PrivateKey
-	// babylonPubKey needs to be retrieved from babylon keyring
-	babylonPubKey *secp256k1.PubKey
+	// babylonStakerAddr the bech32 bbn address to receive staking rewards.
+	babylonStakerAddr sdk.AccAddress
 	// params retrieved from babylon
 	babylonParams *cl.StakingParams
 }
@@ -797,9 +797,9 @@ func (app *StakerApp) retrieveExternalDelegationData(stakerAddress btcutil.Addre
 	}
 
 	return &externalDelegationData{
-		stakerPrivKey: stakerPrivKey,
-		babylonPubKey: app.babylonClient.GetPubKey(),
-		babylonParams: params,
+		stakerPrivKey:     stakerPrivKey,
+		babylonStakerAddr: app.babylonClient.GetKeyAddress(),
+		babylonParams:     params,
 	}, nil
 }
 
@@ -1098,7 +1098,7 @@ func (app *StakerApp) handleStakingEvents() {
 					ev.stakerAddress,
 					ev.watchTxData.slashingTx,
 					ev.watchTxData.slashingTxSig,
-					ev.watchTxData.stakerBabylonPubKey,
+					ev.watchTxData.stakerBabylonAddr,
 					ev.watchTxData.stakerBtcPk,
 					ev.watchTxData.unbondingTx,
 					ev.watchTxData.slashUnbondingTx,
@@ -1279,32 +1279,16 @@ func (app *StakerApp) BabylonController() cl.BabylonClient {
 func (app *StakerApp) generatePop(stakerPrivKey *btcec.PrivateKey) (*cl.BabylonPop, error) {
 	// build proof of possession, no point moving forward if staker does not have all
 	// the necessary keys
-	stakerKey := stakerPrivKey.PubKey()
-
-	encodedPubKey := schnorr.SerializePubKey(stakerKey)
-
-	babylonSig, err := app.babylonClient.Sign(
-		encodedPubKey,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	babylonSigHash := tmhash.Sum(babylonSig)
-
-	btcSig, err := schnorr.Sign(stakerPrivKey, babylonSigHash)
-
+	babylonAddrHash := tmhash.Sum(app.babylonClient.GetKeyAddress().Bytes())
+	btcSig, err := schnorr.Sign(stakerPrivKey, babylonAddrHash)
 	if err != nil {
 		return nil, err
 	}
 
 	pop, err := cl.NewBabylonPop(
 		cl.SchnorrType,
-		babylonSig,
 		btcSig.Serialize(),
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate pop: %w", err)
 	}
@@ -1328,7 +1312,7 @@ func (app *StakerApp) WatchStaking(
 	fpPks []*btcec.PublicKey,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
-	stakerBabylonPk *secp256k1.PubKey,
+	stakerBabylonAddr sdk.AccAddress,
 	stakerBtcPk *btcec.PublicKey,
 	stakerAddress btcutil.Address,
 	pop *cl.BabylonPop,
@@ -1358,7 +1342,7 @@ func (app *StakerApp) WatchStaking(
 		fpPks,
 		slashingTx,
 		slashingTxSig,
-		stakerBabylonPk,
+		stakerBabylonAddr,
 		stakerBtcPk,
 		stakerAddress,
 		pop,

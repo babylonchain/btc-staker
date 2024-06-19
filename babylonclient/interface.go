@@ -98,8 +98,7 @@ func (m *MockBabylonClient) GetPubKey() *secp256k1.PubKey {
 }
 
 func (m *MockBabylonClient) Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error) {
-	msg, err := delegationDataToMsg("signer", dg)
-
+	msg, err := delegationDataToMsg(dg)
 	if err != nil {
 		return nil, err
 	}
