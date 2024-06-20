@@ -1,14 +1,13 @@
 module github.com/babylonchain/btc-staker
 
-go 1.21
-
-toolchain go1.21.4
+go 1.22.3
 
 require (
 	cosmossdk.io/errors v1.0.1
 	cosmossdk.io/math v1.3.0
 	github.com/avast/retry-go/v4 v4.5.1
 	github.com/babylonchain/babylon v0.8.6-0.20240619103849-013f733e9537
+	github.com/babylonchain/networks/parameters v0.2.0
 	github.com/btcsuite/btcd v0.24.0
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/btcsuite/btcd/btcutil v1.1.5
