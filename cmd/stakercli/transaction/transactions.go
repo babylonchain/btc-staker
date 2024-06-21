@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/babylonchain/babylon/btcstaking"
 	bbn "github.com/babylonchain/babylon/types"
@@ -11,6 +12,7 @@ import (
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/babylonchain/networks/parameters/parser"
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/btcutil/psbt"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -29,6 +31,8 @@ const (
 	magicBytesFlag          = "magic-bytes"
 	covenantMembersPksFlag  = "covenant-committee-pks"
 	covenantQuorumFlag      = "covenant-quorum"
+	minStakingAmountFlag    = "min-staking-amount"
+	maxStakingAmountFlag    = "max-staking-amount"
 )
 
 var TransactionCommands = []cli.Command{
@@ -38,18 +42,19 @@ var TransactionCommands = []cli.Command{
 		Usage:     "Commands related to Babylon BTC transactions Staking/Unbonding/Slashing",
 		Category:  "transaction commands",
 		Subcommands: []cli.Command{
-			checkPhase1StakingTransactionCmd,
-			createPhase1UnbondingTransactionCmd,
 			createPhase1StakingTransactionCmd,
+			checkPhase1StakingTransactionCmd,
+			checkPhase1StakingTransactionParamsCmd,
 			createPhase1StakingTransactionWithParamsCmd,
+			createPhase1UnbondingTransactionCmd,
 		},
 	},
 }
 
-var checkPhase1StakingTransactionCmd = cli.Command{
-	Name:      "check-phase1-staking-transaction",
-	ShortName: "cpst",
-	Usage:     "stakercli transaction check-phase1-staking-transaction [fullpath/to/parameters.json]",
+var checkPhase1StakingTransactionParamsCmd = cli.Command{
+	Name:      "check-phase1-staking-transaction-params",
+	ShortName: "cpstp",
+	Usage:     "stakercli transaction check-phase1-staking-transaction-params [fullpath/to/parameters.json]",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:     stakingTransactionFlag,
@@ -62,7 +67,7 @@ var checkPhase1StakingTransactionCmd = cli.Command{
 			Required: true,
 		},
 	},
-	Action: checkPhase1StakingTransaction,
+	Action: checkPhase1StakingTransactionParams,
 }
 
 type StakingTxData struct {
@@ -125,7 +130,7 @@ func validateTxAgainstParams(
 	}
 }
 
-func checkPhase1StakingTransaction(ctx *cli.Context) error {
+func checkPhase1StakingTransactionParams(ctx *cli.Context) error {
 	inputFilePath := ctx.Args().First()
 	if len(inputFilePath) == 0 {
 		return errors.New("json file input is empty")
@@ -287,6 +292,142 @@ func createPhase1StakingTransaction(ctx *cli.Context) error {
 	}
 
 	helpers.PrintRespJSON(*resp)
+	return nil
+}
+
+var checkPhase1StakingTransactionCmd = cli.Command{
+	Name:      "check-phase1-staking-transaction",
+	ShortName: "cpst",
+	Usage:     "Checks whether provided staking transactions is valid staking transaction (tx must be funded/have inputs)",
+	Description: "Checks staking transaction agains custom set of parameters. Use for custom transactions" +
+		"that may not obey the global parameters. For most cases use `check-phase1-staking-transaction-params`",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:     stakingTransactionFlag,
+			Usage:    "Staking transaction in hex",
+			Required: true,
+		},
+		cli.StringFlag{
+			Name:     magicBytesFlag,
+			Usage:    "Magic bytes in op return output in hex",
+			Required: true,
+		},
+		cli.StringSliceFlag{
+			Name:     covenantMembersPksFlag,
+			Usage:    "BTC public keys of the covenant committee members",
+			Required: true,
+		},
+		cli.Uint64Flag{
+			Name:     covenantQuorumFlag,
+			Usage:    "Required quorum for the covenant members",
+			Required: true,
+		},
+		cli.StringFlag{
+			Name:     networkNameFlag,
+			Usage:    "Bitcoin network on which staking should take place one of (mainnet, testnet3, regtest, simnet, signet)",
+			Required: true,
+		},
+		cli.StringFlag{
+			Name:  stakerPublicKeyFlag,
+			Usage: "Optional staker pub key hex to match the staker pub key in tx",
+		},
+		cli.StringFlag{
+			Name:  finalityProviderKeyFlag,
+			Usage: "Optional finality provider public key hex to match the finality provider public key in tx",
+		},
+		cli.Int64Flag{
+			Name:  minStakingAmountFlag,
+			Usage: "Optional minimum staking amount in satoshis to check if the amount spent in tx is higher than the flag",
+		},
+		cli.Int64Flag{
+			Name:  maxStakingAmountFlag,
+			Usage: "Optional maximum staking amount in satoshis to check if the amount spent in tx is lower than the flag",
+		},
+		cli.Int64Flag{
+			Name:  helpers.StakingTimeBlocksFlag,
+			Usage: "Optional staking time in BTC blocks to match how long it was locked for",
+		},
+	},
+	Action: checkPhase1StakingTransaction,
+}
+
+func checkPhase1StakingTransaction(ctx *cli.Context) error {
+	net := ctx.String(networkNameFlag)
+
+	currentParams, err := utils.GetBtcNetworkParams(net)
+
+	if err != nil {
+		return err
+	}
+
+	stakingTxHex := ctx.String(stakingTransactionFlag)
+
+	tx, _, err := bbn.NewBTCTxFromHex(stakingTxHex)
+
+	if err != nil {
+		return err
+	}
+	magicBytes, err := parseMagicBytesFromCliCtx(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	covenantMembersPks, err := parseCovenantKeysFromCliCtx(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	covenantQuorum := uint32(ctx.Uint64(covenantQuorumFlag))
+
+	stakingTx, err := btcstaking.ParseV0StakingTx(
+		tx,
+		magicBytes,
+		covenantMembersPks,
+		covenantQuorum,
+		currentParams,
+	)
+	if err != nil {
+		return err
+	}
+
+	// verify if optional flags match.
+	stakerPk := ctx.String(stakerPublicKeyFlag)
+	if len(stakerPk) > 0 {
+		stakerPkFromTx := schnorr.SerializePubKey(stakingTx.OpReturnData.StakerPublicKey.PubKey)
+		stakerPkHexFromTx := hex.EncodeToString(stakerPkFromTx)
+		if !strings.EqualFold(stakerPk, stakerPkHexFromTx) {
+			return fmt.Errorf("staker pk in tx %s do not match with flag %s", stakerPkHexFromTx, stakerPk)
+		}
+	}
+
+	fpPk := ctx.String(finalityProviderKeyFlag)
+	if len(fpPk) > 0 {
+		fpPkFromTx := schnorr.SerializePubKey(stakingTx.OpReturnData.FinalityProviderPublicKey.PubKey)
+		fpPkHexFromTx := hex.EncodeToString(fpPkFromTx)
+		if !strings.EqualFold(fpPk, fpPkHexFromTx) {
+			return fmt.Errorf("finality provider pk in tx %s do not match with flag %s", fpPkHexFromTx, fpPk)
+		}
+	}
+
+	timeBlocks := ctx.Int64(helpers.StakingTimeBlocksFlag)
+	if timeBlocks > 0 && uint16(timeBlocks) != stakingTx.OpReturnData.StakingTime {
+		return fmt.Errorf("staking time in tx %d do not match with flag %d", stakingTx.OpReturnData.StakingTime, timeBlocks)
+	}
+
+	txAmount := stakingTx.StakingOutput.Value
+	minAmount := ctx.Int64(minStakingAmountFlag)
+	if minAmount > 0 && txAmount < minAmount {
+		return fmt.Errorf("staking amount in tx %d is less than the min-staking-amount in flag %d", txAmount, minAmount)
+	}
+
+	maxAmount := ctx.Int64(maxStakingAmountFlag)
+	if maxAmount > 0 && txAmount > maxAmount {
+		return fmt.Errorf("staking amount in tx %d is more than the max-staking-amount in flag %d", txAmount, maxAmount)
+	}
+
+	fmt.Println("Provided transaction is valid staking transaction!")
 	return nil
 }
 
