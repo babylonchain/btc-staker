@@ -18,12 +18,12 @@ import (
 	"testing"
 	"time"
 
-	btcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
-
 	staking "github.com/babylonchain/babylon/btcstaking"
 	txformat "github.com/babylonchain/babylon/btctxformatter"
+	"github.com/babylonchain/babylon/crypto/eots"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
+	btcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
 	ckpttypes "github.com/babylonchain/babylon/x/checkpointing/types"
 	"github.com/babylonchain/btc-staker/babylonclient"
@@ -576,6 +576,8 @@ func (tm *TestManager) FinalizeUntilEpoch(t *testing.T, epoch uint64) {
 }
 
 func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStakingData *testStakingData) {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+
 	params, err := tm.BabylonClient.QueryStakingTracker()
 	require.NoError(t, err)
 
@@ -591,10 +593,9 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 
 		btcFpKey := bbntypes.NewBIP340PubKeyFromBTCPK(testStakingData.FinalityProviderBtcKeys[i])
 
-		// get current finality providers
-		resp, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
-		require.NoError(t, err)
 		// register the generated finality provider
+		_, mpr, err := eots.NewMasterRandPair(r)
+		require.NoError(t, err)
 		_, err = tm.BabylonClient.RegisterFinalityProvider(
 			testStakingData.FinalityProviderBabylonPublicKeys[i],
 			btcFpKey,
@@ -603,17 +604,26 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 				Moniker: "tester",
 			},
 			pop,
+			mpr,
 			"",
 		)
+		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
-			require.NoError(t, err)
-
-			// After registration we should have one finality provider
-			return len(resp2.FinalityProviders) == len(resp.FinalityProviders)+1
+			resp, err := tm.BabylonClient.QueryFinalityProvider(btcFpKey.MustToBTCPK())
+			if err != nil {
+				return false
+			}
+			require.Equal(t, bbntypes.NewBIP340PubKeyFromBTCPK(&resp.FinalityProvider.BtcPk).MarshalHex(), btcFpKey.MarshalHex())
+			return true
 		}, time.Minute, 250*time.Millisecond)
 	}
+
+	// finalise until the current epoch
+	// TODO: remove
+	epochResp, err := tm.BabylonClient.GetBBNClient().CurrentEpoch()
+	require.NoError(t, err)
+	tm.FinalizeUntilEpoch(t, epochResp.CurrentEpoch)
 }
 
 func (tm *TestManager) sendHeadersToBabylon(t *testing.T, headers []*wire.BlockHeader) {

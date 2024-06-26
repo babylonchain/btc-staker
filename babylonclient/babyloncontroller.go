@@ -9,14 +9,14 @@ import (
 	"strings"
 	"time"
 
-	btcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
-
 	sdkErr "cosmossdk.io/errors"
 	sdkmath "cosmossdk.io/math"
 	"github.com/avast/retry-go/v4"
 	bbnclient "github.com/babylonchain/babylon/client/client"
+	"github.com/babylonchain/babylon/crypto/eots"
 	bbntypes "github.com/babylonchain/babylon/types"
 	bcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
+	btcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
 	btclctypes "github.com/babylonchain/babylon/x/btclightclient/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
 	bsctypes "github.com/babylonchain/babylon/x/btcstkconsumer/types"
@@ -715,16 +715,18 @@ func (bc *BabylonController) RegisterFinalityProvider(
 	commission *sdkmath.LegacyDec,
 	description *sttypes.Description,
 	pop *btcstypes.ProofOfPossession,
+	mpr *eots.MasterPublicRand,
 	consumerID string,
 ) (*pv.RelayerTxResponse, error) {
 	registerMsg := &btcstypes.MsgCreateFinalityProvider{
-		Signer:      bc.getTxSigner(),
-		Commission:  commission,
-		BabylonPk:   bbnPubKey,
-		BtcPk:       btcPubKey,
-		Description: description,
-		Pop:         pop,
-		ConsumerId:  consumerID,
+		Signer:        bc.getTxSigner(),
+		Commission:    commission,
+		BabylonPk:     bbnPubKey,
+		BtcPk:         btcPubKey,
+		Description:   description,
+		Pop:           pop,
+		MasterPubRand: mpr.MarshalBase58(),
+		ConsumerId:    consumerID,
 	}
 
 	return bc.reliablySendMsgs([]sdk.Msg{registerMsg})
