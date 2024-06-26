@@ -7,8 +7,11 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"math/rand"
 	"testing"
+	"time"
 
+	"github.com/babylonchain/babylon/crypto/eots"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
@@ -75,6 +78,8 @@ func (tm *TestManager) createAndRegisterFinalityProvidersWithCZ(
 	t *testing.T,
 	data *testStakingDataWithCZFPs,
 ) {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+
 	// register chain
 	_, err := tm.BabylonClient.RegisterConsumerChain(data.consumerRegister.ConsumerId, data.consumerRegister.ConsumerName, data.consumerRegister.ConsumerDescription)
 	require.NoError(t, err)
@@ -97,6 +102,8 @@ func (tm *TestManager) createAndRegisterFinalityProvidersWithCZ(
 		require.NoError(t, err)
 
 		// register the generated finality provider
+		_, mpr, err := eots.NewMasterRandPair(r)
+		require.NoError(t, err)
 		_, err = tm.BabylonClient.RegisterFinalityProvider(
 			data.CZFPBabylonPKs[i],
 			fpBTCPK,
@@ -105,6 +112,7 @@ func (tm *TestManager) createAndRegisterFinalityProvidersWithCZ(
 				Moniker: "tester",
 			},
 			pop,
+			mpr,
 			data.consumerRegister.ConsumerId,
 		)
 
