@@ -226,28 +226,35 @@ func (n *BabylonNode) TxBankSend(addr, coins string) error {
 // TxBankMultiSend send transaction to multiple addresses from the node address.
 func (n *BabylonNode) TxBankMultiSend(coins string, addresses ...string) error {
 	// babylond tx bank multi-send [from_key_or_address] [to_address_1 to_address_2 ...] [amount] [flags]
-	flags := []string{
-		"tx",
-		"bank",
-		"multi-send",
-		n.WalletName,
-	}
-	flags = append(flags, addresses...)
-	flags = append(flags,
-		coins,
-		"--keyring-backend=test",
-		fmt.Sprintf("--home=%s", n.GetNodeDataDir()),
-		"--log_level=debug",
-		"--chain-id=chain-test",
-		"-b=sync", "--yes", "--gas-prices=10ubbn",
-	)
+	switch len(addresses) {
+	case 0:
+		return nil
+	case 1:
+		return n.TxBankSend(addresses[0], coins)
+	default:
+		flags := []string{
+			"tx",
+			"bank",
+			"multi-send",
+			n.WalletName,
+		}
+		flags = append(flags, addresses...)
+		flags = append(flags,
+			coins,
+			"--keyring-backend=test",
+			fmt.Sprintf("--home=%s", n.GetNodeDataDir()),
+			"--log_level=debug",
+			"--chain-id=chain-test",
+			"-b=sync", "--yes", "--gas-prices=10ubbn",
+		)
 
-	cmd := exec.Command("babylond", flags...)
-	_, err := cmd.Output()
-	if err != nil {
-		return err
+		cmd := exec.Command("babylond", flags...)
+		_, err := cmd.Output()
+		if err != nil {
+			return err
+		}
+		return nil
 	}
-	return nil
 }
 
 func baseDirBabylondir() (string, error) {
