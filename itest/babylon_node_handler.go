@@ -34,8 +34,7 @@ func (n *BabylonNode) start() error {
 		return err
 	}
 
-	pid, err := os.Create(filepath.Join(n.DataDir,
-		fmt.Sprintf("%s.pid", "config")))
+	pid, err := os.Create(filepath.Join(n.DataDir, fmt.Sprintf("%s.pid", "config")))
 	if err != nil {
 		return err
 	}
