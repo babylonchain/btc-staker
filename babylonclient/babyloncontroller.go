@@ -43,7 +43,7 @@ var (
 	// TODO: Maybe configurable?
 	RtyAttNum = uint(5)
 	RtyAtt    = retry.Attempts(RtyAttNum)
-	RtyDel    = retry.Delay(time.Millisecond * 400)
+	RtyDel    = retry.Delay(time.Millisecond * 600)
 	RtyErr    = retry.LastErrorOnly(true)
 )
 
