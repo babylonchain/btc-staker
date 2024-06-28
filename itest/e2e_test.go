@@ -150,14 +150,14 @@ type TestManager struct {
 }
 
 type testStakingData struct {
-	StakerKey                         *btcec.PublicKey
-	StakerBabylonAddr                 sdk.AccAddress
-	FinalityProviderBabylonPrivKeys   []*secp256k1.PrivKey
-	FinalityProviderBabylonPublicKeys []*secp256k1.PubKey
-	FinalityProviderBtcPrivKeys       []*btcec.PrivateKey
-	FinalityProviderBtcKeys           []*btcec.PublicKey
-	StakingTime                       uint16
-	StakingAmount                     int64
+	StakerKey                       *btcec.PublicKey
+	StakerBabylonAddr               sdk.AccAddress
+	FinalityProviderBabylonPrivKeys []*secp256k1.PrivKey
+	FinalityProviderBabylonAddrs    []sdk.AccAddress
+	FinalityProviderBtcPrivKeys     []*btcec.PrivateKey
+	FinalityProviderBtcKeys         []*btcec.PublicKey
+	StakingTime                     uint16
+	StakingAmount                   int64
 }
 
 func (d *testStakingData) GetNumRestakedFPs() int {
@@ -174,25 +174,31 @@ func (tm *TestManager) getTestStakingData(
 	fpBTCSKs, fpBTCPKs, err := datagen.GenRandomBTCKeyPairs(r, numRestakedFPs)
 	require.NoError(t, err)
 
-	fpBBNSKs, fpBBNPKs := []*secp256k1.PrivKey{}, []*secp256k1.PubKey{}
+	fpBBNSKs, fpBBNAddrs := make([]*secp256k1.PrivKey, numRestakedFPs), make([]sdk.AccAddress, numRestakedFPs)
+	strAddrs := make([]string, numRestakedFPs)
 	for i := 0; i < numRestakedFPs; i++ {
 		fpBBNSK := secp256k1.GenPrivKey()
-		fpBBNSKs = append(fpBBNSKs, fpBBNSK)
-		fpBBNPK := fpBBNSK.PubKey().(*secp256k1.PubKey)
-		fpBBNPKs = append(fpBBNPKs, fpBBNPK)
+		fpAddr := sdk.AccAddress(fpBBNSK.PubKey().Address().Bytes())
+
+		fpBBNSKs[i] = fpBBNSK
+		fpBBNAddrs[i] = fpAddr
+		strAddrs[i] = fpAddr.String()
 	}
+
+	err = tm.BabylonHandler.BabylonNode.TxBankMultiSend("1000000ubbn", strAddrs...)
+	require.NoError(t, err)
 
 	return &testStakingData{
 		StakerKey: stakerKey,
 		// the staker babylon addr needs to be the same one that is going to sign
 		// the transaction in the end
-		StakerBabylonAddr:                 tm.BabylonClient.GetKeyAddress(),
-		FinalityProviderBabylonPrivKeys:   fpBBNSKs,
-		FinalityProviderBabylonPublicKeys: fpBBNPKs,
-		FinalityProviderBtcPrivKeys:       fpBTCSKs,
-		FinalityProviderBtcKeys:           fpBTCPKs,
-		StakingTime:                       stakingTime,
-		StakingAmount:                     stakingAmount,
+		StakerBabylonAddr:               tm.BabylonClient.GetKeyAddress(),
+		FinalityProviderBabylonPrivKeys: fpBBNSKs,
+		FinalityProviderBabylonAddrs:    fpBBNAddrs,
+		FinalityProviderBtcPrivKeys:     fpBTCSKs,
+		FinalityProviderBtcKeys:         fpBTCPKs,
+		StakingTime:                     stakingTime,
+		StakingAmount:                   stakingAmount,
 	}
 }
 
@@ -210,7 +216,8 @@ func (td *testStakingData) withStakingAmout(amout int64) *testStakingData {
 
 func StartManager(
 	t *testing.T,
-	numMatureOutputsInWallet uint32) *TestManager {
+	numMatureOutputsInWallet uint32,
+) *TestManager {
 	h := NewBitcoindHandler(t)
 	h.Start()
 	passphrase := "pass"
@@ -584,7 +591,7 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 		require.Error(t, err)
 		require.True(t, errors.Is(err, babylonclient.ErrFinalityProviderDoesNotExist))
 
-		pop, err := btcstypes.NewPoP(testStakingData.FinalityProviderBabylonPrivKeys[i], testStakingData.FinalityProviderBtcPrivKeys[i])
+		pop, err := btcstypes.NewPoPBTC(testStakingData.FinalityProviderBabylonAddrs[i], testStakingData.FinalityProviderBtcPrivKeys[i])
 		require.NoError(t, err)
 
 		btcFpKey := bbntypes.NewBIP340PubKeyFromBTCPK(testStakingData.FinalityProviderBtcKeys[i])
@@ -593,8 +600,9 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 		resp, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
 		require.NoError(t, err)
 		// register the generated finality provider
-		_, err = tm.BabylonClient.RegisterFinalityProvider(
-			testStakingData.FinalityProviderBabylonPublicKeys[i],
+		err = tm.BabylonClient.RegisterFinalityProvider(
+			testStakingData.FinalityProviderBabylonAddrs[i],
+			testStakingData.FinalityProviderBabylonPrivKeys[i],
 			btcFpKey,
 			&params.MinComissionRate,
 			&sttypes.Description{

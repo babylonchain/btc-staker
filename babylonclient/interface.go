@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	sdkmath "cosmossdk.io/math"
+	"github.com/babylonchain/babylon/testutil/datagen"
 	"github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
@@ -158,12 +159,9 @@ func GetMockClient() *MockBabylonClient {
 		panic(err)
 	}
 
-	fpBabylonPrivKey := secp256k1.GenPrivKey()
-	fpBabylonPubKey := fpBabylonPrivKey.PubKey().(*secp256k1.PubKey)
-
 	vi := FinalityProviderInfo{
-		BabylonPk: *fpBabylonPubKey,
-		BtcPk:     *fpBtcPrivKey.PubKey(),
+		BabylonAddr: datagen.GenRandomAccount().GetAddress(),
+		BtcPk:       *fpBtcPrivKey.PubKey(),
 	}
 
 	return &MockBabylonClient{

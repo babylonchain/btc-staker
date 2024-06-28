@@ -235,8 +235,8 @@ func (s *StakerService) providers(_ *rpctypes.Context, offset, limit *int) (*Fin
 
 	for _, provider := range providersResp.FinalityProviders {
 		v := FinalityProviderInfoResponse{
-			BabylonPublicKey: hex.EncodeToString(provider.BabylonPk.Key),
-			BtcPublicKey:     hex.EncodeToString(schnorr.SerializePubKey(&provider.BtcPk)),
+			BabylonAddress: provider.BabylonAddr.String(),
+			BtcPublicKey:   hex.EncodeToString(schnorr.SerializePubKey(&provider.BtcPk)),
 		}
 
 		providerInfos = append(providerInfos, v)

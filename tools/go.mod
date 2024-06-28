@@ -2,7 +2,7 @@ module github.com/babylonchain/vigilante/tools
 
 go 1.22.3
 
-require github.com/babylonchain/babylon v0.9.0-rc.1
+require github.com/babylonchain/babylon v0.8.6-0.20240628205418-d51dc2ba6a4c
 
 require (
 	cloud.google.com/go v0.112.0 // indirect
