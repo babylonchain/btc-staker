@@ -216,11 +216,10 @@ func (n *BabylonNode) TxBankSend(addr, coins string) error {
 	}
 
 	cmd := exec.Command("babylond", flags...)
-	out, err := cmd.Output()
+	_, err := cmd.Output()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\nTxBankSend: %+v - out: %s - \n Addr: %s", flags, out, addr)
 	return nil
 }
 
@@ -244,11 +243,10 @@ func (n *BabylonNode) TxBankMultiSend(coins string, addresses ...string) error {
 	)
 
 	cmd := exec.Command("babylond", flags...)
-	out, err := cmd.Output()
+	_, err := cmd.Output()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\nTxBankMultiSend: %+v - out: %s - \n Addrs: %+v", flags, out, addresses)
 	return nil
 }
 
