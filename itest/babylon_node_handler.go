@@ -155,7 +155,6 @@ func NewBabylonNodeHandler(
 	nodeDataDir := filepath.Join(testDir, walletName, "babylond")
 
 	f, err := os.Create(filepath.Join(testDir, "babylon.log"))
-
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +230,7 @@ func (n *BabylonNode) TxBankMultiSend(coins string, addresses ...string) error {
 	flags := []string{
 		"tx",
 		"bank",
-		"send",
+		"multi-send",
 		n.WalletName,
 	}
 	flags = append(flags, addresses...)
