@@ -14,43 +14,27 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 )
 
-func baseDirBabylondir() (string, error) {
-	tempPath := os.TempDir()
-
-	tempName, err := os.MkdirTemp(tempPath, "zBabylonTestStaker")
-	if err != nil {
-		return "", err
-	}
-
-	err = os.Chmod(tempName, 0755)
-
-	if err != nil {
-		return "", err
-	}
-
-	return tempName, nil
+type BabylonNode struct {
+	cmd        *exec.Cmd
+	pidFile    string
+	DataDir    string
+	WalletName string
 }
 
-type babylonNode struct {
-	cmd     *exec.Cmd
-	pidFile string
-	dataDir string
-}
-
-func newBabylonNode(dataDir string, cmd *exec.Cmd) *babylonNode {
-	return &babylonNode{
-		dataDir: dataDir,
-		cmd:     cmd,
+func newBabylonNode(dataDir, walletName string, cmd *exec.Cmd) *BabylonNode {
+	return &BabylonNode{
+		DataDir:    dataDir,
+		cmd:        cmd,
+		WalletName: walletName,
 	}
 }
 
-func (n *babylonNode) start() error {
+func (n *BabylonNode) start() error {
 	if err := n.cmd.Start(); err != nil {
 		return err
 	}
 
-	pid, err := os.Create(filepath.Join(n.dataDir,
-		fmt.Sprintf("%s.pid", "config")))
+	pid, err := os.Create(filepath.Join(n.DataDir, fmt.Sprintf("%s.pid", "config")))
 	if err != nil {
 		return err
 	}
@@ -67,7 +51,7 @@ func (n *babylonNode) start() error {
 	return nil
 }
 
-func (n *babylonNode) stop() (err error) {
+func (n *BabylonNode) stop() (err error) {
 	if n.cmd == nil || n.cmd.Process == nil {
 		// return if not properly initialized
 		// or error starting the process
@@ -84,7 +68,7 @@ func (n *babylonNode) stop() (err error) {
 	return n.cmd.Process.Signal(os.Interrupt)
 }
 
-func (n *babylonNode) cleanup() error {
+func (n *BabylonNode) cleanup() error {
 	if n.pidFile != "" {
 		if err := os.Remove(n.pidFile); err != nil {
 			log.Printf("unable to remove file %s: %v", n.pidFile,
@@ -93,7 +77,7 @@ func (n *babylonNode) cleanup() error {
 	}
 
 	dirs := []string{
-		n.dataDir,
+		n.DataDir,
 	}
 	var err error
 	for _, dir := range dirs {
@@ -104,7 +88,7 @@ func (n *babylonNode) cleanup() error {
 	return nil
 }
 
-func (n *babylonNode) shutdown() error {
+func (n *BabylonNode) shutdown() error {
 	if err := n.stop(); err != nil {
 		return err
 	}
@@ -115,7 +99,7 @@ func (n *babylonNode) shutdown() error {
 }
 
 type BabylonNodeHandler struct {
-	babylonNode *babylonNode
+	BabylonNode *BabylonNode
 }
 
 func NewBabylonNodeHandler(
@@ -136,6 +120,7 @@ func NewBabylonNodeHandler(
 	pubBabylon2 := types.NewBIP340PubKeyFromBTCPK(covenantPk2)
 	pubBabylon3 := types.NewBIP340PubKeyFromBTCPK(covenantPk3)
 
+	walletName := "node0"
 	initTestnetCmd := exec.Command(
 		"babylond",
 		"testnet",
@@ -166,10 +151,9 @@ func NewBabylonNodeHandler(
 		return nil, err
 	}
 
-	nodeDataDir := filepath.Join(testDir, "node0", "babylond")
+	nodeDataDir := filepath.Join(testDir, walletName, "babylond")
 
 	f, err := os.Create(filepath.Join(testDir, "babylon.log"))
-
 	if err != nil {
 		return nil, err
 	}
@@ -184,21 +168,21 @@ func NewBabylonNodeHandler(
 	startCmd.Stdout = f
 
 	return &BabylonNodeHandler{
-		babylonNode: newBabylonNode(testDir, startCmd),
+		BabylonNode: newBabylonNode(testDir, walletName, startCmd),
 	}, nil
 }
 
 func (w *BabylonNodeHandler) Start() error {
-	if err := w.babylonNode.start(); err != nil {
+	if err := w.BabylonNode.start(); err != nil {
 		// try to cleanup after start error, but return original error
-		_ = w.babylonNode.cleanup()
+		_ = w.BabylonNode.cleanup()
 		return err
 	}
 	return nil
 }
 
 func (w *BabylonNodeHandler) Stop() error {
-	if err := w.babylonNode.shutdown(); err != nil {
+	if err := w.BabylonNode.shutdown(); err != nil {
 		return err
 	}
 
@@ -206,6 +190,85 @@ func (w *BabylonNodeHandler) Stop() error {
 }
 
 func (w *BabylonNodeHandler) GetNodeDataDir() string {
-	dir := filepath.Join(w.babylonNode.dataDir, "node0", "babylond")
+	return w.BabylonNode.GetNodeDataDir()
+}
+
+// GetNodeDataDir returns the home path of the babylon node.
+func (n *BabylonNode) GetNodeDataDir() string {
+	dir := filepath.Join(n.DataDir, n.WalletName, "babylond")
 	return dir
+}
+
+// TxBankSend send transaction to a address from the node address.
+func (n *BabylonNode) TxBankSend(addr, coins string) error {
+	flags := []string{
+		"tx",
+		"bank",
+		"send",
+		n.WalletName,
+		addr, coins,
+		"--keyring-backend=test",
+		fmt.Sprintf("--home=%s", n.GetNodeDataDir()),
+		"--log_level=debug",
+		"--chain-id=chain-test",
+		"-b=sync", "--yes", "--gas-prices=10ubbn",
+	}
+
+	cmd := exec.Command("babylond", flags...)
+	_, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// TxBankMultiSend send transaction to multiple addresses from the node address.
+func (n *BabylonNode) TxBankMultiSend(coins string, addresses ...string) error {
+	// babylond tx bank multi-send [from_key_or_address] [to_address_1 to_address_2 ...] [amount] [flags]
+	switch len(addresses) {
+	case 0:
+		return nil
+	case 1:
+		return n.TxBankSend(addresses[0], coins)
+	default:
+		flags := []string{
+			"tx",
+			"bank",
+			"multi-send",
+			n.WalletName,
+		}
+		flags = append(flags, addresses...)
+		flags = append(flags,
+			coins,
+			"--keyring-backend=test",
+			fmt.Sprintf("--home=%s", n.GetNodeDataDir()),
+			"--log_level=debug",
+			"--chain-id=chain-test",
+			"-b=sync", "--yes", "--gas-prices=10ubbn",
+		)
+
+		cmd := exec.Command("babylond", flags...)
+		_, err := cmd.Output()
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func baseDirBabylondir() (string, error) {
+	tempPath := os.TempDir()
+
+	tempName, err := os.MkdirTemp(tempPath, "zBabylonTestStaker")
+	if err != nil {
+		return "", err
+	}
+
+	err = os.Chmod(tempName, 0755)
+
+	if err != nil {
+		return "", err
+	}
+
+	return tempName, nil
 }

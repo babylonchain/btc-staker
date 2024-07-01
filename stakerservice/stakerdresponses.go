@@ -28,8 +28,8 @@ type SpendTxDetails struct {
 }
 
 type FinalityProviderInfoResponse struct {
-	// Hex encoded Babylon public secp256k1 key in compressed format
-	BabylonPublicKey string `json:"babylon_public_Key"`
+	// bech 32 encoded Babylon address
+	BabylonAddress string `json:"babylon_address"`
 	// Hex encoded Bitcoin public secp256k1 key in BIP340 format
 	BtcPublicKey string `json:"bitcoin_public_Key"`
 }
