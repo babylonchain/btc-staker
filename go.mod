@@ -6,9 +6,9 @@ require (
 	cosmossdk.io/errors v1.0.1
 	cosmossdk.io/math v1.3.0
 	github.com/avast/retry-go/v4 v4.5.1
-	github.com/babylonchain/babylon v0.8.6-0.20240628205418-d51dc2ba6a4c
+	github.com/babylonchain/babylon v0.9.0-rc.2
 	github.com/babylonchain/networks/parameters v0.2.1
-	github.com/btcsuite/btcd v0.24.0
+	github.com/btcsuite/btcd v0.24.2
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/btcsuite/btcd/btcutil v1.1.5
 	github.com/btcsuite/btcd/btcutil/psbt v1.1.8
@@ -31,7 +31,6 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli v1.22.14
-	go.starlark.net v0.0.0-20240520160348-046347dcd104
 	go.uber.org/zap v1.26.0
 	golang.org/x/sync v0.7.0
 	google.golang.org/protobuf v1.33.0
