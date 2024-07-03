@@ -158,9 +158,8 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	fpBtcPks []string,
 	slashingTx string,
 	slashingTxSig string,
-	stakerBabylonPk string,
+	stakerBabylonAddr string,
 	stakerAddress string,
-	stakerBabylonSig string,
 	stakerBtcSig string,
 	unbondingTx string,
 	slashUnbondingTx string,
@@ -178,9 +177,8 @@ func (c *StakerServiceJsonRpcClient) WatchStaking(
 	params["fpBtcPks"] = fpBtcPks
 	params["slashingTx"] = slashingTx
 	params["slashingTxSig"] = slashingTxSig
-	params["stakerBabylonPk"] = stakerBabylonPk
+	params["stakerBabylonAddr"] = stakerBabylonAddr
 	params["stakerAddress"] = stakerAddress
-	params["stakerBabylonSig"] = stakerBabylonSig
 	params["stakerBtcSig"] = stakerBtcSig
 	params["unbondingTx"] = unbondingTx
 	params["slashUnbondingTx"] = slashUnbondingTx

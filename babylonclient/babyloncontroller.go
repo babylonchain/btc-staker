@@ -43,7 +43,7 @@ var (
 	// TODO: Maybe configurable?
 	RtyAttNum = uint(5)
 	RtyAtt    = retry.Attempts(RtyAttNum)
-	RtyDel    = retry.Delay(time.Millisecond * 400)
+	RtyDel    = retry.Delay(time.Millisecond * 600)
 	RtyErr    = retry.LastErrorOnly(true)
 )
 
@@ -110,8 +110,8 @@ type StakingTrackerResponse struct {
 }
 
 type FinalityProviderInfo struct {
-	BabylonPk secp256k1.PubKey
-	BtcPk     btcec.PublicKey
+	BabylonAddr sdk.AccAddress
+	BtcPk       btcec.PublicKey
 }
 
 type FinalityProvidersClientResponse struct {
@@ -273,7 +273,7 @@ type DelegationData struct {
 	FinalityProvidersBtcPks              []*btcec.PublicKey
 	SlashingTransaction                  *wire.MsgTx
 	SlashingTransactionSig               *schnorr.Signature
-	BabylonPk                            *secp256k1.PubKey
+	BabylonStakerAddr                    sdk.AccAddress
 	StakerBtcPk                          *btcec.PublicKey
 	BabylonPop                           *stakerdb.ProofOfPossession
 	Ud                                   *UndelegationData
@@ -308,7 +308,7 @@ type DelegationInfo struct {
 	UndelegationInfo *UndelegationInfo
 }
 
-func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
+func delegationDataToMsg(dg *DelegationData) (*btcstypes.MsgCreateBTCDelegation, error) {
 	if dg == nil {
 		return nil, fmt.Errorf("nil delegation data")
 	}
@@ -365,13 +365,11 @@ func delegationDataToMsg(signer string, dg *DelegationData) (*btcstypes.MsgCreat
 	slashUnbondingTxSig := bbntypes.NewBIP340SignatureFromBTCSig(dg.Ud.SlashUnbondingTransactionSig)
 
 	return &btcstypes.MsgCreateBTCDelegation{
-		Signer:    signer,
-		BabylonPk: dg.BabylonPk,
-		Pop: &btcstypes.ProofOfPossession{
-			// Note: this should be always safe conversion as we received data from our db
+		// Note: this should be always safe conversion as we received data from our db
+		StakerAddr: dg.BabylonStakerAddr.String(),
+		Pop: &btcstypes.ProofOfPossessionBTC{
 			BtcSigType: btcstypes.BTCSigType(dg.BabylonPop.BtcSigType),
-			BabylonSig: dg.BabylonPop.BabylonSigOverBtcPk,
-			BtcSig:     dg.BabylonPop.BtcSigOverBabylonSig,
+			BtcSig:     dg.BabylonPop.BtcSigOverBabylonAddr,
 		},
 		BtcPk:        bbntypes.NewBIP340PubKeyFromBTCPK(dg.StakerBtcPk),
 		FpBtcPkList:  fpPksList,
@@ -408,10 +406,7 @@ func (bc *BabylonController) reliablySendMsgs(
 // TODO: for now return sdk.TxResponse, it will ease up debugging/testing
 // ultimately we should create our own type ate
 func (bc *BabylonController) Delegate(dg *DelegationData) (*pv.RelayerTxResponse, error) {
-	signer := bc.getTxSigner()
-
-	delegateMsg, err := delegationDataToMsg(signer, dg)
-
+	delegateMsg, err := delegationDataToMsg(dg)
 	if err != nil {
 		return nil, err
 	}
@@ -540,11 +535,15 @@ func (bc *BabylonController) QueryFinalityProviders(
 		if err != nil {
 			return nil, fmt.Errorf("query finality providers error: %w", err)
 		}
-		fpBabylonPk := finalityProvider.BabylonPk
+
+		fpAddr, err := sdk.AccAddressFromBech32(finalityProvider.Addr)
+		if err != nil {
+			return nil, fmt.Errorf("query finality providers error transform address: %s - %w", finalityProvider.Addr, err)
+		}
 
 		fpInfo := FinalityProviderInfo{
-			BabylonPk: *fpBabylonPk,
-			BtcPk:     *fpBtcKey,
+			BabylonAddr: fpAddr,
+			BtcPk:       *fpBtcKey,
 		}
 
 		finalityProviders = append(finalityProviders, fpInfo)
@@ -603,15 +602,19 @@ func (bc *BabylonController) QueryFinalityProvider(btcPubKey *btcec.PublicKey) (
 	}
 
 	btcPk, err := response.FinalityProvider.BtcPk.ToBTCPK()
-
 	if err != nil {
 		return nil, fmt.Errorf("received malformed btc pk in babylon response: %w", err)
 	}
 
+	fpAddr, err := sdk.AccAddressFromBech32(response.FinalityProvider.Addr)
+	if err != nil {
+		return nil, fmt.Errorf("received malformed fp addr in babylon response: %s - %w", response.FinalityProvider.Addr, err)
+	}
+
 	return &FinalityProviderClientResponse{
 		FinalityProvider: FinalityProviderInfo{
-			BabylonPk: *response.FinalityProvider.BabylonPk,
-			BtcPk:     *btcPk,
+			BabylonAddr: fpAddr,
+			BtcPk:       *btcPk,
 		},
 	}, nil
 }
@@ -673,24 +676,26 @@ func chainToChainBytes(chain []*wire.BlockHeader) []bbntypes.BTCHeaderBytes {
 // RegisterFinalityProvider registers a BTC finality provider via a MsgCreateFinalityProvider to Babylon
 // it returns tx hash and error
 func (bc *BabylonController) RegisterFinalityProvider(
-	bbnPubKey *secp256k1.PubKey,
+	fpAddr sdk.AccAddress,
+	fpPrivKeyBBN *secp256k1.PrivKey,
 	btcPubKey *bbntypes.BIP340PubKey,
 	commission *sdkmath.LegacyDec,
 	description *sttypes.Description,
-	pop *btcstypes.ProofOfPossession,
-	masterRandomness string,
-) (*pv.RelayerTxResponse, error) {
+	pop *btcstypes.ProofOfPossessionBTC,
+) error {
 	registerMsg := &btcstypes.MsgCreateFinalityProvider{
-		Signer:        bc.getTxSigner(),
-		Commission:    commission,
-		BabylonPk:     bbnPubKey,
-		BtcPk:         btcPubKey,
-		Description:   description,
-		Pop:           pop,
-		MasterPubRand: masterRandomness,
+		Addr:        fpAddr.String(),
+		Commission:  commission,
+		BtcPk:       btcPubKey,
+		Description: description,
+		Pop:         pop,
 	}
 
-	return bc.reliablySendMsgs([]sdk.Msg{registerMsg})
+	fpPrivKeyBBN.PubKey()
+	relayerMsgs := bbnclient.ToProviderMsgs([]sdk.Msg{registerMsg})
+
+	_, err := bc.bbnClient.SendMessageWithSigner(context.Background(), fpAddr, fpPrivKeyBBN, relayerMsgs)
+	return err
 }
 
 func (bc *BabylonController) QueryDelegationInfo(stakingTxHash *chainhash.Hash) (*DelegationInfo, error) {
@@ -858,15 +863,4 @@ func (bc *BabylonController) QueryBtcLightClientTip() (*btclctypes.BTCHeaderInfo
 	}
 
 	return res.Header, nil
-}
-
-func (bc *BabylonController) QueryFinalityProviderRegisteredEpoch(fpPk *btcec.PublicKey) (uint64, error) {
-	res, err := bc.bbnClient.QueryClient.FinalityProvider(
-		bbntypes.NewBIP340PubKeyFromBTCPK(fpPk).MarshalHex(),
-	)
-	if err != nil {
-		return 0, fmt.Errorf("failed to query finality provider registered epoch: %w", err)
-	}
-
-	return res.FinalityProvider.RegisteredEpoch, nil
 }

@@ -280,7 +280,7 @@ git clone https://github.com/babylonchain/btc-staker.git
 ```
 
 You can choose a specific version from
-the [official releases page](https://github.com/babylonchain/btcstaker/releases)
+the [official releases page](https://github.com/babylonchain/btc-staker/releases)
 
 ```bash
 cd btc-staker # cd into the project directory
@@ -352,7 +352,7 @@ In the following, we go through important parameters of the `stakerd.conf` file.
 1. The `Key` parameter in the config below is the name of the key in the keyring to
    use for signing transactions. Use the key name you created
    in [Create a Babylon keyring with funds](#create-a-babylon-keyring-keyring-backend-test-with-funds)
-2. Ensure that the `KeyringDirectory` is set to the location where the keyring is
+2. Ensure that the `KeyDirectory` is set to the location where the keyring is
    stored.
 3. Ensure to use the `test` keyring backend
 4. Ensure you use the correct `ChainID` for the network you're connecting to. For

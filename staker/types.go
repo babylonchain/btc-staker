@@ -22,7 +22,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/wallet/txsizes"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 )
 
@@ -36,9 +36,8 @@ type spendStakeTxInfo struct {
 // babylonPopToDbPop receives already validated pop from external sources and converts it to database representation
 func babylonPopToDbPop(pop *cl.BabylonPop) *stakerdb.ProofOfPossession {
 	return &stakerdb.ProofOfPossession{
-		BtcSigType:           pop.PopTypeNum(),
-		BabylonSigOverBtcPk:  pop.BabylonEcdsaSigOverBtcPk,
-		BtcSigOverBabylonSig: pop.BtcSig,
+		BtcSigType:            pop.PopTypeNum(),
+		BtcSigOverBabylonAddr: pop.BtcSig,
 	}
 }
 
@@ -165,7 +164,7 @@ func createDelegationData(
 	storedTx *stakerdb.StoredTransaction,
 	slashingTx *wire.MsgTx,
 	slashingTxSignature *schnorr.Signature,
-	babylonPubKey *secp256k1.PubKey,
+	babylonStakerAddr sdk.AccAddress,
 	stakingTxInclusionProof []byte,
 	undelegationData *cl.UndelegationData,
 ) *cl.DelegationData {
@@ -182,7 +181,7 @@ func createDelegationData(
 		StakerBtcPk:                          StakerBtcPk,
 		SlashingTransaction:                  slashingTx,
 		SlashingTransactionSig:               slashingTxSignature,
-		BabylonPk:                            babylonPubKey,
+		BabylonStakerAddr:                    babylonStakerAddr,
 		BabylonPop:                           storedTx.Pop,
 		Ud:                                   undelegationData,
 	}
@@ -488,7 +487,7 @@ func parseWatchStakingRequest(
 	fpBtcPks []*btcec.PublicKey,
 	slashingTx *wire.MsgTx,
 	slashingTxSig *schnorr.Signature,
-	stakerBabylonPk *secp256k1.PubKey,
+	stakerBabylonAddr sdk.AccAddress,
 	stakerBtcPk *btcec.PublicKey,
 	stakerAddress btcutil.Address,
 	pop *cl.BabylonPop,
@@ -558,7 +557,7 @@ func parseWatchStakingRequest(
 	}
 
 	// 5. Validate pop
-	if err = pop.ValidatePop(stakerBabylonPk, stakerBtcPk, network); err != nil {
+	if err = pop.ValidatePop(stakerBabylonAddr, stakerBtcPk, network); err != nil {
 		return nil, fmt.Errorf("failed to watch staking tx. Invalid pop: %w", err)
 	}
 
@@ -646,7 +645,7 @@ func parseWatchStakingRequest(
 		pop,
 		slashingTx,
 		slashingTxSig,
-		stakerBabylonPk,
+		stakerBabylonAddr,
 		stakerBtcPk,
 		unbondingTx,
 		slashUnbondingTx,

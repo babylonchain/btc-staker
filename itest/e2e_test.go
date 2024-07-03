@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"math/rand"
 	"net"
 	"net/netip"
@@ -23,7 +22,6 @@ import (
 
 	staking "github.com/babylonchain/babylon/btcstaking"
 	txformat "github.com/babylonchain/babylon/btctxformatter"
-	"github.com/babylonchain/babylon/crypto/eots"
 	"github.com/babylonchain/babylon/testutil/datagen"
 	bbntypes "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
@@ -47,6 +45,7 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkquerytypes "github.com/cosmos/cosmos-sdk/types/query"
 	sttypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/lightningnetwork/lnd/kvdb"
@@ -151,15 +150,14 @@ type TestManager struct {
 }
 
 type testStakingData struct {
-	StakerKey                         *btcec.PublicKey
-	StakerBabylonPrivKey              *secp256k1.PrivKey
-	StakerBabylonPubKey               *secp256k1.PubKey
-	FinalityProviderBabylonPrivKeys   []*secp256k1.PrivKey
-	FinalityProviderBabylonPublicKeys []*secp256k1.PubKey
-	FinalityProviderBtcPrivKeys       []*btcec.PrivateKey
-	FinalityProviderBtcKeys           []*btcec.PublicKey
-	StakingTime                       uint16
-	StakingAmount                     int64
+	StakerKey                       *btcec.PublicKey
+	StakerBabylonAddr               sdk.AccAddress
+	FinalityProviderBabylonPrivKeys []*secp256k1.PrivKey
+	FinalityProviderBabylonAddrs    []sdk.AccAddress
+	FinalityProviderBtcPrivKeys     []*btcec.PrivateKey
+	FinalityProviderBtcKeys         []*btcec.PublicKey
+	StakingTime                     uint16
+	StakingAmount                   int64
 }
 
 func (d *testStakingData) GetNumRestakedFPs() int {
@@ -176,27 +174,31 @@ func (tm *TestManager) getTestStakingData(
 	fpBTCSKs, fpBTCPKs, err := datagen.GenRandomBTCKeyPairs(r, numRestakedFPs)
 	require.NoError(t, err)
 
-	fpBBNSKs, fpBBNPKs := []*secp256k1.PrivKey{}, []*secp256k1.PubKey{}
+	fpBBNSKs, fpBBNAddrs := make([]*secp256k1.PrivKey, numRestakedFPs), make([]sdk.AccAddress, numRestakedFPs)
+	strAddrs := make([]string, numRestakedFPs)
 	for i := 0; i < numRestakedFPs; i++ {
 		fpBBNSK := secp256k1.GenPrivKey()
-		fpBBNSKs = append(fpBBNSKs, fpBBNSK)
-		fpBBNPK := fpBBNSK.PubKey().(*secp256k1.PubKey)
-		fpBBNPKs = append(fpBBNPKs, fpBBNPK)
+		fpAddr := sdk.AccAddress(fpBBNSK.PubKey().Address().Bytes())
+
+		fpBBNSKs[i] = fpBBNSK
+		fpBBNAddrs[i] = fpAddr
+		strAddrs[i] = fpAddr.String()
 	}
 
-	stakerBabylonPrivKey := secp256k1.GenPrivKey()
-	stakerBabylonPubKey := stakerBabylonPrivKey.PubKey().(*secp256k1.PubKey)
+	err = tm.BabylonHandler.BabylonNode.TxBankMultiSend("1000000ubbn", strAddrs...)
+	require.NoError(t, err)
 
 	return &testStakingData{
-		StakerKey:                         stakerKey,
-		StakerBabylonPrivKey:              stakerBabylonPrivKey,
-		StakerBabylonPubKey:               stakerBabylonPubKey,
-		FinalityProviderBabylonPrivKeys:   fpBBNSKs,
-		FinalityProviderBabylonPublicKeys: fpBBNPKs,
-		FinalityProviderBtcPrivKeys:       fpBTCSKs,
-		FinalityProviderBtcKeys:           fpBTCPKs,
-		StakingTime:                       stakingTime,
-		StakingAmount:                     stakingAmount,
+		StakerKey: stakerKey,
+		// the staker babylon addr needs to be the same one that is going to sign
+		// the transaction in the end
+		StakerBabylonAddr:               tm.BabylonClient.GetKeyAddress(),
+		FinalityProviderBabylonPrivKeys: fpBBNSKs,
+		FinalityProviderBabylonAddrs:    fpBBNAddrs,
+		FinalityProviderBtcPrivKeys:     fpBTCSKs,
+		FinalityProviderBtcKeys:         fpBTCPKs,
+		StakingTime:                     stakingTime,
+		StakingAmount:                   stakingAmount,
 	}
 }
 
@@ -214,7 +216,8 @@ func (td *testStakingData) withStakingAmout(amout int64) *testStakingData {
 
 func StartManager(
 	t *testing.T,
-	numMatureOutputsInWallet uint32) *TestManager {
+	numMatureOutputsInWallet uint32,
+) *TestManager {
 	h := NewBitcoindHandler(t)
 	h.Start()
 	passphrase := "pass"
@@ -581,7 +584,6 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 	params, err := tm.BabylonClient.QueryStakingTracker()
 	require.NoError(t, err)
 
-	var regEpoch uint64
 	for i := 0; i < testStakingData.GetNumRestakedFPs(); i++ {
 		// ensure the finality provider in testStakingData does not exist yet
 		fpResp, err := tm.BabylonClient.QueryFinalityProvider(testStakingData.FinalityProviderBtcKeys[i])
@@ -589,7 +591,7 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 		require.Error(t, err)
 		require.True(t, errors.Is(err, babylonclient.ErrFinalityProviderDoesNotExist))
 
-		pop, err := btcstypes.NewPoP(testStakingData.FinalityProviderBabylonPrivKeys[i], testStakingData.FinalityProviderBtcPrivKeys[i])
+		pop, err := btcstypes.NewPoPBTC(testStakingData.FinalityProviderBabylonAddrs[i], testStakingData.FinalityProviderBtcPrivKeys[i])
 		require.NoError(t, err)
 
 		btcFpKey := bbntypes.NewBIP340PubKeyFromBTCPK(testStakingData.FinalityProviderBtcKeys[i])
@@ -597,34 +599,27 @@ func (tm *TestManager) createAndRegisterFinalityProviders(t *testing.T, testStak
 		// get current finality providers
 		resp, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
 		require.NoError(t, err)
-		r = rand.New(rand.NewSource(time.Now().Unix()))
-		_, p, err := eots.NewMasterRandPair(r)
-		require.NoError(t, err)
 		// register the generated finality provider
-		_, err = tm.BabylonClient.RegisterFinalityProvider(
-			testStakingData.FinalityProviderBabylonPublicKeys[i],
+		err = tm.BabylonClient.RegisterFinalityProvider(
+			testStakingData.FinalityProviderBabylonAddrs[i],
+			testStakingData.FinalityProviderBabylonPrivKeys[i],
 			btcFpKey,
 			&params.MinComissionRate,
 			&sttypes.Description{
 				Moniker: "tester",
 			},
 			pop,
-			p.MarshalBase58(),
 		)
-
-		resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
 		require.NoError(t, err)
 
-		// After registration we should have one finality provider
-		require.Len(t, resp2.FinalityProviders, len(resp.FinalityProviders)+1)
+		require.Eventually(t, func() bool {
+			resp2, err := tm.BabylonClient.QueryFinalityProviders(100, 0)
+			require.NoError(t, err)
 
-		epoch, err := tm.BabylonClient.QueryFinalityProviderRegisteredEpoch(btcFpKey.MustToBTCPK())
-		require.NoError(t, err)
-		regEpoch = epoch
+			// After registration we should have one finality provider
+			return len(resp2.FinalityProviders) == len(resp.FinalityProviders)+1
+		}, time.Minute, 250*time.Millisecond)
 	}
-
-	fmt.Printf("Wwaiting epoch %d to be registered\n", regEpoch)
-	tm.FinalizeUntilEpoch(t, regEpoch)
 }
 
 func (tm *TestManager) sendHeadersToBabylon(t *testing.T, headers []*wire.BlockHeader) {
@@ -660,7 +655,7 @@ func (tm *TestManager) mineBlock(t *testing.T) *wire.MsgBlock {
 	return header
 }
 
-func (tm *TestManager) sendStakingTx(t *testing.T, testStakingData *testStakingData) *chainhash.Hash {
+func (tm *TestManager) sendStakingTxBTC(t *testing.T, testStakingData *testStakingData) *chainhash.Hash {
 	fpBTCPKs := []string{}
 	for i := 0; i < testStakingData.GetNumRestakedFPs(); i++ {
 		fpBTCPK := hex.EncodeToString(schnorr.SerializePubKey(testStakingData.FinalityProviderBtcKeys[i]))
@@ -752,7 +747,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 		btcutil.Amount(testStakingData.StakingAmount),
 		regtestParams,
 	)
-
 	require.NoError(t, err)
 
 	err = tm.Sa.Wallet().UnlockWallet(20)
@@ -799,7 +793,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 	require.NoError(t, err)
 
 	stakingTxSlashingPathInfo, err := stakingInfo.SlashingPathSpendInfo()
-
 	require.NoError(t, err)
 
 	slashSig, err := staking.SignTxWithOneScriptSpendInputFromScript(
@@ -808,7 +801,6 @@ func (tm *TestManager) sendWatchedStakingTx(
 		tm.WalletPrivKey,
 		stakingTxSlashingPathInfo.RevealedLeaf.Script,
 	)
-
 	require.NoError(t, err)
 
 	serializedStakingTx, err := utils.SerializeBtcTransaction(tx)
@@ -863,8 +855,8 @@ func (tm *TestManager) sendWatchedStakingTx(
 
 	// TODO: Update pop when new version will be ready, for now using schnorr as we don't have
 	// easy way to generate bip322 sig on backend side
-	pop, err := btcstypes.NewPoP(
-		testStakingData.StakerBabylonPrivKey,
+	pop, err := btcstypes.NewPoPBTC(
+		testStakingData.StakerBabylonAddr,
 		tm.WalletPrivKey,
 	)
 	require.NoError(t, err)
@@ -883,9 +875,8 @@ func (tm *TestManager) sendWatchedStakingTx(
 		fpBTCPKs,
 		hex.EncodeToString(serializedSlashingTx),
 		hex.EncodeToString(slashSig.Serialize()),
-		hex.EncodeToString(testStakingData.StakerBabylonPubKey.Key),
+		testStakingData.StakerBabylonAddr.String(),
 		tm.MinerAddr.String(),
-		hex.EncodeToString(pop.BabylonSig),
 		hex.EncodeToString(pop.BtcSig),
 		hex.EncodeToString(serializedUnbondingTx),
 		hex.EncodeToString(serializedSlashUnbondingTx),
@@ -1125,7 +1116,7 @@ func TestSendingStakingTransaction(t *testing.T) {
 
 	tm.createAndRegisterFinalityProviders(t, testStakingData)
 
-	txHash := tm.sendStakingTx(t, testStakingData)
+	txHash := tm.sendStakingTxBTC(t, testStakingData)
 
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
@@ -1277,7 +1268,7 @@ func TestRestartingTxNotDeepEnough(t *testing.T) {
 	testStakingData := tm.getTestStakingData(t, tm.WalletPrivKey.PubKey(), stakingTime, 10000, 1)
 
 	tm.createAndRegisterFinalityProviders(t, testStakingData)
-	txHash := tm.sendStakingTx(t, testStakingData)
+	txHash := tm.sendStakingTxBTC(t, testStakingData)
 
 	// restart app when tx is not deep enough
 	tm.RestartApp(t)
@@ -1346,7 +1337,7 @@ func TestStakingUnbonding(t *testing.T) {
 
 	tm.createAndRegisterFinalityProviders(t, testStakingData)
 
-	txHash := tm.sendStakingTx(t, testStakingData)
+	txHash := tm.sendStakingTxBTC(t, testStakingData)
 
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
@@ -1417,7 +1408,7 @@ func TestUnbondingRestartWaitingForSignatures(t *testing.T) {
 
 	tm.createAndRegisterFinalityProviders(t, testStakingData)
 
-	txHash := tm.sendStakingTx(t, testStakingData)
+	txHash := tm.sendStakingTxBTC(t, testStakingData)
 
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)
@@ -1570,7 +1561,7 @@ func TestSendingStakingTransaction_Restaking(t *testing.T) {
 
 	tm.createAndRegisterFinalityProviders(t, testStakingData)
 
-	txHash := tm.sendStakingTx(t, testStakingData)
+	txHash := tm.sendStakingTxBTC(t, testStakingData)
 
 	go tm.mineNEmptyBlocks(t, params.ConfirmationTimeBlocks, true)
 	tm.waitForStakingTxState(t, txHash, proto.TransactionState_SENT_TO_BABYLON)

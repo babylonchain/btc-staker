@@ -23,7 +23,7 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	rpc "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/signal"
@@ -235,8 +235,8 @@ func (s *StakerService) providers(_ *rpctypes.Context, offset, limit *int) (*Fin
 
 	for _, provider := range providersResp.FinalityProviders {
 		v := FinalityProviderInfoResponse{
-			BabylonPublicKey: hex.EncodeToString(provider.BabylonPk.Key),
-			BtcPublicKey:     hex.EncodeToString(schnorr.SerializePubKey(&provider.BtcPk)),
+			BabylonAddress: provider.BabylonAddr.String(),
+			BtcPublicKey:   hex.EncodeToString(schnorr.SerializePubKey(&provider.BtcPk)),
 		}
 
 		providerInfos = append(providerInfos, v)
@@ -369,9 +369,8 @@ func (s *StakerService) watchStaking(
 	fpBtcPks []string,
 	slashingTx string,
 	slashingTxSig string,
-	stakerBabylonPk string,
+	stakerBabylonAddr string,
 	stakerAddress string,
-	stakerBabylonSig string,
 	stakerBtcSig string,
 	unbondingTx string,
 	slashUnbondingTx string,
@@ -379,7 +378,6 @@ func (s *StakerService) watchStaking(
 	unbondingTime int,
 	popType int,
 ) (*ResultStake, error) {
-
 	stkTx, err := decodeBtcTx(stakingTx)
 	if err != nil {
 		return nil, err
@@ -439,24 +437,6 @@ func (s *StakerService) watchStaking(
 		return nil, err
 	}
 
-	stakerBabylonPubkeyBytes, err := hex.DecodeString(stakerBabylonPk)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(stakerBabylonPubkeyBytes) != secp256k1.PubKeySize {
-		return nil, fmt.Errorf("babylon public key must have %d bytes", secp256k1.PubKeySize)
-	}
-
-	stakerBabylonPubKey := secp256k1.PubKey{
-		Key: stakerBabylonPubkeyBytes,
-	}
-
-	stakerBabylonSigBytes, err := hex.DecodeString(stakerBabylonSig)
-	if err != nil {
-		return nil, err
-	}
-
 	stakerBtcSigBytes, err := hex.DecodeString(stakerBtcSig)
 	if err != nil {
 		return nil, err
@@ -467,7 +447,7 @@ func (s *StakerService) watchStaking(
 		return nil, err
 	}
 
-	proofOfPossesion, err := babylonclient.NewBabylonPop(btcPopType, stakerBabylonSigBytes, stakerBtcSigBytes)
+	proofOfPossesion, err := babylonclient.NewBabylonPop(btcPopType, stakerBtcSigBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -494,9 +474,21 @@ func (s *StakerService) watchStaking(
 	}
 
 	unbTime, err := parseTimeBtcLock(unbondingTime)
-
 	if err != nil {
 		return nil, err
+	}
+
+	bbnStakerAddr, err := sdk.AccAddressFromBech32(stakerBabylonAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	bbnSignerAddrInConfig := s.staker.BabylonController().GetKeyAddress()
+	if !bbnStakerAddr.Equals(bbnSignerAddrInConfig) {
+		return nil, fmt.Errorf(
+			"bbn staking address in config: %s must match with stakerBabylonAddr in parameters: %s",
+			bbnSignerAddrInConfig.String(), bbnStakerAddr.String(),
+		)
 	}
 
 	hash, err := s.staker.WatchStaking(
@@ -506,7 +498,7 @@ func (s *StakerService) watchStaking(
 		fpPubKeys,
 		slshTx,
 		slashingTxSchnorSig,
-		&stakerBabylonPubKey,
+		bbnStakerAddr,
 		stakerBtcPkParsed,
 		stakerAddr,
 		proofOfPossesion,
@@ -561,7 +553,7 @@ func (s *StakerService) GetRoutes() RoutesMap {
 		"unbond_staking":            rpc.NewRPCFunc(s.unbondStaking, "stakingTxHash,feeRate"),
 		"withdrawable_transactions": rpc.NewRPCFunc(s.withdrawableTransactions, "offset,limit"),
 		// watch api
-		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingTime,stakingValue,stakerBtcPk,fpBtcPks,slashingTx,slashingTxSig,stakerBabylonPk,stakerAddress,stakerBabylonSig,stakerBtcSig,unbondingTx,slashUnbondingTx,slashUnbondingTxSig,unbondingTime,popType"),
+		"watch_staking_tx": rpc.NewRPCFunc(s.watchStaking, "stakingTx,stakingTime,stakingValue,stakerBtcPk,fpBtcPks,slashingTx,slashingTxSig,stakerBabylonAddr,stakerAddress,stakerBtcSig,unbondingTx,slashUnbondingTx,slashUnbondingTxSig,unbondingTime,popType"),
 
 		// Wallet api
 		"list_outputs": rpc.NewRPCFunc(s.listOutputs, ""),

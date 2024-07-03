@@ -81,7 +81,7 @@ func (app *StakerApp) buildOwnedDelegation(
 		storedTx,
 		slashingTx,
 		slashingTxSig,
-		externalData.babylonPubKey,
+		externalData.babylonStakerAddr,
 		stakingTxInclusionProof,
 		undelegationData,
 	)
@@ -124,7 +124,7 @@ func (app *StakerApp) buildDelegation(
 			storedTx,
 			watchedData.SlashingTx,
 			watchedData.SlashingTxSig,
-			watchedData.StakerBabylonPubKey,
+			watchedData.StakerBabylonAddr,
 			stakingTxInclusionProof,
 			&undelegationData,
 		)
