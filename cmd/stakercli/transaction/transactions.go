@@ -113,7 +113,7 @@ func validateTxAgainstParams(
 			continue
 		}
 
-		// At this point we know staking transaciton is valid against this version of global params
+		// At this point we know staking transaction is valid against this version of global params
 		return &CheckPhase1StakingTxResponse{
 			IsValid: true,
 			StakingData: &StakingTxData{
