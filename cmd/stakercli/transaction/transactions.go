@@ -8,8 +8,6 @@ import (
 
 	"github.com/babylonchain/babylon/btcstaking"
 	bbn "github.com/babylonchain/babylon/types"
-	"github.com/babylonchain/btc-staker/cmd/stakercli/helpers"
-	"github.com/babylonchain/btc-staker/utils"
 	"github.com/babylonchain/networks/parameters/parser"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -20,6 +18,9 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/cometbft/cometbft/libs/os"
 	"github.com/urfave/cli"
+
+	"github.com/babylonchain/btc-staker/cmd/stakercli/helpers"
+	"github.com/babylonchain/btc-staker/utils"
 )
 
 const (
@@ -28,7 +29,7 @@ const (
 	stakerPublicKeyFlag     = "staker-pk"
 	finalityProviderKeyFlag = "finality-provider-pk"
 	txInclusionHeightFlag   = "tx-inclusion-height"
-	magicBytesFlag          = "magic-bytes"
+	tagFlag                 = "tag"
 	covenantMembersPksFlag  = "covenant-committee-pks"
 	covenantQuorumFlag      = "covenant-quorum"
 	minStakingAmountFlag    = "min-staking-amount"
@@ -118,7 +119,7 @@ func validateTxAgainstParams(
 			StakingData: &StakingTxData{
 				StakerPublicKeyHex:           hex.EncodeToString(parsed.OpReturnData.StakerPublicKey.Marshall()),
 				FinalityProviderPublicKeyHex: hex.EncodeToString(parsed.OpReturnData.FinalityProviderPublicKey.Marshall()),
-				StakingAmount:                int64(parsed.StakingOutput.Value),
+				StakingAmount:                parsed.StakingOutput.Value,
 				StakingTimeBlocks:            int64(parsed.OpReturnData.StakingTime),
 				ParamsVersion:                int64(params.Version),
 			},
@@ -179,12 +180,12 @@ var createPhase1StakingTransactionCmd = cli.Command{
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:     stakerPublicKeyFlag,
-			Usage:    "staker public key in schnorr format (32 byte) in hex",
+			Usage:    "Staker public key in Schnorr format (32 byte) in hex",
 			Required: true,
 		},
 		cli.StringFlag{
 			Name:     finalityProviderKeyFlag,
-			Usage:    "finality provider public key in schnorr format (32 byte) in hex",
+			Usage:    "Finality provider public key inSchnorr format (32 byte) in hex",
 			Required: true,
 		},
 		cli.Int64Flag{
@@ -198,8 +199,8 @@ var createPhase1StakingTransactionCmd = cli.Command{
 			Required: true,
 		},
 		cli.StringFlag{
-			Name:     magicBytesFlag,
-			Usage:    "Magic bytes in op_return output in hex",
+			Name:     tagFlag,
+			Usage:    "Tag in op_return output in hex",
 			Required: true,
 		},
 		cli.StringSliceFlag{
@@ -254,7 +255,7 @@ func createPhase1StakingTransaction(ctx *cli.Context) error {
 		return err
 	}
 
-	magicBytes, err := parseMagicBytesFromCliCtx(ctx)
+	tag, err := parseTagFromCliCtx(ctx)
 
 	if err != nil {
 		return err
@@ -269,7 +270,7 @@ func createPhase1StakingTransaction(ctx *cli.Context) error {
 	covenantQuorum := uint32(ctx.Uint64(covenantQuorumFlag))
 
 	_, tx, err := btcstaking.BuildV0IdentifiableStakingOutputsAndTx(
-		magicBytes,
+		tag,
 		stakerPk,
 		fpPk,
 		covenantMembersPks,
@@ -308,8 +309,8 @@ var checkPhase1StakingTransactionCmd = cli.Command{
 			Required: true,
 		},
 		cli.StringFlag{
-			Name:     magicBytesFlag,
-			Usage:    "Magic bytes in op return output in hex",
+			Name:     tagFlag,
+			Usage:    "Tag in op return output in hex",
 			Required: true,
 		},
 		cli.StringSliceFlag{
@@ -367,7 +368,7 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	magicBytes, err := parseMagicBytesFromCliCtx(ctx)
+	tag, err := parseTagFromCliCtx(ctx)
 
 	if err != nil {
 		return err
@@ -383,7 +384,7 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 
 	stakingTx, err := btcstaking.ParseV0StakingTx(
 		tx,
-		magicBytes,
+		tag,
 		covenantMembersPks,
 		covenantQuorum,
 		currentParams,
@@ -440,12 +441,12 @@ var createPhase1StakingTransactionWithParamsCmd = cli.Command{
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:     stakerPublicKeyFlag,
-			Usage:    "staker public key in schnorr format (32 byte) in hex",
+			Usage:    "Staker public key in Schnorr format (32 byte) in hex",
 			Required: true,
 		},
 		cli.StringFlag{
 			Name:     finalityProviderKeyFlag,
-			Usage:    "finality provider public key in schnorr format (32 byte) in hex",
+			Usage:    "Finality provider public key in Schnorr format (32 byte) in hex",
 			Required: true,
 		},
 		cli.Int64Flag{

@@ -1,7 +1,7 @@
 # Creating and Submitting phase-1 Staking Transactions
 
 The phase-1 staking transaction is a
-[Bitcoin Staking transaction](https://github.com/babylonchain/babylon/blob/v0.8.5/docs/staking-script.md)
+[Bitcoin Staking transaction](https://github.com/babylonchain/babylon/blob/v0.9.0-rc.3/docs/staking-script.md)
 that includes an additional `OP_RETURN` field containing the staking parameters
 to enable for easy identification and taproot decoding through observing the
 Bitcoin ledger.
@@ -98,18 +98,17 @@ is the BTC staker public key in hex format.
 ## Create Raw Transaction
 
 The binary `stakercli` will be used to generate the transaction using
-the `transaction create-phase1-staking-transaction` command.
+the `transaction create-phase1-staking-transaction-with-params` command.
+The only argument for this command is the path to the `global-params.json` 
+downloaded from https://github.com/babylonchain/networks/blob/main/bbn-test-4/parameters/global-params.json (for testnet-4).
+Note that one should always use the latest global parameter file.
 
 This command has several flag options:
 
-- `--staker-pk` Schnorr BTC staker public key in hex format.
-- `--finality-provider-pk` The finality provider Schnorr BTC public key in hex format.
+- `--staker-pk` staker public key in schnorr format (32 byte) in hex
+- `--finality-provider-pk`finality provider public key in schnorr format (32 byte) in hex
 - `--staking-amount` The amount of satoshis to be locked.
 - `--staking-time` The amount of BTC blocks to lock for.
-- `--magic-bytes` Magic bytes in op_return output in hex.
-- `--covenant-committee-pks` BTC public keys of the covenant committee. For each
-covenant pub key specified, the flag needs to be used again.
-- `--covenant-quorum` Required quorum of covenant members to unbond.
 - `--network` Specifies the BTC network this transaction will be sent, any of
 `[mainnet, testnet3, regtest, simnet, signet]`.
 
@@ -117,17 +116,9 @@ For example to generate one staking transaction that locks `0.05` BTC for one
 year, use `--staking-amount=5000000` and `--staking-time=52560`.
 
 ```shell
-stakercli transaction create-phase1-staking-transaction \
+stakercli transaction create-phase1-staking-transaction-with-params [fullpath/to/parameters.json] \
   --staker-pk 2dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558 \
   --staking-amount 5000000 --staking-time 52560 \
-  --magic-bytes <bbn_4byte_identifier> \
-  --finality-provider-pk <fp_pk_chosen> \
-  --covenant-quorum 3 \
-  --covenant-committee-pks 05149a0c7a95320adf210e47bca8b363b7bd966be86be6392dd6cf4f96995869 \
-  --covenant-committee-pks e8d503cb52715249f32f3ee79cee88dfd48c2565cb0c79cf9640d291f46fd518 \
-  --covenant-committee-pks fe81b2409a32ddfd8ec1556557e8dd949b6e4fd37047523cb7f5fefca283d542 \
-  --covenant-committee-pks bc4a1ff485d7b44faeec320b81ad31c3cad4d097813c21fcf382b4305e4cfc82 \
-  --covenant-committee-pks 001e50601a4a1c003716d7a1ee7fe25e26e55e24e909b3642edb60d30e3c40c1 \
   --network signet
 
 {
