@@ -379,7 +379,7 @@ In the following, we go through important parameters of the `stakerd.conf` file.
 Key = btc-staker
 
 # Chain id of the chain (Babylon)
-ChainID = bbn-test-3
+ChainID = bbn-test
 
 # Address of the chain's RPC server (Babylon)
 RPCAddr = http://localhost:26657
