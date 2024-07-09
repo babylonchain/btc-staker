@@ -103,14 +103,18 @@ The only argument for this command is the path to the `global-params.json`
 downloaded from https://github.com/babylonchain/networks/blob/main/bbn-test-4/parameters/global-params.json (for testnet-4).
 Note that one should always use the latest global parameter file.
 
-This command has several flag options:
+This command has the following required flags:
 
 - `--staker-pk` staker public key in schnorr format (32 byte) in hex
 - `--finality-provider-pk`finality provider public key in schnorr format (32 byte) in hex
-- `--staking-amount` The amount of satoshis to be locked.
-- `--staking-time` The amount of BTC blocks to lock for.
+- `--staking-amount` The amount of satoshis to be locked. Should be in the range [min_staking_amount, max_staking_amount] in the global parameters.
+- `--staking-time` The amount of BTC blocks to lock for. Should be in the range [min_staking_time, max_staking_time] in the global parameters.
+- `--tx-inclusion-height` Expected BTC height at which transaction will be included. This value is important to choose correct global parameters for transaction (default: 0)
 - `--network` Specifies the BTC network this transaction will be sent, any of
 `[mainnet, testnet3, regtest, simnet, signet]`.
+
+Note that the `--tx-inclusion-height` flag must be set according to the expected inclusion height of the transaction.
+Otherwise, the transaction might be constructed by wrong version of global parameters.
 
 For example to generate one staking transaction that locks `0.05` BTC for one
 year, use `--staking-amount=5000000` and `--staking-time=52560`.

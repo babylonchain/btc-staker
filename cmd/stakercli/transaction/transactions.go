@@ -434,7 +434,7 @@ func checkPhase1StakingTransaction(ctx *cli.Context) error {
 
 var createPhase1StakingTransactionWithParamsCmd = cli.Command{
 	Name:        "create-phase1-staking-transaction-with-params",
-	ShortName:   "crpst",
+	ShortName:   "crpstp",
 	Usage:       "stakercli transaction create-phase1-staking-transaction-with-params [fullpath/to/parameters.json]",
 	Description: "Creates unsigned and unfunded phase 1 staking transaction. It also validates the transaction against provided global parameters",
 	Action:      createPhase1StakingTransactionWithParams,
@@ -461,7 +461,7 @@ var createPhase1StakingTransactionWithParamsCmd = cli.Command{
 		},
 		cli.Uint64Flag{
 			Name:     txInclusionHeightFlag,
-			Usage:    "Expected BTC height at which transaction will be included. This value is use important to chose correct global parameters for transaction",
+			Usage:    "Expected BTC height at which transaction will be included. This value is important to choose correct global parameters for transaction",
 			Required: true,
 		},
 		cli.StringFlag{
