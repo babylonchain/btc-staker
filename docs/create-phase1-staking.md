@@ -1,7 +1,7 @@
 # Creating and Submitting phase-1 Staking Transactions
 
 The phase-1 staking transaction is a
-[Bitcoin Staking transaction](https://github.com/babylonchain/babylon/blob/v0.8.5/docs/staking-script.md)
+[Bitcoin Staking transaction](https://github.com/babylonchain/babylon/blob/v0.9.0-rc.3/docs/staking-script.md)
 that includes an additional `OP_RETURN` field containing the staking parameters
 to enable for easy identification and taproot decoding through observing the
 Bitcoin ledger.
@@ -89,51 +89,50 @@ bitcoin-cli -signet \
   -rpcwallet=btc-staker \
   getaddressinfo <addr> | jq -r '.pubkey[2:]'
 
-2dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558
+363c51c11532a48aa765f5e7d4225db68dcc530f374007354de6c0e13eb86399
 ```
 
-In this example the value `2dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558`
+In this example the value `363c51c11532a48aa765f5e7d4225db68dcc530f374007354de6c0e13eb86399`
 is the BTC staker public key in hex format.
 
 ## Create Raw Transaction
 
 The binary `stakercli` will be used to generate the transaction using
-the `transaction create-phase1-staking-transaction` command.
+the `transaction create-phase1-staking-transaction-with-params` command.
+The only argument for this command is the path to the `global-params.json` 
+downloaded from https://github.com/babylonchain/networks/blob/main/bbn-test-4/parameters/global-params.json (for testnet-4).
+Note that one should always use the latest global parameter file.
 
-This command has several flag options:
+This command has the following required flags:
 
-- `--staker-pk` Schnorr BTC staker public key in hex format.
-- `--finality-provider-pk` The finality provider Schnorr BTC public key in hex format.
-- `--staking-amount` The amount of satoshis to be locked.
-- `--staking-time` The amount of BTC blocks to lock for.
-- `--magic-bytes` Magic bytes in op_return output in hex.
-- `--covenant-committee-pks` BTC public keys of the covenant committee. For each
-covenant pub key specified, the flag needs to be used again.
-- `--covenant-quorum` Required quorum of covenant members to unbond.
+- `--staker-pk` staker public key in schnorr format (32 byte) in hex
+- `--finality-provider-pk`finality provider public key in schnorr format (32 byte) in hex
+- `--staking-amount` The amount of satoshis to be locked. Should be in the range [min_staking_amount, max_staking_amount] in the global parameters.
+- `--staking-time` The amount of BTC blocks to lock for. Should be in the range [min_staking_time, max_staking_time] in the global parameters.
+- `--tx-inclusion-height` Expected BTC height at which transaction will be included. This value is important to choose correct global parameters for transaction (default: 0)
 - `--network` Specifies the BTC network this transaction will be sent, any of
 `[mainnet, testnet3, regtest, simnet, signet]`.
+
+Note that the `--tx-inclusion-height` flag must be set according to the expected inclusion height of the transaction.
+Otherwise, the transaction might be constructed by wrong version of global parameters.
 
 For example to generate one staking transaction that locks `0.05` BTC for one
 year, use `--staking-amount=5000000` and `--staking-time=52560`.
 
 ```shell
-stakercli transaction create-phase1-staking-transaction \
-  --staker-pk 2dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558 \
-  --staking-amount 5000000 --staking-time 52560 \
-  --magic-bytes <bbn_4byte_identifier> \
-  --finality-provider-pk <fp_pk_chosen> \
-  --covenant-quorum 3 \
-  --covenant-committee-pks 05149a0c7a95320adf210e47bca8b363b7bd966be86be6392dd6cf4f96995869 \
-  --covenant-committee-pks e8d503cb52715249f32f3ee79cee88dfd48c2565cb0c79cf9640d291f46fd518 \
-  --covenant-committee-pks fe81b2409a32ddfd8ec1556557e8dd949b6e4fd37047523cb7f5fefca283d542 \
-  --covenant-committee-pks bc4a1ff485d7b44faeec320b81ad31c3cad4d097813c21fcf382b4305e4cfc82 \
-  --covenant-committee-pks 001e50601a4a1c003716d7a1ee7fe25e26e55e24e909b3642edb60d30e3c40c1 \
-  --network signet
+stakercli transaction create-phase1-staking-transaction-with-params [fullpath/to/parameters.json] \
+  --staker-pk 363c51c11532a48aa765f5e7d4225db68dcc530f374007354de6c0e13eb86399 \
+  --finality-provider-pk d23c2c25e1fcf8fd1c21b9a402c19e2e309e531e45e92fb1e9805b6056b0cc76 \
+  --staking-amount 5000000 --staking-time 64000 \
+  --network signet --tx-inclusion-height 200665
 
 {
-  "staking_tx_hex": "020000000002404b4c00000000002251204a4b057a9fa0510ccdce480fdac5a3cd12329993bac2517afb784a64d11fc1b40000000000000000496a4762627434002dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558a89e7caf57360bc8b791df72abc3fb6d2ddc0e06e171c9f17c4ea1299e677565cd5000000000"
+  "staking_tx_hex": "020000000002404b4c00000000002251205e405197f52aa158a8bc3372d6569ec95abc069e93565c1588d4552173cbedb50000000000000000496a476262743400363c51c11532a48aa765f5e7d4225db68dcc530f374007354de6c0e13eb86399d23c2c25e1fcf8fd1c21b9a402c19e2e309e531e45e92fb1e9805b6056b0cc76fa0000000000"
 }
 ```
+
+For advanced usage, one can use `stakercli transaction create-phase1-staking-transaction`
+to specify customized global parameters but should only be used for testing purpose. 
 
 ## Fund Raw Transaction
 
@@ -147,7 +146,7 @@ bitcoin-cli -signet \
   -rpcpassword=<your_rpc_password> \
   -rpcport=38332 \
   -rpcwallet=btc-staker \
-  fundrawtransaction 020000000002404b4c00000000002251204a4b057a9fa0510ccdce480fdac5a3cd12329993bac2517afb784a64d11fc1b40000000000000000496a4762627434002dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558a89e7caf57360bc8b791df72abc3fb6d2ddc0e06e171c9f17c4ea1299e677565cd5000000000
+  fundrawtransaction 020000000002404b4c00000000002251205e405197f52aa158a8bc3372d6569ec95abc069e93565c1588d4552173cbedb50000000000000000496a476262743400363c51c11532a48aa765f5e7d4225db68dcc530f374007354de6c0e13eb86399d23c2c25e1fcf8fd1c21b9a402c19e2e309e531e45e92fb1e9805b6056b0cc76fa0000000000
 
 {
   "hex": "0200000001b8eba8646e5fdb240af853d52c37b6159984c34bebb55c6097c4f0d276e536c80000000000fdffffff0344770d000000000016001461e09f8a6e653c6bdec644874dc119be1b60f27a404b4c00000000002251204a4b057a9fa0510ccdce480fdac5a3cd12329993bac2517afb784a64d11fc1b40000000000000000496a4762627434002dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558a89e7caf57360bc8b791df72abc3fb6d2ddc0e06e171c9f17c4ea1299e677565cd5000000000",
@@ -175,12 +174,38 @@ bitcoin-cli -signet \
   signrawtransactionwithwallet 0200000001b8eba8646e5fdb240af853d52c37b6159984c34bebb55c6097c4f0d276e536c80000000000fdffffff0344770d000000000016001461e09f8a6e653c6bdec644874dc119be1b60f27a404b4c00000000002251204a4b057a9fa0510ccdce480fdac5a3cd12329993bac2517afb784a64d11fc1b40000000000000000496a4762627434002dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558a89e7caf57360bc8b791df72abc3fb6d2ddc0e06e171c9f17c4ea1299e677565cd5000000000
 
 {
-  "hex": "02000000000101b8eba8646e5fdb240af853d52c37b6159984c34bebb55c6097c4f0d276e536c80000000000fdffffff0344770d000000000016001461e09f8a6e653c6bdec644874dc119be1b60f27a404b4c00000000002251204a4b057a9fa0510ccdce480fdac5a3cd12329993bac2517afb784a64d11fc1b40000000000000000496a4762627434002dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f3558a89e7caf57360bc8b791df72abc3fb6d2ddc0e06e171c9f17c4ea1299e677565cd500247304402203bae17ac05c211e3c849595ef211f9a23ffc6d32d089e53cfaf81b94353f9e0c022063676b789a3fd85842552cd54408a8e92a1d37f51e0f4765ac29ef89ed707b750121032dedbb66510d56b11f7a611e290f044e24dd48fd9c8a76d103ba05c8e95f355800000000",
+  "hex": "02000000000101a252eb96c7945fc03e17aa2c135c130cf3a497bff1c5f99845bf69194788e4c80200000000fdffffff03404b4c00000000002251205e405197f52aa158a8bc3372d6569ec95abc069e93565c1588d4552173cbedb50000000000000000496a476262743400363c51c11532a48aa765f5e7d4225db68dcc530f374007354de6c0e13eb86399d23c2c25e1fcf8fd1c21b9a402c19e2e309e531e45e92fb1e9805b6056b0cc76fa00476d3800000000002251209e8ceac88cae40c4749f6d67e76509414bd4e55924b38e9e34205e41fbf93a7b0140d6d2bbb60484154f687a4f3b592b6e3f3a0abd788c3bd813d09a8d47712822854e933be6bb5b384db1b0918781582dd6d35ebd9b4d45d0f55ff9c1ab128ffd0ad80f0300",
   "complete": true
 }
 ```
 
 The output gives out the signed funded self-lock transaction in the `hex` property.
+
+## Verify Transaction
+
+To verify the validity of the transaction, you can use the `stakercli transaction check-phase1-staking-transaction-params [fullpath/to/parameters.json]`
+command and specify `--staking-transaction` with the signed transaction hex you abtained from the previous step and `--network`.
+It outputs whether the staking transaction is valid and the parsed staking data if it is valid.
+
+```shell
+stakercli transaction check-phase1-staking-transaction-params [fullpath/to/parameters.json] \
+  --staking-transaction 02000000000101a252eb96c7945fc03e17aa2c135c130cf3a497bff1c5f99845bf69194788e4c80200000000fdffffff03404b4c00000000002251205e405197f52aa158a8bc3372d6569ec95abc069e93565c1588d4552173cbedb50000000000000000496a476262743400363c51c11532a48aa765f5e7d4225db68dcc530f374007354de6c0e13eb86399d23c2c25e1fcf8fd1c21b9a402c19e2e309e531e45e92fb1e9805b6056b0cc76fa00476d3800000000002251209e8ceac88cae40c4749f6d67e76509414bd4e55924b38e9e34205e41fbf93a7b0140d6d2bbb60484154f687a4f3b592b6e3f3a0abd788c3bd813d09a8d47712822854e933be6bb5b384db1b0918781582dd6d35ebd9b4d45d0f55ff9c1ab128ffd0ad80f0300 \
+  --network signet
+  
+{
+    "is_valid": true,
+    "staking_data": {
+        "staker_public_key_hex": "363c51c11532a48aa765f5e7d4225db68dcc530f374007354de6c0e13eb86399",
+        "finality_provider_public_key_hex": "d23c2c25e1fcf8fd1c21b9a402c19e2e309e531e45e92fb1e9805b6056b0cc76",
+        "staking_amount": 5000000,
+        "staking_time_blocks": 64000,
+        "params_version": 2
+    }
+}
+```
+
+Note that you should carefully check whether the `params_version` in the output is the expected version that corresponds
+to the `--tx-inclusion-height` specified earlier.
 
 ## Submit Transaction
 

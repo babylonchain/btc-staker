@@ -80,20 +80,20 @@ func parseCovenantKeysFromSlice(covenantMembersPks []string) ([]*btcec.PublicKey
 	return covenantPubKeys, nil
 }
 
-func parseMagicBytesFromCliCtx(ctx *cli.Context) ([]byte, error) {
-	magicBytesHex := ctx.String(magicBytesFlag)
-	return parseMagicBytesFromHex(magicBytesHex)
+func parseTagFromCliCtx(ctx *cli.Context) ([]byte, error) {
+	tagHex := ctx.String(tagFlag)
+	return parseTagFromHex(tagHex)
 }
 
-func parseMagicBytesFromHex(magicBytesHex string) ([]byte, error) {
-	magicBytes, err := hex.DecodeString(magicBytesHex)
+func parseTagFromHex(tagHex string) ([]byte, error) {
+	tag, err := hex.DecodeString(tagHex)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(magicBytes) != btcstaking.MagicBytesLen {
-		return nil, fmt.Errorf("magic bytes should be of length %d", btcstaking.MagicBytesLen)
+	if len(tag) != btcstaking.TagLen {
+		return nil, fmt.Errorf("tag should be of length %d", btcstaking.TagLen)
 	}
 
-	return magicBytes, nil
+	return tag, nil
 }
