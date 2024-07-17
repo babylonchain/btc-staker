@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/babylonchain/babylon/crypto/bip322"
 	btcctypes "github.com/babylonchain/babylon/x/btccheckpoint/types"
 
 	staking "github.com/babylonchain/babylon/btcstaking"
@@ -1531,6 +1532,32 @@ func TestBitcoindWalletRpcApi(t *testing.T) {
 	_, status, err := wc.TxDetails(txHash, payScript)
 	require.NoError(t, err)
 	require.Equal(t, walletcontroller.TxInChain, status)
+}
+
+func TestBitcoindWalletBip322Signing(t *testing.T) {
+	h := NewBitcoindHandler(t)
+	h.Start()
+	passphrase := "pass"
+
+	_ = h.CreateWallet("test-wallet", passphrase)
+	cfg, c := defaultStakerConfig(t, passphrase)
+
+	segwitAddress, err := c.GetNewAddress("")
+	require.NoError(t, err)
+
+	controller, err := walletcontroller.NewRpcWalletController(cfg)
+	require.NoError(t, err)
+
+	err = controller.UnlockWallet(30)
+	require.NoError(t, err)
+
+	msg := []byte("test message")
+
+	bip322Signature, err := controller.SignBip322NativeSegwit(msg, segwitAddress)
+	require.NoError(t, err)
+
+	err = bip322.Verify(msg, bip322Signature, segwitAddress, regtestParams)
+	require.NoError(t, err)
 }
 
 func TestSendingStakingTransaction_Restaking(t *testing.T) {

@@ -1,13 +1,16 @@
 package walletcontroller
 
 import (
+	"encoding/hex"
 	"fmt"
 	"sort"
 
+	"github.com/babylonchain/babylon/crypto/bip322"
 	"github.com/babylonchain/btc-staker/stakercfg"
 	scfg "github.com/babylonchain/btc-staker/stakercfg"
 	"github.com/babylonchain/btc-staker/types"
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -255,4 +258,45 @@ func (w *RpcWalletController) TxDetails(txHash *chainhash.Hash, pkScript []byte)
 	default:
 		return nil, TxNotFound, fmt.Errorf("invalid bitcoin backend")
 	}
+}
+
+// SignBip322NativeSegwit signs arbitrary message using bip322 signing scheme.
+// To work properly:
+// - wallet must be unlocked
+// - address must be under wallet control
+// - address must be native segwit address
+func (w *RpcWalletController) SignBip322NativeSegwit(msg []byte, address btcutil.Address) (wire.TxWitness, error) {
+	toSpend, err := bip322.GetToSpendTx(msg, address)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to bip322 to spend tx: %w", err)
+	}
+
+	if !txscript.IsPayToWitnessPubKeyHash(toSpend.TxOut[0].PkScript) {
+		return nil, fmt.Errorf("")
+	}
+
+	toSpendhash := toSpend.TxHash()
+
+	toSign := bip322.GetToSignTx(toSpend)
+
+	amt := float64(0)
+	signed, all, err := w.SignRawTransactionWithWallet2(toSign, []btcjson.RawTxWitnessInput{
+		btcjson.RawTxWitnessInput{
+			Txid:         toSpendhash.String(),
+			Vout:         0,
+			ScriptPubKey: hex.EncodeToString(toSpend.TxOut[0].PkScript),
+			Amount:       &amt,
+		},
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign raw transaction while creating bip322 signature: %w", err)
+	}
+
+	if !all {
+		return nil, fmt.Errorf("failed to create bip322 signature, address %s is not under wallet control", address)
+	}
+
+	return signed.TxIn[0].Witness, nil
 }

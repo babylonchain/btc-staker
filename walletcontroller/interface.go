@@ -36,4 +36,5 @@ type WalletController interface {
 	SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) (*chainhash.Hash, error)
 	ListOutputs(onlySpendable bool) ([]Utxo, error)
 	TxDetails(txHash *chainhash.Hash, pkScript []byte) (*notifier.TxConfirmation, TxStatus, error)
+	SignBip322NativeSegwit(msg []byte, address btcutil.Address) (wire.TxWitness, error)
 }
