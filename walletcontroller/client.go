@@ -273,7 +273,7 @@ func (w *RpcWalletController) SignBip322NativeSegwit(msg []byte, address btcutil
 	}
 
 	if !txscript.IsPayToWitnessPubKeyHash(toSpend.TxOut[0].PkScript) {
-		return nil, fmt.Errorf("")
+		return nil, fmt.Errorf("Bip322NativeSegwit support only native segwit addresses")
 	}
 
 	toSpendhash := toSpend.TxHash()
@@ -282,7 +282,7 @@ func (w *RpcWalletController) SignBip322NativeSegwit(msg []byte, address btcutil
 
 	amt := float64(0)
 	signed, all, err := w.SignRawTransactionWithWallet2(toSign, []btcjson.RawTxWitnessInput{
-		btcjson.RawTxWitnessInput{
+		{
 			Txid:         toSpendhash.String(),
 			Vout:         0,
 			ScriptPubKey: hex.EncodeToString(toSpend.TxOut[0].PkScript),
