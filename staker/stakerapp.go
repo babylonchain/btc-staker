@@ -8,9 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	pv "github.com/cosmos/relayer/v2/relayer/provider"
-	"go.uber.org/zap"
-
 	"github.com/avast/retry-go/v4"
 	staking "github.com/babylonchain/babylon/btcstaking"
 	cl "github.com/babylonchain/btc-staker/babylonclient"
@@ -21,6 +18,8 @@ import (
 	"github.com/babylonchain/btc-staker/types"
 	"github.com/babylonchain/btc-staker/utils"
 	"github.com/babylonchain/btc-staker/walletcontroller"
+	pv "github.com/cosmos/relayer/v2/relayer/provider"
+	"go.uber.org/zap"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -1450,21 +1449,32 @@ func (app *StakerApp) StakeFunds(
 
 	// build proof of possesion, no point moving forward if staker do not have all
 	// the necessary keys
-	stakerPrivKey, err := app.wc.DumpPrivateKey(stakerAddress)
+	stakerPubKey, err := app.wc.AddressPublicKey(stakerAddress)
 
 	if err != nil {
 		return nil, err
 	}
 
-	// We build pop ourselves so no need to verify it
-	pop, err := app.generatePop(stakerPrivKey)
+	babylonAddrHash := tmhash.Sum(app.babylonClient.GetKeyAddress().Bytes())
+
+	sig, err := app.wc.SignBip322NativeSegwit(babylonAddrHash, stakerAddress)
+
+	if err != nil {
+		return nil, err
+	}
+
+	pop, err := cl.NewBabylonBip322Pop(
+		babylonAddrHash,
+		sig,
+		stakerAddress,
+	)
 
 	if err != nil {
 		return nil, err
 	}
 
 	stakingInfo, err := staking.BuildStakingInfo(
-		stakerPrivKey.PubKey(),
+		stakerPubKey,
 		fpPks,
 		params.CovenantPks,
 		params.CovenantQuruomThreshold,

@@ -99,13 +99,25 @@ func (w *RpcWalletController) UnlockWallet(timoutSec int64) error {
 }
 
 func (w *RpcWalletController) AddressPublicKey(address btcutil.Address) (*btcec.PublicKey, error) {
-	privKey, err := w.DumpPrivKey(address)
+	encoded := address.EncodeAddress()
+
+	info, err := w.GetAddressInfo(encoded)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return privKey.PrivKey.PubKey(), nil
+	if info.PubKey == nil {
+		return nil, fmt.Errorf("address %s has no public key", encoded)
+	}
+
+	decodedHex, err := hex.DecodeString(*info.PubKey)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return btcec.ParsePubKey(decodedHex)
 }
 
 func (w *RpcWalletController) DumpPrivateKey(address btcutil.Address) (*btcec.PrivateKey, error) {

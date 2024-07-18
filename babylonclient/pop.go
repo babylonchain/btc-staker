@@ -3,10 +3,13 @@ package babylonclient
 import (
 	"fmt"
 
+	"github.com/babylonchain/babylon/crypto/bip322"
 	bbn "github.com/babylonchain/babylon/types"
 	btcstypes "github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/wire"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -23,6 +26,8 @@ type BabylonPop struct {
 	BtcSig  []byte
 }
 
+// NewBabylonPop Generic constructor for BabylonPop that do as little validation
+// as possible. It assumes passed btcSigOverBbnAddr is matching the popType `t`
 func NewBabylonPop(t BabylonBtcPopType, btcSigOverBbnAddr []byte) (*BabylonPop, error) {
 	if len(btcSigOverBbnAddr) == 0 {
 		return nil, fmt.Errorf("cannot create BabylonPop with empty signatures")
@@ -32,6 +37,39 @@ func NewBabylonPop(t BabylonBtcPopType, btcSigOverBbnAddr []byte) (*BabylonPop, 
 		popType: t,
 		BtcSig:  btcSigOverBbnAddr,
 	}, nil
+}
+
+// NewBabylonBip322Pop build proper BabylonPop in BIP322 style, it verifies the
+// the bip322 signature validity
+func NewBabylonBip322Pop(
+	msg []byte,
+	w wire.TxWitness,
+	a btcutil.Address) (*BabylonPop, error) {
+	// TODO: bip322.Verify does not use it last parameter and this parameter should
+	// be removed from the function signature upstream.
+	// after that, we can remove the nil parameter here
+	if err := bip322.Verify(msg, w, a, nil); err != nil {
+		return nil, fmt.Errorf("invalid bip322 pop parameters: %w", err)
+	}
+
+	serializedWitness, err := bip322.SerializeWitness(w)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize bip322 witness: %w", err)
+	}
+
+	bip322Sig := btcstypes.BIP322Sig{
+		Sig:     serializedWitness,
+		Address: a.EncodeAddress(),
+	}
+
+	m, err := bip322Sig.Marshal()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize btcstypes.BIP322Sig proto: %w", err)
+	}
+
+	return NewBabylonPop(Bip322Type, m)
 }
 
 func NewBTCSigType(t BabylonBtcPopType) (btcstypes.BTCSigType, error) {
