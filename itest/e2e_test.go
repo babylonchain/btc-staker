@@ -294,7 +294,7 @@ func StartManager(
 	err = walletClient.UnlockWallet(20)
 	require.NoError(t, err)
 
-	walletPrivKey, err := walletClient.DumpPrivateKey(minerAddressDecoded)
+	walletPrivKey, err := c.DumpPrivKey(minerAddressDecoded)
 	require.NoError(t, err)
 
 	interceptor, err := signal.Intercept()
@@ -334,7 +334,7 @@ func StartManager(
 		Db:               dbbackend,
 		Sa:               stakerApp,
 		BabylonClient:    bl,
-		WalletPrivKey:    walletPrivKey,
+		WalletPrivKey:    walletPrivKey.PrivKey,
 		MinerAddr:        minerAddressDecoded,
 		serverStopper:    &interceptor,
 		wg:               &wg,
